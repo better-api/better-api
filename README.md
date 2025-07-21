@@ -1,2 +1,12 @@
-# better-api
-Better way of working with APIs
+# Better API
+
+A project that makes working with REST APIs easier. It does so by introducing a declarative syntax used to
+declare an API, and providing the tools for parsing, validating, and generating code from the API specification. See
+[design docs](docs/design.md) for more detailed motivation and goals of the project.
+
+> [!NOTE]
+> The project is still very much WIP.
+
+## License
+
+The project is licensed under the [MIT License](LICENSE).
