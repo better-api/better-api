@@ -7,6 +7,8 @@ declare an API, and providing the tools for parsing, validating, and generating 
 > [!NOTE]
 > The project is still very much WIP.
 
+The Better API syntax is described in the [syntax.md](docs/syntax.md).
+
 ## License
 
 The project is licensed under the [MIT License](LICENSE).

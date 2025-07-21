@@ -49,3 +49,13 @@ that prioritizes tooling and keeps in mind the fact that an API has to be implem
   must also be able to generate API server stubs and client code for multiple languages.
 - **Great Developer Experience** - provide great developer experience for working with the spec.
   This includes syntax highlighting, LSP, and formatter.
+
+# Non-Goals
+
+- **OpenAPI Compatibility** - Better API specs can be compiled to OpenAPI spec, but not all
+  OpenAPI specs can be converted to Better API. This is by design.
+- **XML** - Most (all?) modern APIs are JSON based. Better API's focus is on JSON APIs and won't
+  support XML. [Go's xml library](https://pkg.go.dev/encoding/xml) gives a very good reason why:
+  > Mapping between XML elements and data structures is inherently flawed: an XML element is an order-dependent
+  > collection of anonymous values, while a data structure is an order-independent collection of named values.
+  > See encoding/json for a textual representation more suitable to data structures.
