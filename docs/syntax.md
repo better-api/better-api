@@ -598,9 +598,184 @@ For the generated client code it works symmetrically.
 > Wildcards add flexibility but should be used sparingly. Usually it's better to explicitly specify
 > the accepted content types.
 
-## Security
+## Authorization
 
-TODO: Describe security schemas
+Currently there are three supported authorization types:
+
+- **HTTP Bearer** - credentials are passed to `Authorization` header as `Authorization: Bearer <token>`.
+- **HTTP Basic** - credentials are passed to `Authorization` header as `Authorization: Basic <creds>`
+  where `creds` is base64 encoded string `username:password`
+- **API Keys** - Credentials are passed to custom header or query parameter.
+
+You start by defining an authorization type:
+
+```text
+type HttpBearer auth {
+  type: "http"
+  scheme: "bearer"
+}
+
+type HttpBasic auth {
+  type: "http"
+  scheme: "basic"
+}
+
+type ApiKey auth {
+  type: "api_key"
+  header: "X-API-KEY"
+  query: "api_key"
+}
+```
+
+> [!NOTE]
+> As you can see, API key can be defined to be present in either header or query.
+> You can also specify just header or just query, and leave the other field alone.
+
+After you have an authorization type, you can use it to specify auth for a single endpoint:
+
+```text
+GET "/protected" {
+  // ...
+
+  auth: ApiKey
+}
+```
+
+You can also specify multiple auth types per endpoint. They are joined by `or` (at least one
+of them has to match)
+
+```text
+GET {
+  // ...
+
+  auth: [ApiKey, HttpBasic]
+}
+```
+
+> [!NOTE]
+> Because of how the code gen works, you can't specify "anonymous" auth. All auth types
+> have to be named, similar to how all response types have to be named.
+
+### Permissions
+
+Endpoints can require that a user has permissions
+
+```text
+GET {
+  // ...
+
+  auth: ApiKey
+  permissions: "read"
+}
+```
+
+or multiple permissions:
+
+```text
+GET {
+  // ...
+
+  auth: ApiKey
+  permissions: ["read", "write"]
+}
+```
+
+> [!NOTE]
+> Where the permissions come from is the concern of the server implementation. Bearer auth
+> might read them from a JWT token, while API key auth might read them from the database.
+> It is up to the server implementation to decide this.
+
+### Scopes
+
+Authorization and permissions can be declared for the whole path
+
+```text
+path "/protected" {
+  auth: ApiKey
+  permissions: "read"
+
+  /// This endpoint is protected by the path's auth
+  GET "/foo" {
+    // ...
+  }
+
+  /// So is this one
+  PUT "/bar" {
+    // ...
+  }
+}
+```
+
+Inner path or endpoint can override the authorization and/or permissions.
+
+```text
+path "/general_protection" {
+  auth: ApiKey
+  permissions: "read"
+
+  /// Requires ApiKey with permission "read"
+  GET "/foo" {
+    // ...
+  }
+
+  path "/strict" {
+    permissions: "write"
+
+    /// Requires ApiKey with permission "write"
+    GET "/bar" {
+      // ...
+    }
+
+    /// Requires ApiKey with permission "admin"
+    GET "/baz" {
+      permissions: "admin"
+      // ...
+    }
+  }
+
+  /// Requires ApiKey, but doesn't care about permissions
+  GET "/" {
+    auth: ApiKey
+    permissions: null
+  }
+
+  /// Doesn't require any permissions or auth
+  GET "/unauthenticated" {
+    auth: null
+    permissions: null
+  }
+
+  /// All endpoints inside this path are now unauthenticated.
+  path "/ignore" {
+    auth: null
+    permissions: null
+
+    // ...
+  }
+}
+```
+
+Auth and permissions are read for an endpoint. If one (or both) of them are not set,
+they are read from the parent path. If that doesn't have them set, the parent is considered again.
+And so forth until the top.
+
+> [!NOTE]
+> If you set auth to `null`, permissions should also be set to `null`.
+
+### Default Auth
+
+You can set default auth and permissions in a `defaults` block
+
+```text
+type ApiKey auth {
+  // ...
+}
+
+defaults {
+  auth: ApiKey
+  permissions: "read"
+}
+```
 
 ## Error Handling
 
