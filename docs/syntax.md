@@ -18,7 +18,7 @@ betterApi: "1.0"
 name: "My API"
 
 /// Description of the server
-servers {
+server: {
   name: "development"
   url: "http://localhost"
 }
@@ -26,9 +26,8 @@ servers {
 // By defining the servers block multiple times,
 // you can define multiple servers.
 server: {
-  name: "stagin"
+  name: "staging"
   url: "https://staging.example.com"
-
 }
 ```
 
@@ -432,7 +431,7 @@ which are the primary way of adding documentation. Documentation can be added to
 - named types
 - struct properties
 - enum members
-- discrete union members
+- members of discrete unions
 - endpoints
 - path, query, header parameters
 - responses, request bodies and fallbacks
@@ -730,6 +729,9 @@ GET {
 > might read them from a JWT token, while API key auth might read them from the database.
 > It is up to the server implementation to decide this.
 
+If auth is optional, permissions can still be defined. If user is authorized, but doesn't have
+required permissions, the generated code will treat them as unauthorized user.
+
 ### Scopes
 
 Authorization and permissions can be declared for the whole path
@@ -817,7 +819,7 @@ type ApiKey auth {
   // ...
 }
 
-defaults {
+defaults: {
   auth: ApiKey
   permissions: "read"
 }
@@ -825,4 +827,51 @@ defaults {
 
 ## Error Handling
 
-TODO: Describe default fallback, overriding default fallback per path/endpoint scope
+We already mentioned that you can specify error responses for individual endpoints.
+Similar to auth, `fallback` and `response` are scoped within endpoints, paths,
+and the `defaults` block.
+
+> [!TIP]
+> It's recommended that you specify a `fallback` in the `defaults` block. This way
+> the generated server and client code will know how to handle errors that might always
+> happen (400, 500, ...).
+
+Here is an example of how scoped errors might be defined:
+
+```text
+defaults: {
+  fallback: Error
+}
+
+path "/protected" {
+  auth: Bearer
+
+  // We specify a default unauthorized error, since
+  // all endpoints in this path are protected.
+  response: {
+    status: 401
+    type: Error
+  }
+
+  // In this endpoint we don't have to specify fallback or
+  // unauthorized error, but the generated code will have them.
+  GET "/foo" {
+    // ...
+  }
+}
+```
+
+Or, if your whole API is behind auth, you can do:
+
+```text
+defaults: {
+  auth: Bearer
+
+  response: {
+    status: 401
+    type: Error
+  }
+
+  fallback: Error
+}
+```
