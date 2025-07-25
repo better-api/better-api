@@ -635,9 +635,8 @@ After you have an authorization type, you can use it to specify auth for a singl
 
 ```text
 GET "/protected" {
-  // ...
-
   auth: ApiKey
+  // ...
 }
 ```
 
@@ -646,9 +645,8 @@ of them has to match)
 
 ```text
 GET {
-  // ...
-
   auth: [ApiKey, HttpBasic]
+  // ...
 }
 ```
 
@@ -656,16 +654,34 @@ GET {
 > Because of how the code gen works, you can't specify "anonymous" auth. All auth types
 > have to be named, similar to how all response types have to be named.
 
+You can also specify that an auth is optional for and endpoint. This is useful when you have
+a public endpoint, that shows additional info if user is logged in. This is done with the `?`
+operator.
+
+```text
+// Optional auth method
+GET {
+  auth: ApiKey?
+  // ...
+}
+
+// Multiple auth methods, but all are optional
+GET {
+  auth: [ApiKey, HttpBasic]?
+  // ...
+}
+```
+
 ### Permissions
 
 Endpoints can require that a user has permissions
 
 ```text
 GET {
-  // ...
-
   auth: ApiKey
   permissions: "read"
+
+  // ...
 }
 ```
 
@@ -673,10 +689,10 @@ or multiple permissions:
 
 ```text
 GET {
-  // ...
-
   auth: ApiKey
   permissions: ["read", "write"]
+
+  // ...
 }
 ```
 
@@ -737,19 +753,20 @@ path "/general_protection" {
   GET "/" {
     auth: ApiKey
     permissions: null
+    // ...
   }
 
   /// Doesn't require any permissions or auth
   GET "/unauthenticated" {
     auth: null
     permissions: null
+    // ...
   }
 
   /// All endpoints inside this path are now unauthenticated.
   path "/ignore" {
     auth: null
     permissions: null
-
     // ...
   }
 }
