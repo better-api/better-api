@@ -5,7 +5,13 @@ It is very much a work in progress and will probably change during implementatio
 
 ## Basic Info
 
-Let's start with some basic info that you can (and should) define:
+Let's start with some basic info that you can specify. This includes:
+
+- version of Better API
+- version of you API
+- server URLs
+- name of the API
+- description of the API
 
 ```text
 //! This is a special doc comment that is used to describe the whole API.
@@ -16,6 +22,10 @@ betterApi: "1.0"
 
 // Name of your api
 name: "My API"
+
+// Version of you API. THis can be general string, which allows
+// you to choose any versioning you like.
+version: "4.2.42"
 
 /// Description of the server
 server: {
