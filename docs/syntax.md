@@ -3,6 +3,35 @@
 This document tries to semi-formally describe the syntax of the spec and some of the reasoning behind it.
 It is very much a work in progress and will probably change during implementation of the tooling.
 
+## Basic Info
+
+Let's start with some basic info that you can (and should) define:
+
+```text
+//! This is a special doc comment that is used to describe the whole API.
+//! It can have multiple lines and everything.
+
+// Version of better api spec
+betterApi: "1.0"
+
+// Name of your api
+name: "My API"
+
+/// Description of the server
+servers {
+  name: "development"
+  url: "http://localhost"
+}
+
+// By defining the servers block multiple times,
+// you can define multiple servers.
+server: {
+  name: "stagin"
+  url: "https://staging.example.com"
+
+}
+```
+
 ## Types
 
 Because most programming languages don't support anonymous types, Better API doesn't support them either.
@@ -797,7 +826,3 @@ defaults {
 ## Error Handling
 
 TODO: Describe default fallback, overriding default fallback per path/endpoint scope
-
-## Meta Data
-
-TODO: Describe meta data like name, description, version, server urls
