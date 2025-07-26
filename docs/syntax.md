@@ -636,32 +636,101 @@ For the generated client code it works symmetrically.
 > Wildcards add flexibility but should be used sparingly. Usually it's better to explicitly specify
 > the accepted content types.
 
-## Authorization
+## Error Handling
 
-Currently there are three supported authorization types:
+We already mentioned that you can specify error responses for individual endpoints.
+To make working with error easier, Better API makes `fallback` and `response` scoped
+within endpoints, paths, and the `defaults` block.
+
+> [!TIP]
+> It's recommended that you specify a `fallback` in the `defaults` block. This way
+> the generated server and client code will know how to handle errors that might always
+> happen (400, 500, ...).
+
+Here is an example of how scoped errors might be used for defining an API that
+has some endpoints rate limited:
+
+```text
+defaults: {
+  fallback: Error
+}
+
+path "/limited" {
+  // We specify a default rate limiting error, since
+  // all endpoints in this path are rate limited.
+  response: {
+    status: 429
+    type: ErrorTooManyRequests
+  }
+
+  // In this endpoint we don't have to specify fallback or
+  // rate limited error, but the generated code will have them.
+  GET "/foo" {
+    // ...
+  }
+
+  // This endpoint has a special fallback error and overrides
+  // the default fallback error.
+  GET "/bar" {
+    fallback: SpecialError
+  }
+}
+```
+
+Or, if your whole API is rate limited, you can do:
+
+```text
+defaults: {
+  response: {
+    status: 429
+    type: ErrorTooManyRequests
+  }
+
+  fallback: Error
+}
+```
+
+## Authentication & Authorization
+
+Currently there are three supported authentication types:
 
 - **HTTP Bearer** - credentials are passed to `Authorization` header as `Authorization: Bearer <token>`.
 - **HTTP Basic** - credentials are passed to `Authorization` header as `Authorization: Basic <creds>`
   where `creds` is base64 encoded string `username:password`
 - **API Keys** - Credentials are passed to custom header or query parameter.
 
-You start by defining an authorization type:
+Each authentication method must also define an Unauthorized error type. This is the body of a
+401 response returned if the authentication against the method fails.
+
+Authentication method can also define a Forbidden error type. This is the body of a
+403 response returned if permission check against the auth method fails. This is
+required if endpoint specifies required permissions. Permissions are discussed later.
+
+> [!TIP]
+> Unauthorized and Forbidden error types must be either a primitive type, struct, enum or union.
+
+You start by defining an authentication type:
 
 ```text
 type HttpBearer auth {
   type: "http"
   scheme: "bearer"
+  unauthorized: UnauthorizedError
 }
 
 type HttpBasic auth {
   type: "http"
   scheme: "basic"
+  unauthorized: UnauthorizedError
 }
 
 type ApiKey auth {
   type: "api_key"
   header: "X-API-KEY"
   query: "api_key"
+
+  unauthorized: UnauthorizedError
+  forbidden: ForbiddenError
 }
 ```
 
@@ -669,7 +738,7 @@ type ApiKey auth {
 > As you can see, API key can be defined to be present in either header or query.
 > You can also specify just header or just query, and leave the other field alone.
 
-After you have an authorization type, you can use it to specify auth for a single endpoint:
+After you have an authentication type, you can use it to specify auth for a single endpoint:
 
 ```text
 GET "/protected" {
@@ -677,6 +746,11 @@ GET "/protected" {
   // ...
 }
 ```
+
+Endpoint being authenticated means that 401 response for it is already defined. Defining
+a 401 response for such an endpoint results in an error.
+
+---
 
 You can also specify multiple auth types per endpoint. They are joined by `or` (at least one
 of them has to match)
@@ -688,12 +762,17 @@ GET {
 }
 ```
 
+For endpoints that have multiple auth methods, all methods have to have the same unauthorized error
+types.
+
 > [!NOTE]
 > Because of how the code gen works, you can't specify "anonymous" auth. All auth types
 > have to be named, similar to how all response types have to be named.
 
-You can also specify that an auth is optional for and endpoint. This is useful when you have
-a public endpoint, that shows additional info if user is logged in. This is done with the `?`
+---
+
+You can also specify that an auth is optional for an endpoint. This is useful when you have
+a public endpoint that shows additional info if user is logged in. This is done with the `?`
 operator.
 
 ```text
@@ -739,12 +818,18 @@ GET {
 > might read them from a JWT token, while API key auth might read them from the database.
 > It is up to the server implementation to decide this.
 
-If auth is optional, permissions can still be defined. If user is authorized, but doesn't have
+If auth is optional, permissions can still be defined. If user is authenticated but doesn't have
 required permissions, the generated code will treat them as unauthorized user.
+
+If endpoint has multiple auth methods and requires permission, all auth methods have to have
+the same forbidden error type. This is similar to unauthorized error types.
+
+Defining permissions on endpoint also defines its 403 response, similar to how defining auth method
+defined 401 response. This means that endpoint can't redefine 403 response.
 
 ### Scopes
 
-Authorization and permissions can be declared for the whole path
+Authentication and permissions can be declared for the whole path
 
 ```text
 path "/protected" {
@@ -763,7 +848,7 @@ path "/protected" {
 }
 ```
 
-Inner path or endpoint can override the authorization and/or permissions.
+Inner path or endpoint can override the authentication and/or permissions.
 
 ```text
 path "/general_protection" {
@@ -814,11 +899,14 @@ path "/general_protection" {
 ```
 
 Auth and permissions are read for an endpoint. If one (or both) of them are not set,
-they are read from the parent path. If that doesn't have them set, the parent is considered again.
-And so forth until the top.
+they are read from the parent path. If that doesn't have them set, the parent is considered again,
+and so forth until the top.
 
 > [!NOTE]
 > If you set auth to `null`, permissions should also be set to `null`.
+
+> [!NOTE]
+> Specifying auth and permissions for a path defines 401 and 403 responses for all endpoints in the path.
 
 ### Default Auth
 
@@ -835,53 +923,27 @@ defaults: {
 }
 ```
 
-## Error Handling
+> [!NOTE]
+> Defining default auth and permissions defines 401 and 403 responses for all endpoints in the path.
 
-We already mentioned that you can specify error responses for individual endpoints.
-Similar to auth, `fallback` and `response` are scoped within endpoints, paths,
-and the `defaults` block.
+### Advanced Permissions
 
-> [!TIP]
-> It's recommended that you specify a `fallback` in the `defaults` block. This way
-> the generated server and client code will know how to handle errors that might always
-> happen (400, 500, ...).
-
-Here is an example of how scoped errors might be defined:
+There are cases when simple "read" permission is not enough. For instance you have an endpoint
+`/pets/{id}` that returns pet by id and only an owner can update the pet. In this case you can
+define only an authentication method, without any permissions, and a custom 403 response.
 
 ```text
-defaults: {
-  fallback: Error
-}
-
-path "/protected" {
-  auth: Bearer
-
-  // We specify a default unauthorized error, since
-  // all endpoints in this path are protected.
-  response: {
-    status: 401
-    type: Error
-  }
-
-  // In this endpoint we don't have to specify fallback or
-  // unauthorized error, but the generated code will have them.
-  GET "/foo" {
-    // ...
-  }
-}
-```
-
-Or, if your whole API is behind auth, you can do:
-
-```text
-defaults: {
+PUT "/pets/{id}" {
   auth: Bearer
 
   response: {
-    status: 401
-    type: Error
+    status: 403
+    type: ForbiddenError
   }
 
-  fallback: Error
+  // ...
 }
 ```
+
+This way you can perform additional permission checks in the endpoint business logic, where
+you have access to the pet for specified id and authenticated user.
