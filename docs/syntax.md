@@ -3,6 +3,30 @@
 This document tries to semi-formally describe the syntax of the spec and some of the reasoning behind it.
 It is very much a work in progress and will probably change during implementation of the tooling.
 
+## Table of Contents
+
+- [Basic Info](#basic-info)
+- [Types](#types)
+  - [Primitives](#primitives)
+  - [Composite Types](#composite-types)
+  - [Aliases](#aliases)
+  - [Response & Request Body](#response--request-body)
+  - [Examples](#examples)
+- [Path](#path)
+- [Endpoint](#endpoint)
+- [Comments and Documentation](#comments-and-documentation)
+- [Optionals and Defaults](#optionals-and-defaults)
+- [Working with Files](#working-with-files)
+  - [Responses](#responses)
+  - [Request Body](#request-body-1)
+  - [Wildcards](#wildcards)
+- [Error Handling](#error-handling)
+- [Authentication & Authorization](#authentication--authorization)
+  - [Permissions](#permissions)
+  - [Scopes](#scopes)
+  - [Default Auth](#default-auth)
+  - [Advanced Permissions](#advanced-permissions)
+
 ## Basic Info
 
 Let's start with some basic info that you can specify. This includes:
