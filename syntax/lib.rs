@@ -14,8 +14,6 @@ pub enum Kind {
     TOKEN_STRING,
     TOKEN_INTEGER,
     TOKEN_FLOAT,
-    TOKEN_TRUE,
-    TOKEN_FALSE,
 
     TOKEN_COMMENT,     // '//  comment'
     TOKEN_DOC_COMMENT, // '/// doc comment'
@@ -37,5 +35,7 @@ pub enum Kind {
     TOKEN_KW_DELETE,
     TOKEN_KW_PATCH,
 
+    TOKEN_KW_TRUE,    // true
+    TOKEN_KW_FALSE,   // false
     TOKEN_KW_DEFAULT, // @default
 }
