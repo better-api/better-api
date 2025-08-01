@@ -47,7 +47,7 @@ betterApi: "1.0"
 // Name of your api
 name: "My API"
 
-// Version of you API. THis can be general string, which allows
+// Version of you API. This can be general string, which allows
 // you to choose any versioning you like.
 version: "4.2.42"
 
@@ -87,7 +87,7 @@ fn foo(/* ... */) -> FooResponse {/* ... */}
 
 The following primitive types are supported:
 
-- **integers**: `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`
+- **integers**: `i32`, `i64`, `u32`, `u64`
 - **floats**: `f32`, `f64`
 - **date & time**:
   - `date`: ISO date string

@@ -1,0 +1,14 @@
+[package]
+name = "better-api-syntax"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+rowan = "0.16.1"
