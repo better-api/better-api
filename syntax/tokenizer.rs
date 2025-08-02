@@ -41,9 +41,8 @@ impl<'a> Tokenizer<'a> {
             && ch.is_whitespace()
             && *ch != '\n'
         {
-            self.pos += ch.len_utf8();
-
             // Move to next char
+            self.pos += ch.len_utf8();
             self.chars.next();
         }
 
@@ -54,10 +53,44 @@ impl<'a> Tokenizer<'a> {
         while let Some(ch) = self.chars.peek()
             && (ch.is_alphabetic() || ch.is_ascii_digit() || *ch == '_' || *ch == '-')
         {
+            // Move to next char
             self.pos += ch.len_utf8();
+            self.chars.next();
+        }
+    }
+
+    fn string(&mut self) -> Token<'a> {
+        while let Some(ch) = self.chars.peek()
+            && *ch != '"'
+        {
+            if *ch == '\n' {
+                // TODO: Emit diagnostics
+                return self.emit(TOKEN_ERROR);
+            }
 
             // Move to next char
-            self.chars.next();
+            self.pos += ch.len_utf8();
+            let ch = self.chars.next().unwrap();
+
+            // If we have escape sequence, we "ignore" the next character.
+            // The validity of escape sequences is checked during tree parsing.
+            // This was we can have ERROR_NODE and STRING_TOKEN as child, which
+            // preserves more information than ERROR_TOKEN.
+            if ch == '\\' {
+                let ch = self.chars.next();
+                self.pos += ch.map_or(0, |c| c.len_utf8());
+            }
+        }
+
+        let ch = self.chars.next();
+        self.pos += ch.map_or(0, |c| c.len_utf8());
+
+        match ch {
+            // TODO: Emit diagnostics
+            None => self.emit(TOKEN_ERROR),
+            Some('"') => self.emit(TOKEN_STRING),
+            // Unreachable because while loop runs until '"'
+            Some(_) => unreachable!(),
         }
     }
 }
@@ -72,6 +105,8 @@ impl<'a> Iterator for Tokenizer<'a> {
         let token = match ch {
             '\n' => self.emit(TOKEN_EOL),
             ch if ch.is_whitespace() && ch != '\n' => self.whitespace(),
+
+            '"' => self.string(),
 
             ',' => self.emit(TOKEN_COMMA),
             ':' => self.emit(TOKEN_COLON),
@@ -185,6 +220,47 @@ this_is_Ident213-890asdf"#,
                 (TOKEN_KW_DEFAULT, "@default"),
                 (TOKEN_SPACE, " "),
                 (TOKEN_ERROR, "@error"),
+            ]
+        );
+    }
+
+    #[test]
+    fn string_simple() {
+        let tokens: Vec<_> = tokenize(r#""foo""bar""something longer 1@*-""#).collect();
+
+        assert_eq!(
+            tokens,
+            vec![
+                (TOKEN_STRING, "\"foo\""),
+                (TOKEN_STRING, "\"bar\""),
+                (TOKEN_STRING, "\"something longer 1@*-\""),
+            ]
+        );
+    }
+
+    #[test]
+    fn unfinished_string() {
+        let tokens: Vec<_> = tokenize("\"foo\n\"foo").collect();
+
+        assert_eq!(
+            tokens,
+            vec![
+                (TOKEN_ERROR, "\"foo"),
+                (TOKEN_EOL, "\n"),
+                (TOKEN_ERROR, "\"foo"),
+            ]
+        );
+    }
+
+    #[test]
+    fn string_escape() {
+        let tokens: Vec<_> = tokenize(r#" "foo \" \a \b \c \ " "#).collect();
+        assert_eq!(
+            tokens,
+            vec![
+                (TOKEN_SPACE, " "),
+                (TOKEN_STRING, r#""foo \" \a \b \c \ ""#),
+                (TOKEN_SPACE, " "),
             ]
         );
     }
