@@ -93,6 +93,35 @@ impl<'a> Tokenizer<'a> {
             Some(_) => unreachable!(),
         }
     }
+
+    fn number(&mut self) -> Token<'a> {
+        let mut nr_dots = 0;
+
+        while let Some(ch) = self.chars.peek()
+            && (ch.is_ascii_digit() || *ch == '.')
+        {
+            if *ch == '.' {
+                nr_dots += 1;
+            }
+
+            self.pos += ch.len_utf8();
+            self.chars.next();
+        }
+
+        // Check if the number ended with '.'. In this case it's invalid float.
+        // Since digits and '.' are one byte size, the following sub-string is valid.
+        let last_ch = &self.source[self.pos - 1..self.pos];
+        if last_ch == "." {
+            return self.emit(TOKEN_ERROR);
+        }
+
+        match nr_dots {
+            0 => self.emit(TOKEN_INTEGER),
+            1 => self.emit(TOKEN_FLOAT),
+            // TODO: Emit diagnostics
+            _ => self.emit(TOKEN_ERROR),
+        }
+    }
 }
 
 impl<'a> Iterator for Tokenizer<'a> {
@@ -128,6 +157,8 @@ impl<'a> Iterator for Tokenizer<'a> {
                     _ => self.emit(TOKEN_ERROR),
                 }
             }
+
+            ch if ch.is_ascii_digit() => self.number(),
 
             ch if ch.is_alphabetic() => {
                 self.read_ident();
@@ -263,5 +294,23 @@ this_is_Ident213-890asdf"#,
                 (TOKEN_SPACE, " "),
             ]
         );
+    }
+
+    #[test]
+    fn number() {
+        let tokens: Vec<_> = tokenize("10 42.69 1.2.3 1.").collect();
+
+        assert_eq!(
+            tokens,
+            vec![
+                (TOKEN_INTEGER, "10"),
+                (TOKEN_SPACE, " "),
+                (TOKEN_FLOAT, "42.69"),
+                (TOKEN_SPACE, " "),
+                (TOKEN_ERROR, "1.2.3"),
+                (TOKEN_SPACE, " "),
+                (TOKEN_ERROR, "1.")
+            ]
+        )
     }
 }
