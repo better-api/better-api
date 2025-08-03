@@ -65,7 +65,7 @@ impl From<Kind> for rowan::SyntaxKind {
 /// A type that implements rowan::Language trait for nicer
 /// API for working with tokens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Language;
+pub enum Language {}
 
 impl rowan::Language for Language {
     type Kind = Kind;

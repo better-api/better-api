@@ -1,46 +1,58 @@
 use crate::Kind::{self, *};
+use better_api_diagnostic::{Label, Report, Span};
 
+/// A single token. It's a pair of token type and the underlying string.
 pub type Token<'a> = (Kind, &'a str);
 
-pub fn tokenize<'a>(source: &'a str) -> impl Iterator<Item = Token<'a>> {
-    Tokenizer::new(source)
+/// Tokenizes a string and return an iterator of tokens.
+///
+/// Any diagnostics that should be reported are appended into the
+/// `diagnostics` vector provided by the caller.
+pub fn tokenize<'s>(
+    source: &'s str,
+    diagnostics: &mut Vec<Report>,
+) -> impl Iterator<Item = Token<'s>> {
+    Tokenizer::new(source, diagnostics)
 }
 
-struct Tokenizer<'a> {
-    source: &'a str,
-    chars: std::iter::Peekable<std::str::Chars<'a>>,
+struct Tokenizer<'s, 'd> {
+    source: &'s str,
+    chars: std::iter::Peekable<std::str::Chars<'s>>,
 
     /// Start position of the token being parsed.
     start: usize,
     /// Current position of the tokenizer.
     pos: usize,
+
+    reports: &'d mut Vec<Report>,
 }
 
-impl<'a> Tokenizer<'a> {
-    fn new(source: &'a str) -> Self {
+impl<'s, 'd> Tokenizer<'s, 'd> {
+    fn new(source: &'s str, diagnostics: &'d mut Vec<Report>) -> Self {
         Tokenizer {
             source,
             chars: source.chars().peekable(),
             start: 0,
             pos: 0,
+            reports: diagnostics,
         }
     }
 
     /// Returns the string value of the token that is currently being parsed.
-    fn current_value(&self) -> &'a str {
+    fn current_value(&self) -> &'s str {
         &self.source[self.start..self.pos]
     }
 
     /// Emits the currently parsed token and resets starting positions for
     /// next token.
-    fn emit(&mut self, kind: Kind) -> Token<'a> {
+    fn emit(&mut self, kind: Kind) -> Token<'s> {
         let value = self.current_value();
         self.start = self.pos;
         (kind, value)
     }
 
     /// Tokenizes white space that is not EOL '\n'.
-    fn whitespace(&mut self) -> Token<'a> {
+    fn whitespace(&mut self) -> Token<'s> {
         while let Some(ch) = self.chars.peek()
             && ch.is_whitespace()
             && *ch != '\n'
@@ -66,12 +78,20 @@ impl<'a> Tokenizer<'a> {
     }
 
     /// Tokenizes a string
-    fn string(&mut self) -> Token<'a> {
+    fn string(&mut self) -> Token<'s> {
         while let Some(ch) = self.chars.peek()
             && *ch != '"'
         {
             if *ch == '\n' {
-                // TODO: Emit diagnostics
+                self.reports.push(
+                    Report::error("missing string ending quotes '\"'".to_string()).with_label(
+                        Label::new(
+                            "expected '\"' before new line".to_string(),
+                            Span::new(self.pos, self.pos + ch.len_utf8()),
+                        ),
+                    ),
+                );
+
                 return self.emit(TOKEN_ERROR);
             }
 
@@ -93,16 +113,28 @@ impl<'a> Tokenizer<'a> {
         self.pos += ch.map_or(0, |c| c.len_utf8());
 
         match ch {
-            // TODO: Emit diagnostics
-            None => self.emit(TOKEN_ERROR),
+            None => {
+                self.reports.push(
+                    Report::error("missing string ending quotes '\"'".to_string()).with_label(
+                        Label::new(
+                            "expected '\"' before EOF".to_string(),
+                            // We assume that the last character is one byte width. If this is not true
+                            // we might have a strange report, but for now this is fine.
+                            Span::new(self.pos - 1, self.pos),
+                        ),
+                    ),
+                );
+                self.emit(TOKEN_ERROR)
+            }
             Some('"') => self.emit(TOKEN_STRING),
+
             // Unreachable because while loop runs until '"'
             Some(_) => unreachable!(),
         }
     }
 
     /// Tokenizes a number (int or float)
-    fn number(&mut self) -> Token<'a> {
+    fn number(&mut self) -> Token<'s> {
         let mut nr_dots = 0;
 
         while let Some(ch) = self.chars.peek()
@@ -120,19 +152,37 @@ impl<'a> Tokenizer<'a> {
         // Since digits and '.' are one byte size, the following sub-string is valid.
         let last_ch = &self.source[self.pos - 1..self.pos];
         if last_ch == "." {
+            self.reports.push(
+                Report::error(format!("invalid float `{}`", self.current_value()))
+                    .with_label(Label::new(
+                        "invalid float".to_string(),
+                        Span::new(self.start, self.pos),
+                    ))
+                    .with_note(
+                        "help: float can't end with '.'. You should end it with '.0' instead."
+                            .to_string(),
+                    ),
+            );
             return self.emit(TOKEN_ERROR);
         }
 
         match nr_dots {
             0 => self.emit(TOKEN_INTEGER),
             1 => self.emit(TOKEN_FLOAT),
-            // TODO: Emit diagnostics
-            _ => self.emit(TOKEN_ERROR),
+            _ => {
+                self.reports.push(
+                    Report::error(format!("invalid float `{}`", self.current_value())).with_label(
+                        Label::new("invalid float".to_string(), Span::new(self.start, self.pos)),
+                    ),
+                );
+
+                self.emit(TOKEN_ERROR)
+            }
         }
     }
 
     /// Tokenizes a comment
-    fn comment(&mut self) -> Token<'a> {
+    fn comment(&mut self) -> Token<'s> {
         let ch = self.chars.next().unwrap();
         self.pos += ch.len_utf8();
 
@@ -160,7 +210,7 @@ impl<'a> Tokenizer<'a> {
         self.emit(token_type)
     }
 
-    fn keyword(&mut self) -> Token<'a> {
+    fn keyword(&mut self) -> Token<'s> {
         self.read_ident();
         let value = self.current_value();
         let kind = match value {
@@ -192,8 +242,8 @@ impl<'a> Tokenizer<'a> {
     }
 }
 
-impl<'a> Iterator for Tokenizer<'a> {
-    type Item = Token<'a>;
+impl<'s, 'd> Iterator for Tokenizer<'s, 'd> {
+    type Item = Token<'s>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let ch = self.chars.next()?;
@@ -221,8 +271,17 @@ impl<'a> Iterator for Tokenizer<'a> {
                 match value {
                     "@default" => self.emit(TOKEN_KW_DEFAULT),
 
-                    // TODO: Emit diagnostics
-                    _ => self.emit(TOKEN_ERROR),
+                    _ => {
+                        self.reports.push(
+                            Report::error(format!("invalid decorator `{value}`")).with_label(
+                                Label::new(
+                                    "invalid decorator".to_string(),
+                                    Span::new(self.start, self.pos),
+                                ),
+                            ),
+                        );
+                        self.emit(TOKEN_ERROR)
+                    }
                 }
             }
 
@@ -235,8 +294,14 @@ impl<'a> Iterator for Tokenizer<'a> {
                 _ => self.emit(TOKEN_ERROR),
             },
 
-            // TODO: Emit diagnostics
-            _ => self.emit(TOKEN_ERROR),
+            _ => {
+                self.reports.push(
+                    Report::error(format!("unknown token `{}`", self.current_value())).with_label(
+                        Label::new("unknown token".to_string(), Span::new(self.start, self.pos)),
+                    ),
+                );
+                self.emit(TOKEN_ERROR)
+            }
         };
 
         Some(token)
@@ -245,12 +310,16 @@ impl<'a> Iterator for Tokenizer<'a> {
 
 #[cfg(test)]
 mod test {
+    use better_api_diagnostic::{Label, Report, Span};
+
     use super::tokenize;
     use crate::Kind::*;
 
     #[test]
     fn simple_whitespace() {
-        let tokens: Vec<_> = tokenize(" \t \n    \t ").collect();
+        let mut diagnostics = vec![];
+        let tokens: Vec<_> = tokenize(" \t \n    \t ", &mut diagnostics).collect();
+
         assert_eq!(
             tokens,
             vec![
@@ -259,10 +328,12 @@ mod test {
                 (TOKEN_SPACE, "    \t ")
             ]
         );
+        assert_eq!(diagnostics, vec![]);
     }
 
     #[test]
     fn simple_keywords_and_idents() {
+        let mut diagnostics = vec![];
         let tokens: Vec<_> = tokenize(
             r#"GET
 POST
@@ -283,6 +354,7 @@ timestamp
 bool
 string
 file"#,
+            &mut diagnostics,
         )
         .collect();
 
@@ -328,11 +400,13 @@ file"#,
                 (TOKEN_KW_FILE, "file"),
             ]
         );
+        assert_eq!(diagnostics, vec![]);
     }
 
     #[test]
     fn modifier_keywords() {
-        let tokens: Vec<_> = tokenize("@default @error").collect();
+        let mut diagnostics = vec![];
+        let tokens: Vec<_> = tokenize("@default @error", &mut diagnostics).collect();
 
         assert_eq!(
             tokens,
@@ -342,11 +416,22 @@ file"#,
                 (TOKEN_ERROR, "@error"),
             ]
         );
+        assert_eq!(
+            diagnostics,
+            vec![
+                Report::error("invalid decorator `@error`".to_string()).with_label(Label::new(
+                    "invalid decorator".to_string(),
+                    Span::new(9, 15)
+                ))
+            ]
+        );
     }
 
     #[test]
     fn string_simple() {
-        let tokens: Vec<_> = tokenize(r#""foo""bar""something longer 1@*-""#).collect();
+        let mut diagnostics = vec![];
+        let tokens: Vec<_> =
+            tokenize(r#""foo""bar""something longer 1@*-""#, &mut diagnostics).collect();
 
         assert_eq!(
             tokens,
@@ -356,11 +441,13 @@ file"#,
                 (TOKEN_STRING, "\"something longer 1@*-\""),
             ]
         );
+        assert_eq!(diagnostics, vec![]);
     }
 
     #[test]
     fn unfinished_string() {
-        let tokens: Vec<_> = tokenize("\"foo\n\"foo").collect();
+        let mut diagnostics = vec![];
+        let tokens: Vec<_> = tokenize("\"foo\n\"foo", &mut diagnostics).collect();
 
         assert_eq!(
             tokens,
@@ -370,11 +457,23 @@ file"#,
                 (TOKEN_ERROR, "\"foo"),
             ]
         );
+        assert_eq!(
+            diagnostics,
+            vec![
+                Report::error("missing string ending quotes '\"'".to_string()).with_label(
+                    Label::new("expected '\"' before new line".to_string(), Span::new(4, 5))
+                ),
+                Report::error("missing string ending quotes '\"'".to_string()).with_label(
+                    Label::new("expected '\"' before EOF".to_string(), Span::new(8, 9))
+                ),
+            ]
+        );
     }
 
     #[test]
     fn string_escape() {
-        let tokens: Vec<_> = tokenize(r#" "foo \" \a \b \c \ " "#).collect();
+        let mut diagnostics = vec![];
+        let tokens: Vec<_> = tokenize(r#" "foo \" \a \b \c \ " "#, &mut diagnostics).collect();
         assert_eq!(
             tokens,
             vec![
@@ -383,11 +482,13 @@ file"#,
                 (TOKEN_SPACE, " "),
             ]
         );
+        assert_eq!(diagnostics, vec![]);
     }
 
     #[test]
     fn number() {
-        let tokens: Vec<_> = tokenize("10 42.69 1.2.3 1.").collect();
+        let mut diagnostics = vec![];
+        let tokens: Vec<_> = tokenize("10 42.69 1.2.3 1.", &mut diagnostics).collect();
 
         assert_eq!(
             tokens,
@@ -400,15 +501,30 @@ file"#,
                 (TOKEN_SPACE, " "),
                 (TOKEN_ERROR, "1.")
             ]
-        )
+        );
+        assert_eq!(
+            diagnostics,
+            vec![
+                Report::error("invalid float `1.2.3`".to_string())
+                    .with_label(Label::new("invalid float".to_string(), Span::new(9, 14))),
+                Report::error("invalid float `1.`".to_string())
+                    .with_label(Label::new("invalid float".to_string(), Span::new(15, 17)))
+                    .with_note(
+                        "help: float can't end with '.'. You should end it with '.0' instead."
+                            .to_string()
+                    )
+            ]
+        );
     }
 
     #[test]
     fn comments() {
+        let mut diagnostics = vec![];
         let tokens: Vec<_> = tokenize(
             r#"//! Top comment
 /// doc comment
 //comment"#,
+            &mut diagnostics,
         )
         .collect();
 
@@ -422,5 +538,6 @@ file"#,
                 (TOKEN_COMMENT, "//comment")
             ]
         );
+        assert_eq!(diagnostics, vec![]);
     }
 }
