@@ -26,16 +26,20 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    /// Returns the string value of the token that is currently being parsed.
     fn current_value(&self) -> &'a str {
         &self.source[self.start..self.pos]
     }
 
+    /// Emits the currently parsed token and resets starting positions for
+    /// next token.
     fn emit(&mut self, kind: Kind) -> Token<'a> {
         let value = self.current_value();
         self.start = self.pos;
         (kind, value)
     }
 
+    /// Tokenizes white space that is not EOL '\n'.
     fn whitespace(&mut self) -> Token<'a> {
         while let Some(ch) = self.chars.peek()
             && ch.is_whitespace()
@@ -49,6 +53,8 @@ impl<'a> Tokenizer<'a> {
         self.emit(TOKEN_SPACE)
     }
 
+    /// Reds identifier, but doesn't emit a token. This is because the function
+    /// is also used for reading keywords.
     fn read_ident(&mut self) {
         while let Some(ch) = self.chars.peek()
             && (ch.is_alphabetic() || ch.is_ascii_digit() || *ch == '_' || *ch == '-')
@@ -59,6 +65,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    /// Tokenizes a string
     fn string(&mut self) -> Token<'a> {
         while let Some(ch) = self.chars.peek()
             && *ch != '"'
@@ -94,6 +101,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    /// Tokenizes a number (int or float)
     fn number(&mut self) -> Token<'a> {
         let mut nr_dots = 0;
 
@@ -123,6 +131,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    /// Tokenizes a comment
     fn comment(&mut self) -> Token<'a> {
         let ch = self.chars.next().unwrap();
         self.pos += ch.len_utf8();
@@ -149,6 +158,37 @@ impl<'a> Tokenizer<'a> {
         }
 
         self.emit(token_type)
+    }
+
+    fn keyword(&mut self) -> Token<'a> {
+        self.read_ident();
+        let value = self.current_value();
+        let kind = match value {
+            "GET" => TOKEN_KW_GET,
+            "POST" => TOKEN_KW_POST,
+            "PUT" => TOKEN_KW_PUT,
+            "DELETE" => TOKEN_KW_DELETE,
+            "PATCH" => TOKEN_KW_PATCH,
+
+            "true" => TOKEN_KW_TRUE,
+            "false" => TOKEN_KW_FALSE,
+
+            "i32" => TOKEN_KW_I32,
+            "i64" => TOKEN_KW_I64,
+            "u32" => TOKEN_KW_U32,
+            "u64" => TOKEN_KW_U64,
+            "f32" => TOKEN_KW_F32,
+            "f64" => TOKEN_KW_F64,
+            "date" => TOKEN_KW_DATE,
+            "timestamp" => TOKEN_KW_TIMESTAMP,
+            "bool" => TOKEN_KW_BOOL,
+            "string" => TOKEN_KW_STRING,
+            "file" => TOKEN_KW_FILE,
+
+            _ => TOKEN_IDENTIFIER,
+        };
+
+        self.emit(kind)
     }
 }
 
@@ -188,24 +228,7 @@ impl<'a> Iterator for Tokenizer<'a> {
 
             ch if ch.is_ascii_digit() => self.number(),
 
-            ch if ch.is_alphabetic() => {
-                self.read_ident();
-                let value = self.current_value();
-                let kind = match value {
-                    "GET" => TOKEN_KW_GET,
-                    "POST" => TOKEN_KW_POST,
-                    "PUT" => TOKEN_KW_PUT,
-                    "DELETE" => TOKEN_KW_DELETE,
-                    "PATCH" => TOKEN_KW_PATCH,
-
-                    "true" => TOKEN_KW_TRUE,
-                    "false" => TOKEN_KW_FALSE,
-
-                    _ => TOKEN_IDENTIFIER,
-                };
-
-                self.emit(kind)
-            }
+            ch if ch.is_alphabetic() => self.keyword(),
 
             '/' => match self.chars.peek() {
                 Some('/') => self.comment(),
@@ -248,7 +271,18 @@ DELETE
 PATCH
 true
 false
-this_is_Ident213-890asdf"#,
+this_is_Ident213-890asdf
+i32
+i64
+f32
+f64
+u32
+u64
+date
+timestamp
+bool
+string
+file"#,
         )
         .collect();
 
@@ -270,6 +304,28 @@ this_is_Ident213-890asdf"#,
                 (TOKEN_KW_FALSE, "false"),
                 (TOKEN_EOL, "\n"),
                 (TOKEN_IDENTIFIER, "this_is_Ident213-890asdf"),
+                (TOKEN_EOL, "\n"),
+                (TOKEN_KW_I32, "i32"),
+                (TOKEN_EOL, "\n"),
+                (TOKEN_KW_I64, "i64"),
+                (TOKEN_EOL, "\n"),
+                (TOKEN_KW_F32, "f32"),
+                (TOKEN_EOL, "\n"),
+                (TOKEN_KW_F64, "f64"),
+                (TOKEN_EOL, "\n"),
+                (TOKEN_KW_U32, "u32"),
+                (TOKEN_EOL, "\n"),
+                (TOKEN_KW_U64, "u64"),
+                (TOKEN_EOL, "\n"),
+                (TOKEN_KW_DATE, "date"),
+                (TOKEN_EOL, "\n"),
+                (TOKEN_KW_TIMESTAMP, "timestamp"),
+                (TOKEN_EOL, "\n"),
+                (TOKEN_KW_BOOL, "bool"),
+                (TOKEN_EOL, "\n"),
+                (TOKEN_KW_STRING, "string"),
+                (TOKEN_EOL, "\n"),
+                (TOKEN_KW_FILE, "file"),
             ]
         );
     }
