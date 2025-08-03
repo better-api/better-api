@@ -2,6 +2,7 @@ mod tokenizer;
 
 pub use tokenizer::{Token, tokenize};
 
+/// All possible kinds of tokens and composite nodes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[allow(non_camel_case_types)]
 #[repr(u16)]
@@ -49,5 +50,32 @@ pub enum Kind {
     TOKEN_KW_BOOL,      // bool
     TOKEN_KW_STRING,    // string
     TOKEN_KW_FILE,      // file
+
+    NODE_ROOT, // Root node of the file that's parsed
 }
 
+use Kind::*;
+
+impl From<Kind> for rowan::SyntaxKind {
+    fn from(value: Kind) -> Self {
+        Self(value as u16)
+    }
+}
+
+/// A type that implements rowan::Language trait for nicer
+/// API for working with tokens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Language;
+
+impl rowan::Language for Language {
+    type Kind = Kind;
+
+    fn kind_from_raw(raw: rowan::SyntaxKind) -> Self::Kind {
+        assert!(raw.0 <= NODE_ROOT as u16);
+        unsafe { std::mem::transmute::<u16, Kind>(raw.0) }
+    }
+
+    fn kind_to_raw(kind: Self::Kind) -> rowan::SyntaxKind {
+        kind.into()
+    }
+}
