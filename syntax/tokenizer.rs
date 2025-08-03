@@ -122,6 +122,34 @@ impl<'a> Tokenizer<'a> {
             _ => self.emit(TOKEN_ERROR),
         }
     }
+
+    fn comment(&mut self) -> Token<'a> {
+        let ch = self.chars.next().unwrap();
+        self.pos += ch.len_utf8();
+
+        let token_type = match self.chars.peek() {
+            Some('/') => {
+                let ch = self.chars.next().unwrap();
+                self.pos += ch.len_utf8();
+                TOKEN_DOC_COMMENT
+            }
+            Some('!') => {
+                let ch = self.chars.next().unwrap();
+                self.pos += ch.len_utf8();
+                TOKEN_TOP_COMMENT
+            }
+            _ => TOKEN_COMMENT,
+        };
+
+        while let Some(ch) = self.chars.peek()
+            && *ch != '\n'
+        {
+            self.pos += ch.len_utf8();
+            self.chars.next();
+        }
+
+        self.emit(token_type)
+    }
 }
 
 impl<'a> Iterator for Tokenizer<'a> {
@@ -178,6 +206,11 @@ impl<'a> Iterator for Tokenizer<'a> {
 
                 self.emit(kind)
             }
+
+            '/' => match self.chars.peek() {
+                Some('/') => self.comment(),
+                _ => self.emit(TOKEN_ERROR),
+            },
 
             // TODO: Emit diagnostics
             _ => self.emit(TOKEN_ERROR),
@@ -312,5 +345,26 @@ this_is_Ident213-890asdf"#,
                 (TOKEN_ERROR, "1.")
             ]
         )
+    }
+
+    #[test]
+    fn comments() {
+        let tokens: Vec<_> = tokenize(
+            r#"//! Top comment
+/// doc comment
+//comment"#,
+        )
+        .collect();
+
+        assert_eq!(
+            tokens,
+            vec![
+                (TOKEN_TOP_COMMENT, "//! Top comment"),
+                (TOKEN_EOL, "\n"),
+                (TOKEN_DOC_COMMENT, "/// doc comment"),
+                (TOKEN_EOL, "\n"),
+                (TOKEN_COMMENT, "//comment")
+            ]
+        );
     }
 }
