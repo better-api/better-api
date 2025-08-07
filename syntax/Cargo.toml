@@ -13,3 +13,6 @@ path = "lib.rs"
 [dependencies]
 rowan = "0.16.1"
 better-api-diagnostic = { path = "../diagnostic" }
+
+[dev-dependencies]
+insta.workspace = true

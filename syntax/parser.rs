@@ -63,12 +63,24 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         }
     }
 
+    /// Parses the tokens
     fn parse(&mut self) {
         self.builder.start_node(NODE_ROOT.into());
 
+        while self.tokens.peek().is_some() {
+            self.parse_root_node();
+        }
+
+        // Skip leading whitespace
         self.skip_whitespace_eol();
 
         self.builder.finish_node();
+    }
+
+    /// Parses a child of the file. This can be ie. path, name, endpoint, ...
+    fn parse_root_node(&mut self) {
+        self.skip_whitespace_eol();
+        // TODO: Implement me
     }
 }
 
@@ -85,7 +97,7 @@ mod test {
         let tokens = tokenize(text, &mut diagnostics);
 
         let (tree, diagnostics) = parse(tokens);
-        assert_eq!(format!("{tree:?}",), "NODE_ROOT@0..7");
+        insta::assert_debug_snapshot!(tree);
         assert_eq!(diagnostics, vec![]);
     }
 }

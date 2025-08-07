@@ -19,4 +19,5 @@ publish.workspace = true
 repository.workspace = true
 version.workspace = true
 
-[dependencies]
+[workspace.dependencies]
+insta = "1.43"
