@@ -45,6 +45,10 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.tokens.peek().map(|(kind, _)| *kind)
     }
 
+    fn peek_value(&mut self) -> Option<&str> {
+        self.tokens.peek().map(|(_, value)| *value)
+    }
+
     /// Skips whitespace that is not EOL.
     /// If you want to skip EOL as well, use
     /// skip_whitespace_eol.
@@ -63,16 +67,32 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         }
     }
 
+    /// Expects that next token is of certain kind and advances the tokens.
+    /// Otherwise reports an error and doesn't advance the tokens.
+    fn expect(&mut self, kind: Kind) -> bool {
+        if self.peek() == Some(kind) {
+            self.advance();
+            true
+        } else {
+            // TODO: report diagnostic
+            false
+        }
+    }
+
+    /// Parses assignment trivia "<whitespace> : <whitespace>"
+    fn assignment(&mut self) {
+        self.skip_whitespace();
+        self.expect(TOKEN_COLON);
+        self.skip_whitespace();
+    }
+
     /// Parses the tokens
     fn parse(&mut self) {
         self.builder.start_node(NODE_ROOT.into());
 
-        while self.tokens.peek().is_some() {
+        while self.peek().is_some() {
             self.parse_root_node();
         }
-
-        // Skip leading whitespace
-        self.skip_whitespace_eol();
 
         self.builder.finish_node();
     }
@@ -80,7 +100,46 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
     /// Parses a child of the file. This can be ie. path, name, endpoint, ...
     fn parse_root_node(&mut self) {
         self.skip_whitespace_eol();
-        // TODO: Implement me
+
+        match self.peek() {
+            Some(TOKEN_IDENTIFIER) => match self.peek_value() {
+                Some("name") => {
+                    self.builder.start_node(NODE_NAME.into());
+
+                    self.advance();
+                    self.assignment();
+
+                    // TODO: Parse value
+
+                    self.builder.finish_node();
+                }
+                Some("betterApi") => todo!("Parse betterApi version"),
+                Some("version") => todo!("Parse version string"),
+                Some("server") => todo!("Parse server object"),
+                Some("type") => todo!("Parse type"),
+                Some("example") => todo!("Parse example"),
+                Some("path") => todo!("Parse path"),
+                Some(_) => todo!("parse error node"),
+                None => unreachable!(),
+            },
+
+            Some(TOKEN_KW_GET)
+            | Some(TOKEN_KW_POST)
+            | Some(TOKEN_KW_PUT)
+            | Some(TOKEN_KW_DELETE)
+            | Some(TOKEN_KW_PATCH) => todo!("parse endpoint"),
+
+            Some(TOKEN_COMMENT) => todo!("parse comment"),
+            Some(TOKEN_DOC_COMMENT) => todo!("parse doc comment"),
+            Some(TOKEN_TOP_COMMENT) => todo!("parse top comment"),
+
+            Some(_) => todo!("parse error node"),
+
+            // We reached end of the file
+            None => return,
+        }
+
+        self.expect(TOKEN_EOL);
     }
 }
 
@@ -92,7 +151,7 @@ mod test {
 
     #[test]
     fn placeholder_test() {
-        let text = "   \n\n  ";
+        let text = "   \n\nname :  ";
         let mut diagnostics = vec![];
         let tokens = tokenize(text, &mut diagnostics);
 

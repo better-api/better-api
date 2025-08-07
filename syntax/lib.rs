@@ -55,6 +55,10 @@ pub enum Kind {
     TOKEN_KW_STRING,    // string
     TOKEN_KW_FILE,      // file
 
+    /// Underlying value represents a name. It can be
+    /// name of the API, name of the field, name of the endpoint, ...
+    NODE_NAME,
+
     NODE_ROOT, // Root node of the file that's parsed
 }
 
