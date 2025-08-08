@@ -12,6 +12,7 @@ path = "lib.rs"
 
 [dependencies]
 rowan = "0.16.1"
+derive_more = { version = "2.0", features = ["display"] }
 better-api-diagnostic = { path = "../diagnostic" }
 
 [dev-dependencies]
