@@ -121,26 +121,16 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.builder.finish_node();
     }
 
-    /// Parses header trivia. This includes white space, comments,
+    /// Parses prologue trivia. This includes white space, comments,
     /// doc comments and modifiers (@default, ...).
     ///
     /// Returns starting checkpoint of the important trivia (doc comments and modifiers),
     /// if there is any.
-    fn parse_header(&mut self) -> Option<rowan::Checkpoint> {
-        // TODO: Implement me
-        None
-    }
-
-    /// Parses a child of the file. This can be ie. path, name, endpoint, ...
-    fn parse_root_node(&mut self) {
+    fn parse_prologue(&mut self) -> Option<rowan::Checkpoint> {
         let mut start = None;
-
-        // Optional span of `@default`, used for reporting errors
-        let mut default_span = None;
 
         loop {
             self.skip_whitespace_eol();
-
             match self.peek() {
                 Some(TOKEN_COMMENT) => {
                     self.advance();
@@ -150,6 +140,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 Some(TOKEN_DOC_COMMENT) => {
                     if start.is_none() {
                         start = Some(self.builder.checkpoint());
+                        self.builder.start_node(NODE_PROLOGUE.into());
                     }
 
                     self.advance();
@@ -158,73 +149,89 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
                 Some(TOKEN_KW_DEFAULT) => {
                     if start.is_none() {
-                        start = Some(self.builder.checkpoint())
+                        start = Some(self.builder.checkpoint());
+                        self.builder.start_node(NODE_PROLOGUE.into());
                     }
 
-                    let span = Span::new(self.pos, self.peek_value().unwrap().len());
-
-                    if default_span.is_none() {
-                        default_span = Some(span);
-                        self.advance();
-                        self.expect(TOKEN_EOL);
-                    } else {
-                        self.reports.push(
-                            Report::error("repeated `@default`".to_string())
-                                .with_label(Label::new(
-                                    "this `@default` is repeated".to_string(),
-                                    span,
-                                ))
-                                .with_note(
-                                    "help: only one `@default` per node is allowed".to_string(),
-                                ),
-                        );
-                        self.builder.start_node(NODE_ERROR.into());
-                        self.advance();
-                        self.expect(TOKEN_EOL);
-                        self.builder.finish_node();
-                    }
+                    self.parse_default();
                 }
 
-                Some(TOKEN_TOP_COMMENT) => {
-                    self.advance();
-                    break;
-                }
-
-                Some(TOKEN_IDENTIFIER) => {
-                    match self.peek_value() {
-                        Some("name") => self.parse_root_node_field(NODE_NAME),
-                        Some("betterApi") => self.parse_root_node_field(NODE_BETTER_API),
-                        Some("version") => self.parse_root_node_field(NODE_VERSION),
-                        Some("server") => self.parse_root_node_field(NODE_SERVER),
-                        Some("type") => todo!("Parse type"),
-                        Some("example") => todo!("Parse example"),
-                        Some("path") => todo!("Parse path"),
-                        Some(_) => todo!("parse error node"),
-                        None => unreachable!(),
-                    };
-
-                    break;
-                }
-
-                Some(TOKEN_KW_GET)
-                | Some(TOKEN_KW_POST)
-                | Some(TOKEN_KW_PUT)
-                | Some(TOKEN_KW_DELETE)
-                | Some(TOKEN_KW_PATCH) => todo!("parse endpoint"),
-
-                Some(_) => todo!("parse error node"),
-
-                // We reached end of the file
-                None => return,
+                _ => break,
             }
         }
 
+        if start.is_some() {
+            self.builder.finish_node();
+        }
+
+        start
+    }
+
+    /// Parses `@default` node
+    fn parse_default(&mut self) {
+        debug_assert_eq!(self.peek(), Some(TOKEN_KW_DEFAULT));
+        self.builder.start_node(NODE_DEFAULT.into());
+
+        self.advance();
+
+        if self.eat(TOKEN_PAREN_LEFT) {
+            self.parse_value();
+            self.expect(TOKEN_PAREN_RIGHT);
+        }
+
         self.expect(TOKEN_EOL);
+
+        self.builder.finish_node();
+    }
+
+    /// Parses a child of the file. This can be ie. path, name, endpoint, ...
+    fn parse_root_node(&mut self) {
+        let start = self.parse_prologue();
+
+        match self.peek() {
+            Some(TOKEN_TOP_COMMENT) => {
+                self.advance();
+                self.expect(TOKEN_EOL);
+            }
+
+            Some(TOKEN_IDENTIFIER) => {
+                match self.peek_value() {
+                    Some("name") => self.parse_root_node_field(NODE_API_NAME, start),
+                    Some("betterApi") => self.parse_root_node_field(NODE_BETTER_API, start),
+                    Some("version") => self.parse_root_node_field(NODE_VERSION, start),
+                    Some("server") => self.parse_root_node_field(NODE_SERVER, start),
+                    Some("type") => todo!("Parse type"),
+                    Some("example") => todo!("Parse example"),
+                    Some("path") => todo!("Parse path"),
+                    Some(_) => todo!("parse error node"),
+
+                    // Unreachable because `self.peek()` is token identifier.
+                    None => unreachable!(),
+                };
+
+                self.expect(TOKEN_EOL);
+            }
+
+            Some(TOKEN_KW_GET)
+            | Some(TOKEN_KW_POST)
+            | Some(TOKEN_KW_PUT)
+            | Some(TOKEN_KW_DELETE)
+            | Some(TOKEN_KW_PATCH) => todo!("parse endpoint"),
+
+            Some(_) => todo!("parse error node"),
+
+            // We reached end of the file
+            None => (),
+        }
     }
 
     /// Helper function for parsing some of the root nodes.
-    fn parse_root_node_field(&mut self, kind: Kind) {
-        self.builder.start_node(kind.into());
+    fn parse_root_node_field(&mut self, kind: Kind, start: Option<rowan::Checkpoint>) {
+        if let Some(start) = start {
+            self.builder.start_node_at(start, kind.into());
+        } else {
+            self.builder.start_node(kind.into());
+        }
 
         self.advance();
         self.assignment();
@@ -261,7 +268,7 @@ mod test {
     #[test]
     fn placeholder_test() {
         let text = r#"   
-        // A comment
+        /// A comment
         name :  "foobar""#;
         let mut diagnostics = vec![];
         let tokens = tokenize(text, &mut diagnostics);

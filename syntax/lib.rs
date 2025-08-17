@@ -93,9 +93,8 @@ pub enum Kind {
     #[display("`file`")]
     TOKEN_KW_FILE, // file
 
-    /// Underlying value represents a name. It can be
-    /// name of the API, name of the field, name of the endpoint, ...
-    NODE_NAME,
+    /// Name of the PAI
+    NODE_API_NAME,
     /// Better API Version root node
     NODE_BETTER_API,
     /// API Version root node
@@ -103,8 +102,17 @@ pub enum Kind {
     /// Server root node
     NODE_SERVER,
 
+    /// Underlying value represents a name. It can be
+    /// name of the field, name of the endpoint, ...
+    NODE_NAME,
+
     /// Represents a value. Should have exactly one child.
     NODE_VALUE,
+
+    /// Represents a prologue of type, property, endpoint, ...
+    NODE_PROLOGUE,
+
+    NODE_DEFAULT,
 
     NODE_ERROR,
 
