@@ -123,11 +123,8 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
     /// Parses prologue trivia. This includes white space, comments,
     /// doc comments and modifiers (@default, ...).
-    ///
-    /// Returns starting checkpoint of the important trivia (doc comments and modifiers),
-    /// if there is any.
-    fn parse_prologue(&mut self) -> Option<rowan::Checkpoint> {
-        let mut start = None;
+    fn parse_prologue(&mut self) -> Option<Prologue> {
+        let mut res = None;
 
         loop {
             self.skip_whitespace_eol();
@@ -138,9 +135,11 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 }
 
                 Some(TOKEN_DOC_COMMENT) => {
-                    if start.is_none() {
-                        start = Some(self.builder.checkpoint());
-                        self.builder.start_node(NODE_PROLOGUE.into());
+                    if res.is_none() {
+                        res = Some(Prologue {
+                            start: self.builder.checkpoint(),
+                            default: None,
+                        });
                     }
 
                     self.advance();
@@ -148,23 +147,44 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 }
 
                 Some(TOKEN_KW_DEFAULT) => {
-                    if start.is_none() {
-                        start = Some(self.builder.checkpoint());
-                        self.builder.start_node(NODE_PROLOGUE.into());
+                    if res.is_none() {
+                        res = Some(Prologue {
+                            start: self.builder.checkpoint(),
+                            default: None,
+                        });
+                    }
+
+                    let start_pos = self.pos;
+
+                    let is_duplicated = res.as_ref().unwrap().default.is_some();
+                    if is_duplicated {
+                        self.builder.start_node(NODE_ERROR.into());
                     }
 
                     self.parse_default();
+
+                    if is_duplicated {
+                        // Finish error node
+                        self.builder.finish_node();
+
+                        // Report error
+                        self.reports.push(
+                            Report::error("duplicated `@default` is not allowed".to_string())
+                                .with_label(Label::new(
+                                    "duplicated `@default`".to_string(),
+                                    Span::new(start_pos, self.pos),
+                                )),
+                        );
+                    } else {
+                        res.as_mut().unwrap().default = Some(Span::new(start_pos, self.pos));
+                    }
                 }
 
                 _ => break,
             }
         }
 
-        if start.is_some() {
-            self.builder.finish_node();
-        }
-
-        start
+        res
     }
 
     /// Parses `@default` node
@@ -226,9 +246,13 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
     }
 
     /// Helper function for parsing some of the root nodes.
-    fn parse_root_node_field(&mut self, kind: Kind, start: Option<rowan::Checkpoint>) {
-        if let Some(start) = start {
-            self.builder.start_node_at(start, kind.into());
+    fn parse_root_node_field(&mut self, kind: Kind, prologue: Option<Prologue>) {
+        if let Some(prologue) = prologue {
+            if let Some(report) = prologue.expect_no_default() {
+                self.reports.push(report);
+            }
+
+            self.builder.start_node_at(prologue.start, kind.into());
         } else {
             self.builder.start_node(kind.into());
         }
@@ -259,6 +283,26 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
     }
 }
 
+struct Prologue {
+    start: rowan::Checkpoint,
+    default: Option<Span>,
+}
+
+impl Prologue {
+    /// Checks that there is no `@default` in the parsed prologue.
+    /// If there is a `@default`, a diagnostic for it is emitted.
+    fn expect_no_default(&self) -> Option<Report> {
+        let default_span = self.default?;
+
+        Some(
+            Report::error("unexpected `@default`".to_string()).with_label(Label::new(
+                "unexpected `@default`".to_string(),
+                default_span,
+            )),
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::tokenize;
@@ -269,7 +313,9 @@ mod test {
     fn placeholder_test() {
         let text = r#"   
         /// A comment
-        name :  "foobar""#;
+        @default("asdf")
+        name:  "foobar"
+        "#;
         let mut diagnostics = vec![];
         let tokens = tokenize(text, &mut diagnostics);
 
