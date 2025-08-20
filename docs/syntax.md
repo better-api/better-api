@@ -10,7 +10,7 @@ It is very much a work in progress and will probably change during implementatio
   - [Primitives](#primitives)
   - [Composite Types](#composite-types)
   - [Aliases](#aliases)
-  - [Response & Request Body](#response--request-body)
+  - [Response](#response)
   - [Examples](#examples)
 - [Path](#path)
 - [Endpoint](#endpoint)
@@ -26,13 +26,14 @@ It is very much a work in progress and will probably change during implementatio
   - [Scopes](#scopes)
   - [Default Auth](#default-auth)
   - [Advanced Permissions](#advanced-permissions)
+- [Code Generation Naming](#code-generation-naming)
 
 ## Basic Info
 
 Let's start with some basic info that you can specify. This includes:
 
 - version of Better API
-- version of you API
+- version of your API
 - server URLs
 - name of the API
 - description of the API
@@ -47,7 +48,7 @@ betterApi: "1.0"
 // Name of your api
 name: "My API"
 
-// Version of you API. This can be general string, which allows
+// Version of your API. This can be a general string, which allows
 // you to choose any versioning you like.
 version: "4.2.42"
 
@@ -67,22 +68,6 @@ server: {
 
 ## Types
 
-Because most programming languages don't support anonymous types, Better API doesn't support them either.
-In practice this means that every response and request body has to be a named type (unless it's a [primitive type](#primitives)).
-This way we can generate client code similar to:
-
-```rust
-struct Foo;
-
-enum FooResponse {
-  Status200(Foo),
-  Fallback(Error),
-
-}
-
-fn foo(/* ... */) -> FooResponse {/* ... */}
-```
-
 ### Primitives
 
 The following primitive types are supported:
@@ -101,47 +86,30 @@ The following primitive types are supported:
 
 Composite types join [primitive](#primitives) and other composite types.
 
-#### Structs
+#### Records
 
-Structs are a way to define objects.
+Records are a way to define objects.
 
 ```text
-type Foo struct {
+type Foo: rec {
   foo: string
   bar: i32
   baz: [timestamp]
 }
 ```
 
-##### Read & Write Only
-
-Sometimes you want to use most of the struct as request and response body, but some fields
-are different. For instance, when creating a resource with a `POST` request you don't want to
-specify an id, but you get it in the response. For this, `@writeonly` and `@readonly` decorators can
-be used
-
-```text
-type Foo struct {
-  @readonly
-  id: string
-
-  @writeonly
-  type: TypeEnum
-}
-```
-
 #### Enums
 
-Enums are a way to limit the options. They can limit integers or strings.
+Enums are a way to limit the options. They can be integers or strings.
 
 ```text
-type Foo enum(string) {
+type Foo: enum(string) {
   foo,
   bar,
   "non-ident like value",
 }
 
-type Bar enum(i32) {
+type Bar: enum(i32) {
   -1,
   42,
 }
@@ -151,20 +119,20 @@ type Bar enum(i32) {
 
 Sum types, also known as tagged unions, are a way to create an object
 that can be one of many objects based on a discriminator. Since everything is serialized into JSON,
-the types must be [structs](#structs). This is best described with an example:
+the types must be [records](#records). This is best described with an example:
 
 ```text
-type FooStruct struct {
+type FooRecord: rec {
   foo_property: string
 }
 
-type BarStruct struct {
+type BarRecord: rec {
   bar_property: i32
 }
 
-type SumType union("type") {
-  foo: FooStruct
-  bar: BarStruct
+type SumType: union("type") {
+  foo: FooRecord
+  bar: BarRecord
 }
 ```
 
@@ -190,7 +158,7 @@ You can change the name of the discriminator field by swapping the `"type"` in t
 brackets with something else:
 
 ```text
-type SumType union("my_discriminator") {
+type SumType: union("my_discriminator") {
   // ...
 }
 ```
@@ -207,103 +175,73 @@ type's default example.
 type Alias: string
 ```
 
-### Response & Request Body
+### Response
 
-Request and response bodies are the only types that can be anonymously declared as part of an [endpoint](#endpoint).
-This is because they are not directly used to generate types in the target programming language.
-You can still define them as a named type, for easier code reuse.
-
-Usually, you will want to specify a request/response type when you want to reuse the same
-documentation in multiple places, or when you want to override the default content type header in
-multiple places. Setting an explicit content type is usually required only when working with files.
+You can use any JSON serializable type (everything that doesn't contain a `file`) as an endpoint response.
+If you want to add additional headers or change the content type, you want to use the `response` type.
 A more detailed description of when and why you want to change the default content type is in
 the [Working with Files](#working-with-files) section.
 
-#### Response
+If the response contains no additional headers and doesn't specify a custom content type, you can
+and _should_ work with body types directly, instead of creating an unnecessary response type.
 
-Responses have a status code, content type header, additional headers, and a response body type.
-You can specify only the type of the response body. In this case, the status will be 200,
-and the content type header will be `application/json`.
+Response types can be assigned to a named type, as all other types can:
 
 ```text
-type FooResponse response {
-  type: Foo
+type FooResponse: resp {
+  body: Foo
 }
 ```
 
-is equal to
+is equal to using just `Foo` in the endpoint specifications. We'll look at endpoints later.
+
+Some things you want to use a response type for are:
+
+- specifying an empty body:
+  ```text
+  type FooResponse: resp {
+    status: 204
+    body: null
+  }
+  ```
+- adding custom headers:
+  ```text
+  type FooResponse: resp {
+    headers: FooHeaders
+    body: Foo
+  }
+  ```
+
+Sometimes it's handy to use anonymous (inlined) headers and body:
 
 ```text
-type FooResponse response {
-  status: 200
-  contentType: "application/json"
-  type: Foo
-}
-```
-
-You can also specify an empty body:
-
-```text
-type FooResponse response {
-  status: 204
-  type: null
-}
-```
-
-Adding custom headers is also possible:
-
-```text
-type FooResponse response {
-  headers: {
+type FooResponse: resp {
+  headers: rec {
     bar: string
     "X-Complex-Header": i32
   }
 
-  type: Foo
+  body: rec {
+    foo: string
+  }
 }
 ```
 
-#### Request Body
-
-Request body declaration is very similar to response declaration, but without the status code:
-
-```text
-type FooRequest requestBody {
-  type: Foo
-}
-```
-
-Or you can change the content type header:
-
-```text
-type FooRequest requestBody {
-  contentType: "multipart/form-data"
-  type: Foo
-}
-```
-
-#### Fallback
-
-You can specify a default error response. This is a response outside of the 2xx range that is not
-covered explicitly. The fallback type is the same as response, but without the response code.
-Usually it's not necessary to define a named fallback type.
-
-```text
-type FooFallback fallback {
-  type: Error
-}
-```
+When working with anonymous types, concrete types will still have to be generated in the server stubs
+and client implementation. See [Code Generation Naming](#code-generation-naming) to see which names are reserved.
+You can also just run the validator over your specifications and it will point you to names that clash
+with generated names.
 
 ### Examples
 
 Examples can be defined only for a named type that is one of:
 
-- [struct](#structs)
-- [enum](#enums)
-- [union](#sum-types)
-- [alias](#aliases) to primitive type, struct, enum, or union.
+- [records](#records)
+- [enums](#enums)
+- [unions](#sum-types)
+- [aliases](#aliases) to primitive type, record, enum, or union.
 
-Request/response body/fallback examples are not supported. If [struct](#structs) `Foo` is used as both
+Request/response body examples are not supported. If type `Foo` is used as both
 a request body and response, the example of `Foo` should be a valid example for both request and response.
 Otherwise, your type definitions are not consistent and you should define two types.
 
@@ -316,14 +254,14 @@ Let's look at the most basic example:
 ```text
 type Id: string
 
-/// This is a simple example for ID
+/// This is a simple example for Id
 example for Id: "aa92e02f-1d4e-4228-b308-27451d0c45a1"
 ```
 
 Examples can also be named:
 
 ```text
-type Foo struct {
+type Foo: rec {
   bar: string
 }
 
@@ -382,34 +320,27 @@ path "/hello" {
 The minimum required properties are:
 
 - `name`: Name of the endpoint. This is used for code generation and has to be unique.
-- `response`: At least one response type
+- `on <status>`: At least one response type
 
 ```text
 GET "/hello" {
   name: "hello"
 
-  response: {
-    type: Foo
-  }
-
+  on 200: Foo
 }
 ```
 
-There can be more than one response, but each response has to have a unique `status`.
+There can be more than one response, but each response has to have a unique status.
 So you can define a 200 response and multiple 4xx and 5xx error responses. But you can't define
 two 200 responses. One response can have multiple `contentType`s. See [Working with Files](#working-with-files)
 for more details on when you might want this and how to use it.
 
-You can specify almost any type as a response (only requestBody and fallback are forbidden).
-This means that instead of specifying an anonymous response type, you can specify e.g. a struct
-directly, which gives a handy shorthand:
+You can also specify a default response with `on default: T`, which describes how a response looks like for
+all other status codes that aren't explicitly defined. This is useful for handling other errors that are not
+expected to happen, but you still want to handle them with type safety.
 
-```text
-GET {
-  // Response with 200 status and application/json content type.
-  response: Foo
-}
-```
+You can specify almost any type as a response. If you specify something that isn't a `resp`, it's treated
+as `application/json` content type with no additional headers.
 
 You can also specify tags, path, query and header parameters, and request body. Here is
 a more detailed example:
@@ -422,6 +353,46 @@ POST "/hello/{id}" {
   tags: "one tag"
   // or multiple
   tags: ["one", "two"]
+
+  path: rec {
+    id: string
+  }
+
+  query: rec {
+    name: string
+  }
+
+  headers: rec {
+    "X-Header": string
+    accept: string
+  }
+
+  // Request body definition
+  requestBody: HelloRequestBody
+
+  // Default 200 response
+  on 200: Greet
+  on 404: ErrorNotFound
+  on default: DefaultError
+}
+```
+
+Parameters in query, path, and headers are limited to [primitives](#primitives) (without `file`). This is because
+there are many ways to serialize more complex types into URL path and query parameters.
+Different languages use different libraries that do it in different ways. We want to keep compatibility
+without annoying edge cases, so Better API supports only primitive types in these locations.
+
+There can be only one `requestBody` per endpoint. Endpoint can accept request body that is not
+`application/json`. This is useful when working with files. See
+[Working with Files](#working-with-files) for more details on how to do this.
+
+This is also a good place to mention that there is some type inference when types are obvious. For instance,
+path, query and header params can only be a record, therefore we can omit the `rec` keyword.
+
+```text
+POST "/hello/{id}" {
+  name: "hello"
+  tags: "one tag"
 
   path: {
     id: string
@@ -437,44 +408,29 @@ POST "/hello/{id}" {
   }
 
   // Default 200 response
-  response: Greet
-
-  // Error response
-  response: {
-    status: 404
-    type: ErrorNotFound
-  }
-
-  fallback: ErrorFallback
+  on 200: Greet
+  on 404: ErrorNotFound
 }
 ```
 
-Parameters in query, path, and headers are limited to [primitives](#primitives) (without `file`). This is because
-there are many ways to serialize more complex types into URL path and query parameters.
-Different languages use different libraries that do it in different ways. We want to keep compatibility
-without annoying edge cases, so Better API supports only primitive types in these locations.
-
-There can be only one requestBody per endpoint. But the request body can have multiple `contentType`s
-(similar to responses). See [Working with Files](#working-with-files) for more details on how to use this.
-
 ## Comments and Documentation
 
-I already hinted at comments `// ...`. Better API also supports doc comments `/// ...`,
+We already hinted at comments `// ...`. Better API also supports doc comments `/// ...`,
 which are the primary way of adding documentation. Documentation can be added to:
 
 - named types
-- struct properties
+- record properties
 - enum members
-- members of discrete unions
+- members of sum types
 - endpoints
 - path, query, header parameters
-- responses, request bodies and fallbacks
+- responses and request bodies
 
 Let's look at an example:
 
 ```text
 /// A greeting to the user
-type Greeting struct {
+type Greeting: rec {
   /// A greeting
   greeting: string
 }
@@ -489,19 +445,19 @@ GET "/hello" {
   }
 
   /// Successfully greet the user
-  response: Greeting
+  on 200: Greeting
 }
 ```
 
 ## Optionals and Defaults
 
-Properties in [structs](#structs), path, query, and header parameters can be optional or have a default value.
-If a property is optional, it cannot also have a default.
+Properties in [records](#records), path, query, and header parameters can be optional or
+have a default value. If a property is optional, it cannot also have a default value.
 
 Optional is declared by appending `?` to the end of the type.
 
 ```text
-type Foo struct {
+type Foo: rec {
   bar: string?
 }
 
@@ -517,7 +473,7 @@ GET "/foo" {
 Default is specified with a `@default` decorator:
 
 ```text
-type Foo struct {
+type Foo: rec {
   @default("baz")
   bar: string
 }
@@ -535,12 +491,12 @@ GET "/foo" {
 You can also specify default for more complex types:
 
 ```text
-type Foo struct {
+type Foo: rec {
   a: i32
   b: string
 }
 
-type Bar struct {
+type Bar: rec {
   @default({
     a: 10
     b: "hey!"
@@ -554,7 +510,7 @@ type Bar struct {
 
 ## Working with Files
 
-The only real reason for changing the content type of a request or response is when you are working with files.
+The only reason for changing the content type of a request or response is when you are working with files.
 Better API has a primitive `file` type which represents a binary file. Because of how HTTP works, binary
 files are only supported for certain content types.
 
@@ -565,9 +521,9 @@ of that response represents the mime type of the file.
 
 ```text
 GET {
-  response: {
+  on 200: resp {
     contentType: "image/png"
-    type: file
+    body: file
   }
 }
 ```
@@ -576,9 +532,9 @@ You can specify multiple content types:
 
 ```text
 GET {
-  response: {
+  on 200: resp {
     contentType: ["image/png", "image/jpeg"]
-    type: file
+    body: file
   }
 }
 ```
@@ -587,9 +543,9 @@ or a wildcard like
 
 ```text
 GET {
-  response: {
+  on 200: resp {
     contentType: "image/*"
-    type: file
+    body: file
   }
 }
 ```
@@ -598,51 +554,48 @@ or even
 
 ```text
 GET {
-  response: {
+  on 200: resp {
     contentType: "*/*"
-    type: file
+    body: file
   }
 }
 ```
 
 ### Request Body
 
-Similar to responses, you can specify the type of the request body to be `file` and set the content type.
+Similar to responses, you can specify the type of the request body to be `file` and set the content type
+that the endpoint accepts. To set the content type, use `accept` field.
 
 ```text
 POST {
-  requestBody: {
-    contentType: "image/*"
-    type: file
-  }
+  accept: "image/*"
+  requestBody: file
 }
 ```
 
-Unlike response types, you can also specify `multipart/form-data` as the contentType
-and set the `type` of the body to a simple struct with one or more of the struct fields as `file`.
+Unlike response types, you can also specify `multipart/form-data` as the `accept`
+and set the `type` of the body to a simple record with one or more of the record fields as `file`.
 
 ```text
-type Foo struct {
+type Foo: rec {
   id: string
   image: file
 }
 
 POST {
-  requestBody: {
-    contentType: "multipart/form-data"
-    type: Foo
-  }
+  accept: "multipart/form-data"
+  requestBody: Foo
 }
 ```
 
-A simple struct is a struct where all properties are a primitive type or enum.
+A simple record is a record where all properties are a primitive type or enum.
 In other words, it must be only one layer deep. This is because the fields are
 encoded as form data, and we want to keep consistency between languages
 and libraries.
 
 Since `application/x-www-form-urlencoded` is to some extent a simplified `multipart/form-data`,
-you can set that as the requestBody content type as well. But in this case, you cannot upload files,
-only simple structs.
+you can set that as the `accept` value as well. But in this case, you cannot upload files,
+only simple records.
 
 ### Wildcards
 
@@ -663,11 +616,11 @@ For the generated client code it works symmetrically.
 ## Error Handling
 
 We already mentioned that you can specify error responses for individual endpoints.
-To make working with error easier, Better API makes `fallback` and `response` scoped
+To make working with errors easier, Better API makes responses scoped
 within endpoints, paths, and the `defaults` block.
 
 > [!TIP]
-> It's recommended that you specify a `fallback` in the `defaults` block. This way
+> It's recommended that you specify a default response in the `defaults` block. This way
 > the generated server and client code will know how to handle errors that might always
 > happen (400, 500, ...).
 
@@ -676,16 +629,13 @@ has some endpoints rate limited:
 
 ```text
 defaults: {
-  fallback: Error
+  on default: Error
 }
 
 path "/limited" {
   // We specify a default rate limiting error, since
   // all endpoints in this path are rate limited.
-  response: {
-    status: 429
-    type: ErrorTooManyRequests
-  }
+  on 429: ErrorTooManyRequests
 
   // In this endpoint we don't have to specify fallback or
   // rate limited error, but the generated code will have them.
@@ -696,7 +646,7 @@ path "/limited" {
   // This endpoint has a special fallback error and overrides
   // the default fallback error.
   GET "/bar" {
-    fallback: SpecialError
+    on default: SpecialError
   }
 }
 ```
@@ -705,12 +655,8 @@ Or, if your whole API is rate limited, you can do:
 
 ```text
 defaults: {
-  response: {
-    status: 429
-    type: ErrorTooManyRequests
-  }
-
-  fallback: Error
+  on 429: ErrorTooManyRequests
+  on default: Error
 }
 ```
 
@@ -721,34 +667,31 @@ Currently there are three supported authentication types:
 - **HTTP Bearer** - credentials are passed to `Authorization` header as `Authorization: Bearer <token>`.
 - **HTTP Basic** - credentials are passed to `Authorization` header as `Authorization: Basic <creds>`
   where `creds` is base64 encoded string `username:password`
-- **API Keys** - Credentials are passed to custom header or query parameter.
+- **API Keys** - credentials are passed to custom header or query parameter.
 
 Each authentication method must also define an Unauthorized error type. This is the body of a
 401 response returned if the authentication against the method fails.
 
 Authentication method can also define a Forbidden error type. This is the body of a
-403 response returned if permission check against the auth method fails. This is
-required if endpoint specifies required permissions. Permissions are discussed later.
-
-> [!TIP]
-> Unauthorized and Forbidden error types must be either a primitive type, struct, enum or union.
+403 response returned if a permission check against the auth method fails. This is
+required if an endpoint specifies required permissions. Permissions are discussed later.
 
 You start by defining an authentication type:
 
 ```text
-type HttpBearer auth {
+type HttpBearer: auth {
   type: "http"
   scheme: "bearer"
   unauthorized: UnauthorizedError
 }
 
-type HttpBasic auth {
+type HttpBasic: auth {
   type: "http"
   scheme: "basic"
   unauthorized: UnauthorizedError
 }
 
-type ApiKey auth {
+type ApiKey: auth {
   type: "api_key"
   header: "X-API-KEY"
   query: "api_key"
@@ -760,7 +703,7 @@ type ApiKey auth {
 
 > [!NOTE]
 > As you can see, API key can be defined to be present in either header or query.
-> You can also specify just header or just query, and leave the other field alone.
+> You can also specify just header or just query, and leave the other field empty.
 
 After you have an authentication type, you can use it to specify auth for a single endpoint:
 
@@ -777,7 +720,7 @@ a 401 response for such an endpoint results in an error.
 ---
 
 You can also specify multiple auth types per endpoint. They are joined by `or` (at least one
-of them has to match)
+of them has to match).
 
 ```text
 GET {
@@ -790,8 +733,8 @@ For endpoints that have multiple auth methods, all methods have to have the same
 types.
 
 > [!NOTE]
-> Because of how the code gen works, you can't specify "anonymous" auth. All auth types
-> have to be named, similar to how all response types have to be named.
+> Because of how the code gen works, you can't specify anonymous auth. All auth types
+> have to be named.
 
 ---
 
@@ -842,14 +785,16 @@ GET {
 > might read them from a JWT token, while API key auth might read them from the database.
 > It is up to the server implementation to decide this.
 
-If auth is optional, permissions can still be defined. If user is authenticated but doesn't have
-required permissions, the generated code will treat them as unauthorized user.
+If auth is optional, permissions can still be defined. If a user is authenticated but doesn't have
+required permissions, the generated code will treat them as an unauthorized user.
 
-If endpoint has multiple auth methods and requires permission, all auth methods have to have
-the same forbidden error type. This is similar to unauthorized error types.
+If an endpoint has multiple auth methods and requires permissions, at least _one_ auth method has to authorize
+the user with _all_ required permissions. Otherwise the user is treated as unauthorized or unauthenticated.
+In this case all auth methods have to have the same forbidden error type.
+This is similar to unauthorized error types.
 
-Defining permissions on endpoint also defines its 403 response, similar to how defining auth method
-defined 401 response. This means that endpoint can't redefine 403 response.
+Defining permissions on an endpoint also defines its 403 response, similar to how defining an auth method
+defines a 401 response. This means that an endpoint can't redefine a 403 response.
 
 ### Scopes
 
@@ -927,7 +872,7 @@ they are read from the parent path. If that doesn't have them set, the parent is
 and so forth until the top.
 
 > [!NOTE]
-> If you set auth to `null`, permissions should also be set to `null`.
+> If you set auth to `null`, permissions must also be set to `null`.
 
 > [!NOTE]
 > Specifying auth and permissions for a path defines 401 and 403 responses for all endpoints in the path.
@@ -937,7 +882,7 @@ and so forth until the top.
 You can set default auth and permissions in a `defaults` block
 
 ```text
-type ApiKey auth {
+type ApiKey: auth {
   // ...
 }
 
@@ -947,27 +892,25 @@ defaults: {
 }
 ```
 
-> [!NOTE]
-> Defining default auth and permissions defines 401 and 403 responses for all endpoints in the path.
-
 ### Advanced Permissions
 
-There are cases when simple "read" permission is not enough. For instance you have an endpoint
-`/pets/{id}` that returns pet by id and only an owner can update the pet. In this case you can
+There are cases when simple "read" permission is not enough. For instance, you have an endpoint
+`/pets/{id}` that returns a pet by id and only an owner can update the pet. In this case you can
 define only an authentication method, without any permissions, and a custom 403 response.
 
 ```text
 PUT "/pets/{id}" {
   auth: Bearer
 
-  response: {
-    status: 403
-    type: ForbiddenError
-  }
+  on 403: ForbiddenError
 
   // ...
 }
 ```
 
 This way you can perform additional permission checks in the endpoint business logic, where
-you have access to the pet for specified id and authenticated user.
+you have access to the pet for the specified id and authenticated user.
+
+## Code Generation Naming
+
+TODO
