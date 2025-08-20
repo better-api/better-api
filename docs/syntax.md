@@ -42,10 +42,10 @@ Let's start with some basic info that you can specify. This includes:
 //! This is a special doc comment that is used to describe the whole API.
 //! It can have multiple lines and everything.
 
-// Version of better api spec
+// Version of Better API spec
 betterApi: "1.0"
 
-// Name of your api
+// Name of your API
 name: "My API"
 
 // Version of your API. This can be a general string, which allows
@@ -80,7 +80,7 @@ The following primitive types are supported:
 - `bool`
 - `string`
 - `array`: denoted with `[<type>]`
-- `file`: binary file with limitations on when and where it can be used.
+- `file`: binary file with limitations on when and where it can be used
 
 ### Composite Types
 
@@ -382,7 +382,7 @@ there are many ways to serialize more complex types into URL path and query para
 Different languages use different libraries that do it in different ways. We want to keep compatibility
 without annoying edge cases, so Better API supports only primitive types in these locations.
 
-There can be only one `requestBody` per endpoint. Endpoint can accept request body that is not
+There can be only one `requestBody` per endpoint. An endpoint can accept a request body that is not
 `application/json`. This is useful when working with files. See
 [Working with Files](#working-with-files) for more details on how to do this.
 
@@ -574,7 +574,7 @@ POST {
 ```
 
 Unlike response types, you can also specify `multipart/form-data` as the `accept`
-and set the `type` of the body to a simple record with one or more of the record fields as `file`.
+and set the type of the body to a simple record with one or more of the record fields as `file`.
 
 ```text
 type Foo: rec {
@@ -602,12 +602,12 @@ only simple records.
 When multiple content types are specified, or content type contains a wildcard, the generated
 code will loosen the type safety.
 
-For instance if request body has a wildcard, generated server stubs will contain a content type
-header string in the request parameter. It is the server implementation responsibility to check
-which content type it is. Similarly, the wildcards in response types will have to be set by the
+For instance, if a request body has a wildcard, generated server stubs will contain a content type
+header string in the request parameter. It is the server implementation's responsibility to check
+which content type it is. Similarly, wildcards in response types will have to be set by the
 server implementation correctly.
 
-For the generated client code it works symmetrically.
+For the generated client code, it works symmetrically.
 
 > [!NOTE]
 > Wildcards add flexibility but should be used sparingly. Usually it's better to explicitly specify
@@ -664,10 +664,10 @@ defaults: {
 
 Currently there are three supported authentication types:
 
-- **HTTP Bearer** - credentials are passed to `Authorization` header as `Authorization: Bearer <token>`.
+- **HTTP Bearer** - credentials are passed to `Authorization` header as `Authorization: Bearer <token>`
 - **HTTP Basic** - credentials are passed to `Authorization` header as `Authorization: Basic <creds>`
   where `creds` is base64 encoded string `username:password`
-- **API Keys** - credentials are passed to custom header or query parameter.
+- **API Keys** - credentials are passed to custom header or query parameter
 
 Each authentication method must also define an Unauthorized error type. This is the body of a
 401 response returned if the authentication against the method fails.
@@ -714,7 +714,7 @@ GET "/protected" {
 }
 ```
 
-Endpoint being authenticated means that 401 response for it is already defined. Defining
+Endpoint being authenticated means that a 401 response for it is already defined. Defining
 a 401 response for such an endpoint results in an error.
 
 ---
@@ -739,7 +739,7 @@ types.
 ---
 
 You can also specify that an auth is optional for an endpoint. This is useful when you have
-a public endpoint that shows additional info if user is logged in. This is done with the `?`
+a public endpoint that shows additional info if a user is logged in. This is done with the `?`
 operator.
 
 ```text
@@ -879,7 +879,7 @@ and so forth until the top.
 
 ### Default Auth
 
-You can set default auth and permissions in a `defaults` block
+You can set default auth and permissions in a `defaults` block:
 
 ```text
 type ApiKey: auth {
@@ -913,4 +913,89 @@ you have access to the pet for the specified id and authenticated user.
 
 ## Code Generation Naming
 
-TODO
+For types that you name explicitly, the generated code will keep the name. For instance
+
+```text
+type Foo: ...
+```
+
+will result in the generated code having a type named `Foo`.
+
+There are also some types that are generated without you explicitly defining them. This is mostly the case for anonymous
+types, since a lot of languages don't support anonymous types. If you try to name a type with a name which clashes with
+an auto generated type name, it will result in a validation error.
+
+There is a pattern of auto generated type names, which we'll go over in this chapter.
+
+Each endpoint will generate a `Request` and `Response` type. More specifically an endpoint named `foo` will generate
+`FooRequest` and `FooResponse` types. When using anonymous types for request query, path or header params, you will get
+`FooQuery`, `FooPath` and `FooHeader` types. If you specify an anonymous type for `requestBody`,
+you will get `FooRequestBody` type as well.
+
+If you specify a named response for a status code you will not get a special type, otherwise you will get `FooResponse200` type.
+For instance
+
+```text
+type Foo: resp {
+  ...
+}
+
+type Bar: rec {
+  ...
+}
+
+GET {
+  name: "baz"
+
+  on 200: Foo
+  on 400: Bar
+}
+```
+
+will result in `BazResponse` and `BazResponse400` types.
+
+If response defines anonymous body or headers, you will also get `RespHeaders` and `RespBody` types.
+For instance
+
+```text
+type Foo: resp {
+  headers: {...}
+  body: rec {...}
+}
+```
+
+will result in `FooHeaders` and `FooBody` generated. Similarly
+
+```text
+GET {
+  name: "foo"
+  on 200: resp {
+    headers: {...}
+    body: rec {...}
+  }
+}
+```
+
+results in `FooResponse200Headers` and `FooResponse200Body` generated.
+
+---
+
+While these rules might seem hard to follow, you shouldn't really have to worry about them - the validator will check
+them for you. Also note that if the type doesn't need to be generated you can use its name. For instance, it's valid to do
+
+```text
+/// Docs for foo body
+type FooBody: rec {...}
+
+example for FooBody: {...}
+
+type Foo: resp {
+  headers: {...}
+  body: FooBody
+}
+```
+
+because here `FooBody` is not an anonymous type and therefore doesn't need to be named by the generator.
+
+This means that it all basically boils down to: the auto-generated name _should_ be so specific that in the event of
+a name collision, there is a problem in the naming of the user types.
