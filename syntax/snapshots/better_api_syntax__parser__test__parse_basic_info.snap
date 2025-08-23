@@ -1,0 +1,46 @@
+---
+source: syntax/parser.rs
+expression: tree
+---
+NODE_ROOT@0..205
+  TOKEN_TOP_COMMENT@0..25 "//! This is a top com ..."
+  TOKEN_EOL@25..26 "\n"
+  TOKEN_COMMENT@26..53 "// This is a normal c ..."
+  TOKEN_EOL@53..54 "\n"
+  TOKEN_TOP_COMMENT@54..85 "//! Here is another t ..."
+  TOKEN_EOL@85..86 "\n"
+  TOKEN_EOL@86..87 "\n"
+  NODE_API_NAME@87..121
+    TOKEN_DOC_COMMENT@87..104 "/// A doc comment"
+    TOKEN_EOL@104..105 "\n"
+    TOKEN_IDENTIFIER@105..109 "name"
+    TOKEN_COLON@109..110 ":"
+    TOKEN_SPACE@110..112 "  "
+    NODE_VALUE@112..120
+      TOKEN_STRING@112..120 "\"foobar\""
+    TOKEN_EOL@120..121 "\n"
+  TOKEN_EOL@121..122 "\n"
+  TOKEN_COMMENT@122..152 "// This should report ..."
+  TOKEN_EOL@152..153 "\n"
+  NODE_BETTER_API@153..189
+    NODE_DEFAULT@153..170
+      TOKEN_KW_DEFAULT@153..161 "@default"
+      TOKEN_PAREN_LEFT@161..162 "("
+      NODE_VALUE@162..168
+        TOKEN_STRING@162..168 "\"asdf\""
+      TOKEN_PAREN_RIGHT@168..169 ")"
+      TOKEN_EOL@169..170 "\n"
+    TOKEN_IDENTIFIER@170..179 "betterApi"
+    TOKEN_COLON@179..180 ":"
+    TOKEN_SPACE@180..181 " "
+    NODE_VALUE@181..188
+      TOKEN_STRING@181..188 "\"1.0.0\""
+    TOKEN_EOL@188..189 "\n"
+  TOKEN_EOL@189..190 "\n"
+  NODE_VERSION@190..205
+    TOKEN_IDENTIFIER@190..197 "version"
+    TOKEN_COLON@197..198 ":"
+    TOKEN_SPACE@198..199 " "
+    NODE_VALUE@199..204
+      TOKEN_STRING@199..204 "\"1.0\""
+    TOKEN_EOL@204..205 "\n"

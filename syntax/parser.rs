@@ -206,20 +206,26 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
     /// Parses a child of the file. This can be ie. path, name, endpoint, ...
     fn parse_root_node(&mut self) {
-        let start = self.parse_prologue();
+        let prologue = self.parse_prologue();
 
         match self.peek() {
             Some(TOKEN_TOP_COMMENT) => {
+                if let Some(prologue) = prologue
+                    && let Some(report) = prologue.expect_no_default()
+                {
+                    self.reports.push(report);
+                }
+
                 self.advance();
                 self.expect(TOKEN_EOL);
             }
 
             Some(TOKEN_IDENTIFIER) => {
                 match self.peek_value() {
-                    Some("name") => self.parse_root_node_field(NODE_API_NAME, start),
-                    Some("betterApi") => self.parse_root_node_field(NODE_BETTER_API, start),
-                    Some("version") => self.parse_root_node_field(NODE_VERSION, start),
-                    Some("server") => self.parse_root_node_field(NODE_SERVER, start),
+                    Some("name") => self.parse_root_node_field(NODE_API_NAME, prologue),
+                    Some("betterApi") => self.parse_root_node_field(NODE_BETTER_API, prologue),
+                    Some("version") => self.parse_root_node_field(NODE_VERSION, prologue),
+                    Some("server") => self.parse_root_node_field(NODE_SERVER, prologue),
                     Some("type") => todo!("Parse type"),
                     Some("example") => todo!("Parse example"),
                     Some("path") => todo!("Parse path"),
@@ -228,8 +234,6 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                     // Unreachable because `self.peek()` is token identifier.
                     None => unreachable!(),
                 };
-
-                self.expect(TOKEN_EOL);
             }
 
             Some(TOKEN_KW_GET)
@@ -260,6 +264,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.advance();
         self.assignment();
         self.parse_value();
+        self.expect(TOKEN_EOL);
 
         self.builder.finish_node();
     }
@@ -270,13 +275,28 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         match self.peek() {
             Some(TOKEN_STRING) => self.advance(),
             Some(kind) => {
+                let start = self.pos;
                 self.builder.start_node(NODE_ERROR.into());
                 self.advance();
                 self.builder.finish_node();
 
-                todo!("emit report");
+                self.reports.push(
+                    Report::error(format!("expected value, found {kind}")).with_label(Label::new(
+                        "expected value".to_string(),
+                        Span::new(start, self.pos),
+                    )),
+                );
             }
-            None => todo!("emit report"),
+            None => {
+                self.reports.push(
+                    Report::error("expected value, found end of file".to_string()).with_label(
+                        Label::new(
+                            "expected value".to_string(),
+                            Span::new(self.pos, self.pos + 1),
+                        ),
+                    ),
+                );
+            }
         }
 
         self.builder.finish_node();
@@ -305,22 +325,41 @@ impl Prologue {
 
 #[cfg(test)]
 mod test {
-    use crate::tokenize;
+    use better_api_diagnostic::{Label, Report, Span};
+    use indoc::indoc;
 
     use super::parse;
+    use crate::tokenize;
 
     #[test]
-    fn placeholder_test() {
-        let text = r#"   
-        /// A comment
-        @default("asdf")
-        name:  "foobar"
-        "#;
+    fn parse_basic_info() {
+        let text = indoc! {r#"
+            //! This is a top comment
+            // This is a normal comment
+            //! Here is another top comment
+            
+            /// A doc comment
+            name:  "foobar"
+
+            // This should report an error
+            @default("asdf")
+            betterApi: "1.0.0"
+
+            version: "1.0"
+        "#};
         let mut diagnostics = vec![];
         let tokens = tokenize(text, &mut diagnostics);
 
         let (tree, diagnostics) = parse(tokens);
         insta::assert_debug_snapshot!(tree);
-        assert_eq!(diagnostics, vec![]);
+        assert_eq!(
+            diagnostics,
+            vec![
+                Report::error("unexpected `@default`".to_string()).with_label(Label::new(
+                    "unexpected `@default`".to_string(),
+                    Span::new(153, 170)
+                ))
+            ]
+        );
     }
 }

@@ -1,9 +1,0 @@
----
-source: syntax/parser.rs
-expression: tree
----
-NODE_ROOT@0..7
-  TOKEN_SPACE@0..3 "   "
-  TOKEN_EOL@3..4 "\n"
-  TOKEN_EOL@4..5 "\n"
-  TOKEN_SPACE@5..7 "  "

@@ -17,3 +17,4 @@ better-api-diagnostic = { path = "../diagnostic" }
 
 [dev-dependencies]
 insta.workspace = true
+indoc = "2"
