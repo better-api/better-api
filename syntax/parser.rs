@@ -222,10 +222,12 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
             Some(TOKEN_IDENTIFIER) => {
                 match self.peek_value() {
-                    Some("name") => self.parse_root_node_field(NODE_API_NAME, prologue),
-                    Some("betterApi") => self.parse_root_node_field(NODE_BETTER_API, prologue),
-                    Some("version") => self.parse_root_node_field(NODE_VERSION, prologue),
-                    Some("server") => self.parse_root_node_field(NODE_SERVER, prologue),
+                    Some("name") => self.parse_root_node_field(NODE_API_NAME, prologue, false),
+                    Some("betterApi") => {
+                        self.parse_root_node_field(NODE_BETTER_API, prologue, false)
+                    }
+                    Some("version") => self.parse_root_node_field(NODE_VERSION, prologue, false),
+                    Some("server") => self.parse_root_node_field(NODE_SERVER, prologue, true),
                     Some("type") => todo!("Parse type"),
                     Some("example") => todo!("Parse example"),
                     Some("path") => todo!("Parse path"),
@@ -250,13 +252,24 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
     }
 
     /// Helper function for parsing some of the root nodes.
-    fn parse_root_node_field(&mut self, kind: Kind, prologue: Option<Prologue>) {
+    fn parse_root_node_field(
+        &mut self,
+        kind: Kind,
+        prologue: Option<Prologue>,
+        use_prologue: bool,
+    ) {
         if let Some(prologue) = prologue {
             if let Some(report) = prologue.expect_no_default() {
                 self.reports.push(report);
             }
 
             self.builder.start_node_at(prologue.start, kind.into());
+
+            if use_prologue {
+                self.builder
+                    .start_node_at(prologue.start, NODE_PROLOGUE.into());
+                self.builder.finish_node();
+            }
         } else {
             self.builder.start_node(kind.into());
         }
@@ -274,6 +287,8 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
         match self.peek() {
             Some(TOKEN_STRING) => self.advance(),
+            Some(TOKEN_CURLY_LEFT) => self.parse_object(),
+
             Some(kind) => {
                 let start = self.pos;
                 self.builder.start_node(NODE_ERROR.into());
@@ -296,6 +311,69 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                         ),
                     ),
                 );
+            }
+        }
+
+        self.builder.finish_node();
+    }
+
+    fn parse_object(&mut self) {
+        self.builder.start_node(NODE_OBJECT.into());
+
+        self.expect(TOKEN_CURLY_LEFT);
+
+        loop {
+            self.skip_whitespace_eol();
+            match self.peek() {
+                Some(TOKEN_COMMENT) => {
+                    self.advance();
+                    self.expect(TOKEN_EOL);
+                }
+
+                Some(TOKEN_IDENTIFIER) | Some(TOKEN_STRING) => {
+                    self.builder.start_node(NODE_OBJECT_FIELD.into());
+
+                    self.builder.start_node(NODE_NAME.into());
+                    self.advance();
+                    self.builder.finish_node();
+
+                    self.assignment();
+
+                    self.parse_value();
+                    self.expect(TOKEN_EOL);
+
+                    self.builder.finish_node();
+                }
+
+                Some(TOKEN_CURLY_RIGHT) => {
+                    self.advance();
+                    break;
+                }
+
+                Some(kind) => {
+                    let start = self.pos;
+
+                    self.builder.start_node(NODE_ERROR.into());
+                    self.advance();
+                    self.builder.finish_node();
+
+                    self.reports.push(
+                        Report::error(format!("expected field name, found {kind}")).with_label(
+                            Label::new(
+                                "expected field name".to_string(),
+                                Span::new(start, self.pos),
+                            ),
+                        ),
+                    );
+                }
+                None => self.reports.push(
+                    Report::error("expected field name, found end of file".to_string()).with_label(
+                        Label::new(
+                            "expected field value".to_string(),
+                            Span::new(self.pos, self.pos + 1),
+                        ),
+                    ),
+                ),
             }
         }
 
@@ -361,5 +439,23 @@ mod test {
                 ))
             ]
         );
+    }
+
+    #[test]
+    fn parse_server() {
+        let text = indoc! {r#"
+            /// doc comment
+            server: {
+                name: "foo"
+                url: "bar"
+            }
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        assert_eq!(diagnostics, vec![]);
     }
 }
