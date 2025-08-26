@@ -1,0 +1,90 @@
+---
+source: syntax/parser.rs
+expression: diagnostics
+---
+[
+    Report {
+        severity: Error,
+        title: "expected value, found an identifier",
+        label: Some(
+            Label {
+                message: "expected value",
+                span: Span {
+                    start: 36,
+                    end: 42,
+                },
+            },
+        ),
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected field name, found an integer",
+        label: Some(
+            Label {
+                message: "expected field name",
+                span: Span {
+                    start: 47,
+                    end: 50,
+                },
+            },
+        ),
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected field name, found `:`",
+        label: Some(
+            Label {
+                message: "expected field name",
+                span: Span {
+                    start: 50,
+                    end: 51,
+                },
+            },
+        ),
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected `:`, found new line",
+        label: Some(
+            Label {
+                message: "unexpected token",
+                span: Span {
+                    start: 57,
+                    end: 58,
+                },
+            },
+        ),
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected value, found new line",
+        label: Some(
+            Label {
+                message: "expected value",
+                span: Span {
+                    start: 57,
+                    end: 58,
+                },
+            },
+        ),
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected new line, found space",
+        label: Some(
+            Label {
+                message: "unexpected token",
+                span: Span {
+                    start: 58,
+                    end: 62,
+                },
+            },
+        ),
+        note: None,
+    },
+]

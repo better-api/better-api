@@ -1,0 +1,49 @@
+---
+source: syntax/parser.rs
+expression: tree
+---
+NODE_ROOT@0..75
+  NODE_SERVER@0..75
+    NODE_PROLOGUE@0..16
+      TOKEN_DOC_COMMENT@0..15 "/// doc comment"
+      TOKEN_EOL@15..16 "\n"
+    TOKEN_IDENTIFIER@16..22 "server"
+    TOKEN_COLON@22..23 ":"
+    TOKEN_SPACE@23..24 " "
+    NODE_VALUE@24..74
+      NODE_OBJECT@24..74
+        TOKEN_CURLY_LEFT@24..25 "{"
+        TOKEN_EOL@25..26 "\n"
+        TOKEN_SPACE@26..30 "    "
+        NODE_OBJECT_FIELD@30..43
+          NODE_NAME@30..34
+            TOKEN_IDENTIFIER@30..34 "name"
+          TOKEN_COLON@34..35 ":"
+          TOKEN_SPACE@35..36 " "
+          NODE_VALUE@36..42
+            NODE_ERROR@36..42
+              TOKEN_IDENTIFIER@36..42 "foobar"
+          TOKEN_EOL@42..43 "\n"
+        TOKEN_SPACE@43..47 "    "
+        NODE_ERROR@47..50
+          TOKEN_INTEGER@47..50 "123"
+        NODE_ERROR@50..51
+          TOKEN_COLON@50..51 ":"
+        TOKEN_SPACE@51..52 " "
+        NODE_OBJECT_FIELD@52..58
+          NODE_NAME@52..57
+            TOKEN_STRING@52..57 "\"bar\""
+          NODE_VALUE@57..58
+            NODE_ERROR@57..58
+              TOKEN_EOL@57..58 "\n"
+        TOKEN_SPACE@58..62 "    "
+        NODE_OBJECT_FIELD@62..73
+          NODE_NAME@62..65
+            TOKEN_IDENTIFIER@62..65 "url"
+          TOKEN_COLON@65..66 ":"
+          TOKEN_SPACE@66..67 " "
+          NODE_VALUE@67..72
+            TOKEN_STRING@67..72 "\"baz\""
+          TOKEN_EOL@72..73 "\n"
+        TOKEN_CURLY_RIGHT@73..74 "}"
+    TOKEN_EOL@74..75 "\n"

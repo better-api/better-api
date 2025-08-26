@@ -458,4 +458,23 @@ mod test {
         insta::assert_debug_snapshot!(tree);
         assert_eq!(diagnostics, vec![]);
     }
+
+    #[test]
+    fn parse_server_error() {
+        let text = indoc! {r#"
+            /// doc comment
+            server: {
+                name: foobar
+                123: "bar"
+                url: "baz"
+            }
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        insta::assert_debug_snapshot!(diagnostics);
+    }
 }
