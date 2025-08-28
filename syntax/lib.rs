@@ -113,8 +113,10 @@ pub enum Kind {
     NODE_PROLOGUE,
 
     NODE_DEFAULT,
+
     NODE_OBJECT,
     NODE_OBJECT_FIELD,
+    NODE_BOOL_VALUE,
 
     NODE_ERROR,
 

@@ -287,6 +287,15 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
         match self.peek() {
             Some(TOKEN_STRING) => self.advance(),
+            Some(TOKEN_INTEGER) => self.advance(),
+            Some(TOKEN_FLOAT) => self.advance(),
+
+            Some(TOKEN_KW_TRUE) | Some(TOKEN_KW_FALSE) => {
+                self.builder.start_node(NODE_BOOL_VALUE.into());
+                self.advance();
+                self.builder.finish_node();
+            }
+
             Some(TOKEN_CURLY_LEFT) => self.parse_object(),
 
             Some(kind) => {
@@ -476,5 +485,23 @@ mod test {
         let (tree, diagnostics) = parse(tokens);
         insta::assert_debug_snapshot!(tree);
         insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn parse_value() {
+        let text = indoc! {r#"
+            name: false
+            name: true
+            name: "string"
+            name: 69
+            name: 4.20
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        assert_eq!(diagnostics, vec![]);
     }
 }
