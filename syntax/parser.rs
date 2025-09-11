@@ -228,7 +228,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                     }
                     Some("version") => self.parse_root_node_field(NODE_VERSION, prologue, false),
                     Some("server") => self.parse_root_node_field(NODE_SERVER, prologue, true),
-                    Some("type") => todo!("Parse type"),
+                    Some("type") => self.parse_type_def(prologue),
                     Some("example") => todo!("Parse example"),
                     Some("path") => todo!("Parse path"),
                     Some(_) => todo!("parse error node"),
@@ -278,6 +278,75 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.assignment();
         self.parse_value();
         self.expect(TOKEN_EOL);
+
+        self.builder.finish_node();
+    }
+
+    fn parse_type_def(&mut self, prologue: Option<Prologue>) {
+        if let Some(prologue) = prologue {
+            if let Some(report) = prologue.expect_no_default() {
+                self.reports.push(report);
+            }
+
+            self.builder
+                .start_node_at(prologue.start, NODE_TYPE_DEF.into());
+
+            self.builder
+                .start_node_at(prologue.start, NODE_PROLOGUE.into());
+            self.builder.finish_node();
+        } else {
+            self.builder.start_node(NODE_TYPE_DEF.into());
+        }
+
+        debug_assert_eq!(self.peek_value(), Some("type"));
+        self.advance();
+
+        self.skip_whitespace();
+
+        self.builder.start_node(NODE_NAME.into());
+        self.expect(TOKEN_IDENTIFIER);
+        self.builder.finish_node();
+
+        self.assignment();
+
+        self.parse_type(DefaultCompositeType::None);
+
+        self.skip_whitespace();
+        self.expect(TOKEN_EOL);
+
+        self.builder.finish_node();
+    }
+
+    fn parse_type(&mut self, default_composite_type: DefaultCompositeType) {
+        self.builder.start_node(NODE_TYPE.into());
+
+        match self.peek() {
+            Some(TOKEN_IDENTIFIER) => self.advance(),
+            Some(TOKEN_KW_I32)
+            | Some(TOKEN_KW_I64)
+            | Some(TOKEN_KW_U32)
+            | Some(TOKEN_KW_U64)
+            | Some(TOKEN_KW_F32)
+            | Some(TOKEN_KW_F64)
+            | Some(TOKEN_KW_DATE)
+            | Some(TOKEN_KW_TIMESTAMP)
+            | Some(TOKEN_KW_BOOL)
+            | Some(TOKEN_KW_STRING)
+            | Some(TOKEN_KW_FILE) => self.advance(),
+
+            Some(TOKEN_BRACKET_LEFT) => todo!("parse array"),
+
+            Some(TOKEN_CURLY_LEFT) => match default_composite_type {
+                DefaultCompositeType::None => todo!("handle ambigous error"),
+                DefaultCompositeType::Record => todo!("parse record"),
+                DefaultCompositeType::Enum => todo!("parse enum"),
+                DefaultCompositeType::Union => todo!("parse union"),
+                DefaultCompositeType::Response => todo!("parse response"),
+            },
+
+            Some(_) => todo!("handle unexpected token error"),
+            None => todo!("handle unepxected eof error"),
+        }
 
         self.builder.finish_node();
     }
@@ -410,6 +479,16 @@ impl Prologue {
     }
 }
 
+#[derive(Clone, Copy, Default)]
+enum DefaultCompositeType {
+    #[default]
+    None,
+    Record,
+    Enum,
+    Union,
+    Response,
+}
+
 #[cfg(test)]
 mod test {
     use better_api_diagnostic::{Label, Report, Span};
@@ -495,6 +574,33 @@ mod test {
             name: "string"
             name: 69
             name: 4.20
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        assert_eq!(diagnostics, vec![]);
+    }
+
+    #[test]
+    fn parse_simple_type_def() {
+        let text = indoc! {r#"
+            /// Doc comment 
+            type Foo: Bar
+            
+            type Str: string
+            type I32: i32
+            type I64: i64
+            type U32: u32
+            type U64: u64
+            type F32: f32
+            type F64: f64
+            type Date: date
+            type TimeStamp: timestamp
+            type Boolean: bool
+            type File: file
         "#};
 
         let mut diagnostics = vec![];

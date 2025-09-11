@@ -108,6 +108,8 @@ pub enum Kind {
 
     /// Represents a value. Should have exactly one child.
     NODE_VALUE,
+    /// Represents a type. Should have exactly one child
+    NODE_TYPE,
 
     /// Represents a prologue of type, property, endpoint, ...
     NODE_PROLOGUE,
@@ -117,6 +119,9 @@ pub enum Kind {
     NODE_OBJECT,
     NODE_OBJECT_FIELD,
     NODE_BOOL_VALUE,
+
+    /// Represents definition of a type connected to an ident.
+    NODE_TYPE_DEF,
 
     NODE_ERROR,
 
