@@ -1,0 +1,32 @@
+---
+source: syntax/parser.rs
+expression: tree
+---
+NODE_ROOT@0..36
+  NODE_TYPE_DEF@0..15
+    TOKEN_KW_TYPE@0..4 "type"
+    TOKEN_SPACE@4..5 " "
+    NODE_NAME@5..8
+      TOKEN_IDENTIFIER@5..8 "Foo"
+    TOKEN_COLON@8..9 ":"
+    TOKEN_SPACE@9..10 " "
+    NODE_TYPE@10..14
+      NODE_TYPE_OPTION@10..14
+        NODE_TYPE@10..13
+          TOKEN_KW_I32@10..13 "i32"
+        TOKEN_OPTION@13..14 "?"
+    TOKEN_EOL@14..15 "\n"
+  NODE_TYPE_DEF@15..36
+    TOKEN_KW_TYPE@15..19 "type"
+    TOKEN_SPACE@19..20 " "
+    NODE_NAME@20..23
+      TOKEN_IDENTIFIER@20..23 "Foo"
+    TOKEN_COLON@23..24 ":"
+    TOKEN_SPACE@24..25 " "
+    NODE_TYPE@25..35
+      NODE_TYPE_OPTION@25..35
+        NODE_TYPE@25..34
+          TOKEN_KW_STRING@25..31 "string"
+          TOKEN_SPACE@31..34 "   "
+        TOKEN_OPTION@34..35 "?"
+    TOKEN_EOL@35..36 "\n"

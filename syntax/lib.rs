@@ -92,8 +92,18 @@ pub enum Kind {
     TOKEN_KW_STRING, // string
     #[display("`file`")]
     TOKEN_KW_FILE, // file
+    #[display("`type`")]
+    TOKEN_KW_TYPE, // type
+    #[display("`rec`")]
+    TOKEN_KW_REC, // rec
+    #[display("`enum`")]
+    TOKEN_KW_ENUM, // enum
+    #[display("`union`")]
+    TOKEN_KW_UNION, // union
+    #[display("`resp`")]
+    TOKEN_KW_RESP, // response
 
-    /// Name of the PAI
+    /// Name of the API
     NODE_API_NAME,
     /// Better API Version root node
     NODE_BETTER_API,
@@ -122,6 +132,7 @@ pub enum Kind {
 
     /// Represents definition of a type connected to an ident.
     NODE_TYPE_DEF,
+    NODE_TYPE_OPTION,
 
     NODE_ERROR,
 

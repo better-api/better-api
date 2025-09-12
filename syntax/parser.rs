@@ -228,7 +228,6 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                     }
                     Some("version") => self.parse_root_node_field(NODE_VERSION, prologue, false),
                     Some("server") => self.parse_root_node_field(NODE_SERVER, prologue, true),
-                    Some("type") => self.parse_type_def(prologue),
                     Some("example") => todo!("Parse example"),
                     Some("path") => todo!("Parse path"),
                     Some(_) => todo!("parse error node"),
@@ -237,6 +236,8 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                     None => unreachable!(),
                 };
             }
+
+            Some(TOKEN_KW_TYPE) => self.parse_type_def(prologue),
 
             Some(TOKEN_KW_GET)
             | Some(TOKEN_KW_POST)
@@ -320,6 +321,8 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
     fn parse_type(&mut self, default_composite_type: DefaultCompositeType) {
         self.builder.start_node(NODE_TYPE.into());
 
+        let checkpoint = self.builder.checkpoint();
+
         match self.peek() {
             Some(TOKEN_IDENTIFIER) => self.advance(),
             Some(TOKEN_KW_I32)
@@ -346,6 +349,18 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
             Some(_) => todo!("handle unexpected token error"),
             None => todo!("handle unepxected eof error"),
+        }
+
+        self.skip_whitespace();
+        if self.peek() == Some(TOKEN_OPTION) {
+            self.builder
+                .start_node_at(checkpoint, NODE_TYPE_OPTION.into());
+            self.builder.start_node_at(checkpoint, NODE_TYPE.into());
+            self.builder.finish_node();
+
+            self.advance();
+
+            self.builder.finish_node();
         }
 
         self.builder.finish_node();
@@ -601,6 +616,21 @@ mod test {
             type TimeStamp: timestamp
             type Boolean: bool
             type File: file
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        assert_eq!(diagnostics, vec![]);
+    }
+
+    #[test]
+    fn parse_option_type() {
+        let text = indoc! {r#"
+            type Foo: i32?
+            type Foo: string   ?
         "#};
 
         let mut diagnostics = vec![];

@@ -235,6 +235,12 @@ impl<'s, 'd> Tokenizer<'s, 'd> {
             "string" => TOKEN_KW_STRING,
             "file" => TOKEN_KW_FILE,
 
+            "type" => TOKEN_KW_TYPE,
+            "rec" => TOKEN_KW_REC,
+            "enum" => TOKEN_KW_ENUM,
+            "union" => TOKEN_KW_UNION,
+            "resp" => TOKEN_KW_RESP,
+
             _ => TOKEN_IDENTIFIER,
         };
 
@@ -311,6 +317,7 @@ impl<'s, 'd> Iterator for Tokenizer<'s, 'd> {
 #[cfg(test)]
 mod test {
     use better_api_diagnostic::{Label, Report, Span};
+    use indoc::indoc;
 
     use super::tokenize;
     use crate::Kind::*;
@@ -335,25 +342,27 @@ mod test {
     fn simple_keywords_and_idents() {
         let mut diagnostics = vec![];
         let tokens: Vec<_> = tokenize(
-            r#"GET
-POST
-PUT
-DELETE
-PATCH
-true
-false
-this_is_Ident213-890asdf
-i32
-i64
-f32
-f64
-u32
-u64
-date
-timestamp
-bool
-string
-file"#,
+            indoc! {r#"
+                GET
+                POST
+                PUT
+                DELETE
+                PATCH
+                true
+                false
+                this_is_Ident213-890asdf
+                i32
+                i64
+                f32
+                f64
+                u32
+                u64
+                date
+                timestamp
+                bool
+                string
+                file
+            "#},
             &mut diagnostics,
         )
         .collect();
@@ -398,6 +407,7 @@ file"#,
                 (TOKEN_KW_STRING, "string"),
                 (TOKEN_EOL, "\n"),
                 (TOKEN_KW_FILE, "file"),
+                (TOKEN_EOL, "\n"),
             ]
         );
         assert_eq!(diagnostics, vec![]);
@@ -521,9 +531,11 @@ file"#,
     fn comments() {
         let mut diagnostics = vec![];
         let tokens: Vec<_> = tokenize(
-            r#"//! Top comment
-/// doc comment
-//comment"#,
+            indoc! {r#"
+                //! Top comment
+                /// doc comment
+                //comment
+            "#},
             &mut diagnostics,
         )
         .collect();
@@ -535,9 +547,28 @@ file"#,
                 (TOKEN_EOL, "\n"),
                 (TOKEN_DOC_COMMENT, "/// doc comment"),
                 (TOKEN_EOL, "\n"),
-                (TOKEN_COMMENT, "//comment")
+                (TOKEN_COMMENT, "//comment"),
+                (TOKEN_EOL, "\n"),
             ]
         );
+        assert_eq!(diagnostics, vec![]);
+    }
+
+    #[test]
+    fn types() {
+        let mut diagnostics = vec![];
+        let tokens: Vec<_> = tokenize(
+            indoc! {r#"
+                type Foo: rec {}
+                type Foo: enum(string) {}
+                type Foo: union("type") {}
+                type Foo: resp {}
+            "#},
+            &mut diagnostics,
+        )
+        .collect();
+
+        insta::assert_debug_snapshot!(tokens);
         assert_eq!(diagnostics, vec![]);
     }
 }
