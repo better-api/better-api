@@ -1,0 +1,58 @@
+---
+source: syntax/parser.rs
+expression: tree
+---
+NODE_ROOT@0..59
+  NODE_TYPE_DEF@0..16
+    TOKEN_KW_TYPE@0..4 "type"
+    TOKEN_SPACE@4..5 " "
+    NODE_NAME@5..8
+      TOKEN_IDENTIFIER@5..8 "Foo"
+    TOKEN_COLON@8..9 ":"
+    TOKEN_SPACE@9..10 " "
+    NODE_TYPE@10..15
+      NODE_TYPE_ARRAY@10..15
+        TOKEN_BRACKET_LEFT@10..11 "["
+        NODE_TYPE@11..14
+          TOKEN_KW_I32@11..14 "i32"
+        TOKEN_BRACKET_RIGHT@14..15 "]"
+    TOKEN_EOL@15..16 "\n"
+  NODE_TYPE_DEF@16..38
+    TOKEN_KW_TYPE@16..20 "type"
+    TOKEN_SPACE@20..21 " "
+    NODE_NAME@21..24
+      TOKEN_IDENTIFIER@21..24 "Foo"
+    TOKEN_COLON@24..25 ":"
+    TOKEN_SPACE@25..26 " "
+    NODE_TYPE@26..37
+      NODE_TYPE_ARRAY@26..37
+        TOKEN_BRACKET_LEFT@26..27 "["
+        TOKEN_SPACE@27..28 " "
+        NODE_TYPE@28..36
+          NODE_TYPE_OPTION@28..36
+            NODE_TYPE@28..35
+              TOKEN_KW_STRING@28..34 "string"
+              TOKEN_SPACE@34..35 " "
+            TOKEN_OPTION@35..36 "?"
+        TOKEN_BRACKET_RIGHT@36..37 "]"
+    TOKEN_EOL@37..38 "\n"
+  NODE_TYPE_DEF@38..59
+    TOKEN_KW_TYPE@38..42 "type"
+    TOKEN_SPACE@42..43 " "
+    NODE_NAME@43..46
+      TOKEN_IDENTIFIER@43..46 "Foo"
+    TOKEN_COLON@46..47 ":"
+    TOKEN_SPACE@47..48 " "
+    NODE_TYPE@48..58
+      NODE_TYPE_OPTION@48..58
+        NODE_TYPE@48..57
+          NODE_TYPE_ARRAY@48..57
+            TOKEN_BRACKET_LEFT@48..49 "["
+            NODE_TYPE@49..56
+              NODE_TYPE_OPTION@49..56
+                NODE_TYPE@49..55
+                  TOKEN_KW_STRING@49..55 "string"
+                TOKEN_OPTION@55..56 "?"
+            TOKEN_BRACKET_RIGHT@56..57 "]"
+        TOKEN_OPTION@57..58 "?"
+    TOKEN_EOL@58..59 "\n"

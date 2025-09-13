@@ -337,7 +337,19 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
             | Some(TOKEN_KW_STRING)
             | Some(TOKEN_KW_FILE) => self.advance(),
 
-            Some(TOKEN_BRACKET_LEFT) => todo!("parse array"),
+            Some(TOKEN_BRACKET_LEFT) => {
+                self.builder.start_node(NODE_TYPE_ARRAY.into());
+
+                self.advance();
+                self.skip_whitespace();
+
+                self.parse_type(DefaultCompositeType::None);
+
+                self.skip_whitespace();
+                self.expect(TOKEN_BRACKET_RIGHT);
+
+                self.builder.finish_node();
+            }
 
             Some(TOKEN_CURLY_LEFT) => match default_composite_type {
                 DefaultCompositeType::None => todo!("handle ambigous error"),
@@ -631,6 +643,22 @@ mod test {
         let text = indoc! {r#"
             type Foo: i32?
             type Foo: string   ?
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        assert_eq!(diagnostics, vec![]);
+    }
+
+    #[test]
+    fn parse_array_type() {
+        let text = indoc! {r#"
+            type Foo: [i32]
+            type Foo: [ string ?]
+            type Foo: [string?]?
         "#};
 
         let mut diagnostics = vec![];
