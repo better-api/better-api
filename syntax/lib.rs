@@ -132,8 +132,12 @@ pub enum Kind {
 
     /// Represents definition of a type connected to an ident.
     NODE_TYPE_DEF,
+
     NODE_TYPE_OPTION,
     NODE_TYPE_ARRAY,
+
+    NODE_TYPE_RECORD,
+    NODE_RECORD_FIELD,
 
     NODE_ERROR,
 

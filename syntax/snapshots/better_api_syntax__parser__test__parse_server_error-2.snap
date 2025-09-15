@@ -75,13 +75,13 @@ expression: diagnostics
     },
     Report {
         severity: Error,
-        title: "expected new line, found space",
+        title: "expected new line, found an identifier",
         label: Some(
             Label {
                 message: "unexpected token",
                 span: Span {
-                    start: 58,
-                    end: 62,
+                    start: 62,
+                    end: 65,
                 },
             },
         ),

@@ -351,9 +351,14 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 self.builder.finish_node();
             }
 
+            Some(TOKEN_KW_REC) => self.parse_record_type(),
+            Some(TOKEN_KW_ENUM) => todo!("parse enum type"),
+            Some(TOKEN_KW_UNION) => todo!("parse union type"),
+            Some(TOKEN_KW_RESP) => todo!("parse response type"),
+
             Some(TOKEN_CURLY_LEFT) => match default_composite_type {
                 DefaultCompositeType::None => todo!("handle ambigous error"),
-                DefaultCompositeType::Record => todo!("parse record"),
+                DefaultCompositeType::Record => self.parse_record_type(),
                 DefaultCompositeType::Enum => todo!("parse enum"),
                 DefaultCompositeType::Union => todo!("parse union"),
                 DefaultCompositeType::Response => todo!("parse response"),
@@ -445,6 +450,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                     self.assignment();
 
                     self.parse_value();
+                    self.skip_whitespace();
                     self.expect(TOKEN_EOL);
 
                     self.builder.finish_node();
@@ -474,7 +480,88 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 None => self.reports.push(
                     Report::error("expected field name, found end of file".to_string()).with_label(
                         Label::new(
-                            "expected field value".to_string(),
+                            "expected field name".to_string(),
+                            Span::new(self.pos, self.pos + 1),
+                        ),
+                    ),
+                ),
+            }
+        }
+
+        self.builder.finish_node();
+    }
+
+    fn parse_record_type(&mut self) {
+        self.builder.start_node(NODE_TYPE_RECORD.into());
+
+        if self.peek() == Some(TOKEN_KW_REC) {
+            self.advance();
+        }
+
+        self.skip_whitespace();
+        self.expect(TOKEN_CURLY_LEFT);
+
+        loop {
+            let prologue = self.parse_prologue();
+
+            match self.peek() {
+                Some(TOKEN_IDENTIFIER) | Some(TOKEN_STRING) => {
+                    if let Some(prologue) = prologue {
+                        self.builder
+                            .start_node_at(prologue.start, NODE_RECORD_FIELD.into());
+
+                        self.builder
+                            .start_node_at(prologue.start, NODE_PROLOGUE.into());
+                        self.builder.finish_node();
+                    } else {
+                        self.builder.start_node(NODE_RECORD_FIELD.into());
+                    }
+
+                    self.builder.start_node(NODE_NAME.into());
+                    self.advance();
+                    self.builder.finish_node();
+
+                    self.assignment();
+
+                    self.parse_type(DefaultCompositeType::None);
+                    self.skip_whitespace();
+                    self.expect(TOKEN_EOL);
+
+                    self.builder.finish_node();
+                }
+
+                Some(TOKEN_CURLY_RIGHT) => {
+                    if let Some(prologue) = prologue
+                        && let Some(report) = prologue.expect_no_default()
+                    {
+                        self.reports.push(report);
+                    }
+
+                    self.advance();
+                    break;
+                }
+
+                Some(kind) => {
+                    let start = self.pos;
+
+                    self.builder.start_node(NODE_ERROR.into());
+                    self.advance();
+                    self.builder.finish_node();
+
+                    self.reports.push(
+                        Report::error(format!("expected field name, found {kind}")).with_label(
+                            Label::new(
+                                "expected field name".to_string(),
+                                Span::new(start, self.pos),
+                            ),
+                        ),
+                    );
+                }
+
+                None => self.reports.push(
+                    Report::error("expected field name, found end of file".to_string()).with_label(
+                        Label::new(
+                            "expected field name".to_string(),
                             Span::new(self.pos, self.pos + 1),
                         ),
                     ),
@@ -561,7 +648,7 @@ mod test {
         let text = indoc! {r#"
             /// doc comment
             server: {
-                name: "foo"
+                name: "foo"  
                 url: "bar"
             }
         "#};
@@ -659,6 +746,36 @@ mod test {
             type Foo: [i32]
             type Foo: [ string ?]
             type Foo: [string?]?
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        assert_eq!(diagnostics, vec![]);
+    }
+
+    #[test]
+    fn parse_record_type() {
+        let text = indoc! {r#"
+            type Foo: rec {
+                // comment
+                /// doc comment
+                foo: bool
+
+                /// More doc comment
+                @default("foobar")
+                bar: string
+
+                // Just a comment
+                hey: i32
+
+                hoy: rec {
+                    @default(true)
+                    nested: bool
+                }
+            }
         "#};
 
         let mut diagnostics = vec![];
