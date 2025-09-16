@@ -40,6 +40,17 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.builder.token(kind.into(), value);
     }
 
+    // Advances tokens while `check` is returning true.
+    fn advance_while<F: Fn(Kind) -> bool>(&mut self, check: F) {
+        loop {
+            if self.peek().is_some_and(&check) {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+    }
+
     /// Returns the token kind of the next token.
     fn peek(&mut self) -> Option<Kind> {
         self.tokens.peek().map(|(kind, _)| *kind)
@@ -383,6 +394,17 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.builder.finish_node();
     }
 
+    // TODO: Recovery symbol is a function that returns true when recovery symbol is found.
+    // For starters, EOF is always a recovery symbols without specifying.
+    // Same approach has to be taken for parsing types.
+    //
+    // TODO: When parsing object/record field, if first token is not ident or string, parse error token
+    // until EOL. This you won't half parse a field.
+    //
+    // TODO: In case of advancing until recovery token/EOL think about what the report should be:
+    // - "Expected value, found {kind}", and only one token is inside the span
+    // - "Expected value, found {kind}", and all advanced tokens are inside the span
+    // - "Expected value", and all advanced tokens are inside the span
     fn parse_value(&mut self) {
         self.builder.start_node(NODE_VALUE.into());
 
