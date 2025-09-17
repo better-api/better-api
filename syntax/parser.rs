@@ -114,6 +114,19 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         }
     }
 
+    /// Parses error node. It advances the tokens until EOF is reached,
+    /// or until recovery token is found `is_recovery(token) == true`.
+    fn parse_error<F: Fn(Kind) -> bool>(&mut self, is_recovery: F) -> Span {
+        let start = self.pos;
+        let end = self.pos + self.peek_value().map_or(1, |val| val.len());
+
+        self.builder.start_node(NODE_ERROR.into());
+        self.advance_while(|token| token != TOKEN_EOL && !is_recovery(token));
+        self.builder.finish_node();
+
+        Span::new(start, end)
+    }
+
     /// Parses assignment trivia "<whitespace> : <whitespace>"
     fn assignment(&mut self) {
         self.skip_whitespace();
@@ -400,11 +413,6 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
     //
     // TODO: When parsing object/record field, if first token is not ident or string, parse error token
     // until EOL. This you won't half parse a field.
-    //
-    // TODO: In case of advancing until recovery token/EOL think about what the report should be:
-    // - "Expected value, found {kind}", and only one token is inside the span
-    // - "Expected value, found {kind}", and all advanced tokens are inside the span
-    // - "Expected value", and all advanced tokens are inside the span
     fn parse_value(&mut self) {
         self.builder.start_node(NODE_VALUE.into());
 
@@ -422,16 +430,10 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
             Some(TOKEN_CURLY_LEFT) => self.parse_object(),
 
             Some(kind) => {
-                let start = self.pos;
-                self.builder.start_node(NODE_ERROR.into());
-                self.advance();
-                self.builder.finish_node();
-
+                let span = self.parse_error(|_| false);
                 self.reports.push(
-                    Report::error(format!("expected value, found {kind}")).with_label(Label::new(
-                        "expected value".to_string(),
-                        Span::new(start, self.pos),
-                    )),
+                    Report::error(format!("expected value, found {kind}"))
+                        .with_label(Label::new("expected value".to_string(), span)),
                 );
             }
             None => {
@@ -484,28 +486,22 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 }
 
                 Some(kind) => {
-                    let start = self.pos;
-
-                    self.builder.start_node(NODE_ERROR.into());
-                    self.advance();
-                    self.builder.finish_node();
-
+                    let span = self.parse_error(|_| false);
                     self.reports.push(
-                        Report::error(format!("expected field name, found {kind}")).with_label(
-                            Label::new(
-                                "expected field name".to_string(),
-                                Span::new(start, self.pos),
+                        Report::error(format!("expected field name, found {kind}"))
+                            .with_label(Label::new("expected field name".to_string(), span))
+                            .with_note(
+                                "help: field name must be an identifier or string".to_string(),
                             ),
-                        ),
                     );
                 }
                 None => self.reports.push(
-                    Report::error("expected field name, found end of file".to_string()).with_label(
-                        Label::new(
+                    Report::error("expected field name, found end of file".to_string())
+                        .with_label(Label::new(
                             "expected field name".to_string(),
                             Span::new(self.pos, self.pos + 1),
-                        ),
-                    ),
+                        ))
+                        .with_note("help: field name must be an identifier or string".to_string()),
                 ),
             }
         }

@@ -25,18 +25,13 @@ NODE_ROOT@0..75
               TOKEN_IDENTIFIER@36..42 "foobar"
           TOKEN_EOL@42..43 "\n"
         TOKEN_SPACE@43..47 "    "
-        NODE_ERROR@47..50
+        NODE_ERROR@47..57
           TOKEN_INTEGER@47..50 "123"
-        NODE_ERROR@50..51
           TOKEN_COLON@50..51 ":"
-        TOKEN_SPACE@51..52 " "
-        NODE_OBJECT_FIELD@52..62
-          NODE_NAME@52..57
-            TOKEN_STRING@52..57 "\"bar\""
-          NODE_VALUE@57..58
-            NODE_ERROR@57..58
-              TOKEN_EOL@57..58 "\n"
-          TOKEN_SPACE@58..62 "    "
+          TOKEN_SPACE@51..52 " "
+          TOKEN_STRING@52..57 "\"bar\""
+        TOKEN_EOL@57..58 "\n"
+        TOKEN_SPACE@58..62 "    "
         NODE_OBJECT_FIELD@62..73
           NODE_NAME@62..65
             TOKEN_IDENTIFIER@62..65 "url"
