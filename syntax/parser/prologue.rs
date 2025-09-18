@@ -99,10 +99,11 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.advance();
 
         if self.eat(TOKEN_PAREN_LEFT) {
-            self.parse_value();
+            self.parse_value(|token| token == TOKEN_PAREN_RIGHT);
             self.expect(TOKEN_PAREN_RIGHT);
         }
 
+        self.skip_whitespace();
         self.expect(TOKEN_EOL);
 
         self.builder.finish_node();

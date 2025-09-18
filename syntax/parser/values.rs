@@ -1,17 +1,15 @@
 use better_api_diagnostic::{Label, Report, Span};
 
 use super::Parser;
-use crate::Kind::*;
+use crate::Kind::{self, *};
 use crate::Token;
 
 impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
-    // TODO: Recovery symbol is a function that returns true when recovery symbol is found.
-    // For starters, EOF is always a recovery symbols without specifying.
-    // Same approach has to be taken for parsing types.
-    //
-    // TODO: When parsing object/record field, if first token is not ident or string, parse error token
-    // until EOL. This you won't half parse a field.
-    pub fn parse_value(&mut self) {
+    /// Parses value node.
+    ///
+    /// If error is found, error node will be emitted. Error node consumes
+    /// until EOF is reached, or until recovery token is found `is_recovery(token) == true`
+    pub fn parse_value<F: Fn(Kind) -> bool>(&mut self, is_recovery: F) {
         self.builder.start_node(NODE_VALUE.into());
 
         match self.peek() {
@@ -28,7 +26,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
             Some(TOKEN_CURLY_LEFT) => self.parse_object(),
 
             Some(kind) => {
-                let span = self.parse_error(|_| false);
+                let span = self.parse_error(&is_recovery);
                 self.reports.push(
                     Report::error(format!("expected value, found {kind}"))
                         .with_label(Label::new("expected value".to_string(), span)),
@@ -71,7 +69,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
                     self.assignment();
 
-                    self.parse_value();
+                    self.parse_value(|token| token == TOKEN_CURLY_RIGHT);
                     self.skip_whitespace();
                     self.expect(TOKEN_EOL);
 
@@ -84,7 +82,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 }
 
                 Some(kind) => {
-                    let span = self.parse_error(|_| false);
+                    let span = self.parse_error(|token| token == TOKEN_CURLY_RIGHT);
                     self.reports.push(
                         Report::error(format!("expected field name, found {kind}"))
                             .with_label(Label::new("expected field name".to_string(), span))

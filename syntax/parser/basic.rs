@@ -4,7 +4,7 @@ use better_api_diagnostic::{Label, Report, Span};
 
 use super::Parser;
 use crate::Kind::{self, *};
-use crate::{Token, node};
+use crate::Token;
 
 impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
     /// Advances to the next token.
