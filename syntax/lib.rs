@@ -143,6 +143,11 @@ pub enum Kind {
     /// Field used in records and unions
     NODE_TYPE_FIELD,
 
+    NODE_TYPE_RESPONSE,
+    NODE_TYPE_RESP_CONTENT_TYPE,
+    NODE_TYPE_RESP_HEADERS,
+    NODE_TYPE_RESP_BODY,
+
     NODE_ERROR,
 
     NODE_ROOT, // Root node of the file that's parsed

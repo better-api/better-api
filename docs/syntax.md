@@ -195,22 +195,14 @@ type FooResponse: resp {
 
 is equal to using just `Foo` in the endpoint specifications. We'll look at endpoints later.
 
-Some things you want to use a response type for are:
+The most common reason for using a response type is adding custom headers:
 
-- specifying an empty body:
-  ```text
-  type FooResponse: resp {
-    status: 204
-    body: null
-  }
-  ```
-- adding custom headers:
-  ```text
-  type FooResponse: resp {
-    headers: FooHeaders
-    body: Foo
-  }
-  ```
+```text
+type FooResponse: resp {
+  headers: FooHeaders
+  body: Foo
+}
+```
 
 Sometimes it's handy to use anonymous (inlined) headers and body:
 
