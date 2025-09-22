@@ -110,3 +110,80 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.skip_whitespace();
     }
 }
+
+#[cfg(test)]
+mod test {
+    use better_api_diagnostic::{Label, Report, Span};
+    use indoc::indoc;
+
+    use crate::{parse, tokenize};
+
+    #[test]
+    fn parse_basic_info() {
+        let text = indoc! {r#"
+            //! This is a top comment
+            // This is a normal comment
+            //! Here is another top comment
+            
+            /// A doc comment
+            name:  "foobar"
+
+            // This should report an error
+            @default("asdf")
+            betterApi: "1.0.0"
+
+            version: "1.0"
+        "#};
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        assert_eq!(
+            diagnostics,
+            vec![
+                Report::error("unexpected `@default`".to_string()).with_label(Label::new(
+                    "unexpected `@default`".to_string(),
+                    Span::new(153, 170)
+                ))
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_server() {
+        let text = indoc! {r#"
+            /// doc comment
+            server: {
+                name: "foo"  
+                url: "bar"
+            }
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        assert_eq!(diagnostics, vec![]);
+    }
+
+    #[test]
+    fn parse_server_error() {
+        let text = indoc! {r#"
+            /// doc comment
+            server: {
+                name: foobar
+                123: "bar"
+                url: "baz"
+            }
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+}

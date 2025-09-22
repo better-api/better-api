@@ -105,3 +105,28 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.builder.finish_node();
     }
 }
+
+#[cfg(test)]
+mod test {
+    use indoc::indoc;
+
+    use crate::{parse, tokenize};
+
+    #[test]
+    fn parse_value() {
+        let text = indoc! {r#"
+            name: false
+            name: true
+            name: "string"
+            name: 69
+            name: 4.20
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        assert_eq!(diagnostics, vec![]);
+    }
+}

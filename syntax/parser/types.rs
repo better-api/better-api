@@ -197,3 +197,98 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.builder.finish_node();
     }
 }
+
+#[cfg(test)]
+mod test {
+    use indoc::indoc;
+
+    use crate::{parse, tokenize};
+
+    #[test]
+    fn parse_simple_type_def() {
+        let text = indoc! {r#"
+            /// Doc comment 
+            type Foo: Bar
+            
+            type Str: string
+            type I32: i32
+            type I64: i64
+            type U32: u32
+            type U64: u64
+            type F32: f32
+            type F64: f64
+            type Date: date
+            type TimeStamp: timestamp
+            type Boolean: bool
+            type File: file
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        assert_eq!(diagnostics, vec![]);
+    }
+
+    #[test]
+    fn parse_option_type() {
+        let text = indoc! {r#"
+            type Foo: i32?
+            type Foo: string   ?
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        assert_eq!(diagnostics, vec![]);
+    }
+
+    #[test]
+    fn parse_array_type() {
+        let text = indoc! {r#"
+            type Foo: [i32]
+            type Foo: [ string ?]
+            type Foo: [string?]?
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        assert_eq!(diagnostics, vec![]);
+    }
+
+    #[test]
+    fn parse_record_type() {
+        let text = indoc! {r#"
+            type Foo: rec {
+                // comment
+                /// doc comment
+                foo: bool
+
+                /// More doc comment
+                @default("foobar")
+                bar: string
+
+                // Just a comment
+                hey: i32
+
+                hoy: rec {
+                    @default(true)
+                    nested: bool
+                }
+            }
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        assert_eq!(diagnostics, vec![]);
+    }
+}

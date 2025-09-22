@@ -10,9 +10,6 @@ mod prologue;
 mod types;
 mod values;
 
-#[cfg(test)]
-mod test;
-
 pub fn parse<'a, T: Iterator<Item = Token<'a>>>(tokens: T) -> (node::SyntaxNode, Vec<Report>) {
     let mut parser = Parser::new(tokens);
     parser.parse();
