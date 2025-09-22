@@ -1,0 +1,48 @@
+---
+source: syntax/parser/types.rs
+expression: diagnostics
+---
+[
+    Report {
+        severity: Error,
+        title: "expected `(`, found a string",
+        label: Some(
+            Label {
+                message: "unexpected token",
+                span: Span {
+                    start: 99,
+                    end: 105,
+                },
+            },
+        ),
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected `)`, found `{`",
+        label: Some(
+            Label {
+                message: "unexpected token",
+                span: Span {
+                    start: 106,
+                    end: 107,
+                },
+            },
+        ),
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected new line, found `}`",
+        label: Some(
+            Label {
+                message: "unexpected token",
+                span: Span {
+                    start: 115,
+                    end: 116,
+                },
+            },
+        ),
+        note: None,
+    },
+]

@@ -79,7 +79,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
             Some(TOKEN_KW_REC) => self.parse_record_type(),
             Some(TOKEN_KW_ENUM) => self.parse_enum_type(),
-            Some(TOKEN_KW_UNION) => todo!("parse union type"),
+            Some(TOKEN_KW_UNION) => self.parse_union_type(),
             Some(TOKEN_KW_RESP) => todo!("parse response type"),
 
             Some(TOKEN_CURLY_LEFT) => {
@@ -108,7 +108,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                     }
                     DefaultCompositeType::Record => self.parse_record_type(),
                     DefaultCompositeType::Enum => self.parse_enum_type(),
-                    DefaultCompositeType::Union => todo!("parse union"),
+                    DefaultCompositeType::Union => self.parse_union_type(),
                     DefaultCompositeType::Response => todo!("parse response"),
                 }
             }
@@ -168,13 +168,85 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
     fn parse_record_type(&mut self) {
         self.builder.start_node(NODE_TYPE_RECORD.into());
 
-        if self.peek() == Some(TOKEN_KW_REC) {
-            self.advance();
-        }
+        self.eat(TOKEN_KW_REC);
 
         self.skip_whitespace();
         self.expect(TOKEN_CURLY_LEFT);
 
+        self.parse_type_fields();
+
+        self.builder.finish_node();
+    }
+
+    fn parse_enum_type(&mut self) {
+        self.builder.start_node(NODE_TYPE_ENUM.into());
+
+        self.eat(TOKEN_KW_ENUM);
+
+        self.skip_whitespace();
+        self.expect(TOKEN_PAREN_LEFT);
+        self.skip_whitespace();
+        self.parse_type(DefaultCompositeType::None, |token| {
+            token == TOKEN_PAREN_RIGHT || token == TOKEN_CURLY_LEFT
+        });
+        self.skip_whitespace();
+        self.expect(TOKEN_PAREN_RIGHT);
+        self.skip_whitespace();
+        self.expect(TOKEN_CURLY_LEFT);
+
+        loop {
+            self.skip_whitespace_eol();
+
+            match self.peek() {
+                Some(TOKEN_CURLY_RIGHT) => {
+                    self.advance();
+                    break;
+                }
+
+                Some(_) => {
+                    self.parse_value(|token| token == TOKEN_COMMA || token == TOKEN_CURLY_RIGHT);
+                    self.skip_whitespace();
+                    self.expect(TOKEN_EOL);
+                }
+
+                None => {
+                    self.reports.push(
+                        Report::error(
+                            "expected enum member (value), found end of file".to_string(),
+                        )
+                        .with_label(Label::new(
+                            "expected enum member".to_string(),
+                            Span::new(self.pos, self.pos + 1),
+                        )),
+                    );
+                    break;
+                }
+            }
+        }
+
+        self.builder.finish_node();
+    }
+
+    fn parse_union_type(&mut self) {
+        self.builder.start_node(NODE_TYPE_UNION.into());
+
+        self.eat(TOKEN_KW_UNION);
+
+        self.skip_whitespace();
+        self.expect(TOKEN_PAREN_LEFT);
+        self.skip_whitespace();
+        self.parse_value(|token| token == TOKEN_PAREN_RIGHT || token == TOKEN_CURLY_LEFT);
+        self.skip_whitespace();
+        self.expect(TOKEN_PAREN_RIGHT);
+        self.skip_whitespace();
+        self.expect(TOKEN_CURLY_LEFT);
+
+        self.parse_type_fields();
+
+        self.builder.finish_node();
+    }
+
+    fn parse_type_fields(&mut self) {
         loop {
             let prologue = self.parse_prologue();
 
@@ -182,13 +254,13 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 Some(TOKEN_IDENTIFIER) | Some(TOKEN_STRING) => {
                     if let Some(prologue) = prologue {
                         self.builder
-                            .start_node_at(prologue.start, NODE_RECORD_FIELD.into());
+                            .start_node_at(prologue.start, NODE_TYPE_FIELD.into());
 
                         self.builder
                             .start_node_at(prologue.start, NODE_PROLOGUE.into());
                         self.builder.finish_node();
                     } else {
-                        self.builder.start_node(NODE_RECORD_FIELD.into());
+                        self.builder.start_node(NODE_TYPE_FIELD.into());
                     }
 
                     self.builder.start_node(NODE_NAME.into());
@@ -238,59 +310,6 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 }
             }
         }
-
-        self.builder.finish_node();
-    }
-
-    fn parse_enum_type(&mut self) {
-        self.builder.start_node(NODE_TYPE_ENUM.into());
-
-        if self.peek() == Some(TOKEN_KW_ENUM) {
-            self.advance();
-        }
-
-        self.skip_whitespace();
-        self.expect(TOKEN_PAREN_LEFT);
-        self.skip_whitespace();
-        self.parse_type(DefaultCompositeType::None, |token| {
-            token == TOKEN_PAREN_RIGHT || token == TOKEN_CURLY_LEFT
-        });
-        self.skip_whitespace();
-        self.expect(TOKEN_PAREN_RIGHT);
-        self.skip_whitespace();
-        self.expect(TOKEN_CURLY_LEFT);
-
-        loop {
-            self.skip_whitespace_eol();
-
-            match self.peek() {
-                Some(TOKEN_CURLY_RIGHT) => {
-                    self.advance();
-                    break;
-                }
-
-                Some(_) => {
-                    self.parse_value(|token| token == TOKEN_COMMA || token == TOKEN_CURLY_RIGHT);
-                    self.skip_whitespace();
-                    self.expect(TOKEN_EOL);
-                }
-
-                None => {
-                    self.reports.push(
-                        Report::error(
-                            "expected enum member (value), found end of file".to_string(),
-                        )
-                        .with_label(Label::new(
-                            "expected enum member".to_string(),
-                            Span::new(self.pos, self.pos + 1),
-                        )),
-                    );
-                    break;
-                }
-            }
-        }
-
-        self.builder.finish_node();
     }
 }
 
@@ -418,6 +437,27 @@ mod test {
             type Foo: {
                 bar: string
             }
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn parse_union_type() {
+        let text = indoc! {r#"
+            type Foo: union("type") {
+                bar: Bar
+                "baz str": Baz
+            }
+
+            // Very invalid union
+            type Bar: union "type" {bar: Bar}
+            // Should parse correctly!
         "#};
 
         let mut diagnostics = vec![];

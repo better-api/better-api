@@ -20,7 +20,7 @@ NODE_ROOT@0..268
         TOKEN_COMMENT@20..30 "// comment"
         TOKEN_EOL@30..31 "\n"
         TOKEN_SPACE@31..35 "    "
-        NODE_RECORD_FIELD@35..65
+        NODE_TYPE_FIELD@35..65
           NODE_PROLOGUE@35..55
             TOKEN_DOC_COMMENT@35..50 "/// doc comment"
             TOKEN_EOL@50..51 "\n"
@@ -34,7 +34,7 @@ NODE_ROOT@0..268
           TOKEN_EOL@64..65 "\n"
         TOKEN_EOL@65..66 "\n"
         TOKEN_SPACE@66..70 "    "
-        NODE_RECORD_FIELD@70..130
+        NODE_TYPE_FIELD@70..130
           NODE_PROLOGUE@70..118
             TOKEN_DOC_COMMENT@70..90 "/// More doc comment"
             TOKEN_EOL@90..91 "\n"
@@ -59,7 +59,7 @@ NODE_ROOT@0..268
         TOKEN_COMMENT@135..152 "// Just a comment"
         TOKEN_EOL@152..153 "\n"
         TOKEN_SPACE@153..157 "    "
-        NODE_RECORD_FIELD@157..166
+        NODE_TYPE_FIELD@157..166
           NODE_NAME@157..160
             TOKEN_IDENTIFIER@157..160 "hey"
           TOKEN_COLON@160..161 ":"
@@ -69,7 +69,7 @@ NODE_ROOT@0..268
           TOKEN_EOL@165..166 "\n"
         TOKEN_EOL@166..167 "\n"
         TOKEN_SPACE@167..171 "    "
-        NODE_RECORD_FIELD@171..232
+        NODE_TYPE_FIELD@171..232
           NODE_NAME@171..174
             TOKEN_IDENTIFIER@171..174 "hoy"
           TOKEN_COLON@174..175 ":"
@@ -81,7 +81,7 @@ NODE_ROOT@0..268
               TOKEN_CURLY_LEFT@180..181 "{"
               TOKEN_EOL@181..182 "\n"
               TOKEN_SPACE@182..190 "        "
-              NODE_RECORD_FIELD@190..226
+              NODE_TYPE_FIELD@190..226
                 NODE_PROLOGUE@190..213
                   NODE_DEFAULT@190..205
                     TOKEN_KW_DEFAULT@190..198 "@default"
