@@ -1,8 +1,8 @@
 ---
-source: syntax/parser.rs
+source: syntax/parser/types.rs
 expression: tree
 ---
-NODE_ROOT@0..234
+NODE_ROOT@0..268
   NODE_TYPE_DEF@0..234
     TOKEN_KW_TYPE@0..4 "type"
     TOKEN_SPACE@4..5 " "
@@ -104,3 +104,18 @@ NODE_ROOT@0..234
           TOKEN_EOL@231..232 "\n"
         TOKEN_CURLY_RIGHT@232..233 "}"
     TOKEN_EOL@233..234 "\n"
+  TOKEN_EOL@234..235 "\n"
+  TOKEN_COMMENT@235..252 "// Invalid record"
+  TOKEN_EOL@252..253 "\n"
+  NODE_TYPE_DEF@253..268
+    TOKEN_KW_TYPE@253..257 "type"
+    TOKEN_SPACE@257..258 " "
+    NODE_NAME@258..261
+      TOKEN_IDENTIFIER@258..261 "Bar"
+    TOKEN_COLON@261..262 ":"
+    TOKEN_SPACE@262..263 " "
+    NODE_TYPE@263..268
+      NODE_TYPE_RECORD@263..268
+        TOKEN_KW_REC@263..266 "rec"
+        TOKEN_CURLY_LEFT@266..267 "{"
+        TOKEN_EOL@267..268 "\n"

@@ -2,7 +2,7 @@ use better_api_diagnostic::{Label, Report, Span};
 
 use super::Parser;
 use super::prologue::Prologue;
-use crate::Kind::*;
+use crate::Kind::{self, *};
 use crate::Token;
 
 #[derive(Clone, Copy, Default)]
@@ -43,7 +43,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
         self.assignment();
 
-        self.parse_type(DefaultCompositeType::None);
+        self.parse_type(DefaultCompositeType::None, |_| false);
 
         self.skip_whitespace();
         self.expect(TOKEN_EOL);
@@ -51,9 +51,14 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.builder.finish_node();
     }
 
-    pub fn parse_type(&mut self, default_composite_type: DefaultCompositeType) {
+    pub fn parse_type<F: Fn(Kind) -> bool>(
+        &mut self,
+        default_composite_type: DefaultCompositeType,
+        is_recovery: F,
+    ) {
         self.builder.start_node(NODE_TYPE.into());
 
+        // Checkpoint for wrapping the type into OPTION
         let checkpoint = self.builder.checkpoint();
 
         match self.peek() {
@@ -70,22 +75,10 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
             | Some(TOKEN_KW_STRING)
             | Some(TOKEN_KW_FILE) => self.advance(),
 
-            Some(TOKEN_BRACKET_LEFT) => {
-                self.builder.start_node(NODE_TYPE_ARRAY.into());
-
-                self.advance();
-                self.skip_whitespace();
-
-                self.parse_type(DefaultCompositeType::None);
-
-                self.skip_whitespace();
-                self.expect(TOKEN_BRACKET_RIGHT);
-
-                self.builder.finish_node();
-            }
+            Some(TOKEN_BRACKET_LEFT) => self.parse_array_type(),
 
             Some(TOKEN_KW_REC) => self.parse_record_type(),
-            Some(TOKEN_KW_ENUM) => todo!("parse enum type"),
+            Some(TOKEN_KW_ENUM) => self.parse_enum_type(),
             Some(TOKEN_KW_UNION) => todo!("parse union type"),
             Some(TOKEN_KW_RESP) => todo!("parse response type"),
 
@@ -97,8 +90,23 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 DefaultCompositeType::Response => todo!("parse response"),
             },
 
-            Some(_) => todo!("handle unexpected token error"),
-            None => todo!("handle unepxected eof error"),
+            Some(kind) => {
+                let span = self.parse_error(&is_recovery);
+                self.reports.push(
+                    Report::error(format!("expected type, found {kind}"))
+                        .with_label(Label::new("expected value".to_string(), span)),
+                );
+            }
+            None => {
+                self.reports.push(
+                    Report::error("expected type, found end of file".to_string()).with_label(
+                        Label::new(
+                            "expected type".to_string(),
+                            Span::new(self.pos, self.pos + 1),
+                        ),
+                    ),
+                );
+            }
         }
 
         self.skip_whitespace();
@@ -112,6 +120,24 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
             self.builder.finish_node();
         }
+
+        self.builder.finish_node();
+    }
+
+    fn parse_array_type(&mut self) {
+        debug_assert_eq!(self.peek(), Some(TOKEN_BRACKET_LEFT));
+
+        self.builder.start_node(NODE_TYPE_ARRAY.into());
+
+        self.advance();
+        self.skip_whitespace();
+
+        self.parse_type(DefaultCompositeType::None, |token| {
+            token == TOKEN_BRACKET_RIGHT
+        });
+
+        self.skip_whitespace();
+        self.expect(TOKEN_BRACKET_RIGHT);
 
         self.builder.finish_node();
     }
@@ -148,7 +174,9 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
                     self.assignment();
 
-                    self.parse_type(DefaultCompositeType::None);
+                    self.parse_type(DefaultCompositeType::None, |token| {
+                        token == TOKEN_CURLY_RIGHT
+                    });
                     self.skip_whitespace();
                     self.expect(TOKEN_EOL);
 
@@ -167,30 +195,75 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 }
 
                 Some(kind) => {
-                    let start = self.pos;
-
-                    self.builder.start_node(NODE_ERROR.into());
-                    self.advance();
-                    self.builder.finish_node();
+                    let span = self.parse_error(|_| false);
 
                     self.reports.push(
-                        Report::error(format!("expected field name, found {kind}")).with_label(
-                            Label::new(
-                                "expected field name".to_string(),
-                                Span::new(start, self.pos),
-                            ),
-                        ),
+                        Report::error(format!("expected field name, found {kind}"))
+                            .with_label(Label::new("expected field name".to_string(), span)),
                     );
                 }
 
-                None => self.reports.push(
-                    Report::error("expected field name, found end of file".to_string()).with_label(
-                        Label::new(
-                            "expected field name".to_string(),
+                None => {
+                    self.reports.push(
+                        Report::error("expected field name, found end of file".to_string())
+                            .with_label(Label::new(
+                                "expected field name".to_string(),
+                                Span::new(self.pos, self.pos + 1),
+                            )),
+                    );
+                    break;
+                }
+            }
+        }
+
+        self.builder.finish_node();
+    }
+
+    fn parse_enum_type(&mut self) {
+        self.builder.start_node(NODE_TYPE_ENUM.into());
+
+        if self.peek() == Some(TOKEN_KW_ENUM) {
+            self.advance();
+        }
+
+        self.skip_whitespace();
+        self.expect(TOKEN_PAREN_LEFT);
+        self.skip_whitespace();
+        self.parse_type(DefaultCompositeType::None, |token| {
+            token == TOKEN_PAREN_RIGHT || token == TOKEN_CURLY_LEFT
+        });
+        self.skip_whitespace();
+        self.expect(TOKEN_PAREN_RIGHT);
+        self.skip_whitespace();
+        self.expect(TOKEN_CURLY_LEFT);
+
+        loop {
+            self.skip_whitespace_eol();
+
+            match self.peek() {
+                Some(TOKEN_CURLY_RIGHT) => {
+                    self.advance();
+                    break;
+                }
+
+                Some(_) => {
+                    self.parse_value(|token| token == TOKEN_COMMA || token == TOKEN_CURLY_RIGHT);
+                    self.skip_whitespace();
+                    self.expect(TOKEN_EOL);
+                }
+
+                None => {
+                    self.reports.push(
+                        Report::error(
+                            "expected enum member (value), found end of file".to_string(),
+                        )
+                        .with_label(Label::new(
+                            "expected enum member".to_string(),
                             Span::new(self.pos, self.pos + 1),
-                        ),
-                    ),
-                ),
+                        )),
+                    );
+                    break;
+                }
             }
         }
 
@@ -282,6 +355,9 @@ mod test {
                     nested: bool
                 }
             }
+
+            // Invalid record
+            type Bar: rec{
         "#};
 
         let mut diagnostics = vec![];
@@ -289,6 +365,27 @@ mod test {
 
         let (tree, diagnostics) = parse(tokens);
         insta::assert_debug_snapshot!(tree);
-        assert_eq!(diagnostics, vec![]);
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn parse_enum_type() {
+        let text = indoc! {r#"
+            type Foo: enum(string) {
+                "foo"
+                "bar"
+            }
+
+            // Very invalid enum
+            type Bar: enum string {"foo" "bar"}
+            // Should parse correctly!
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        insta::assert_debug_snapshot!(diagnostics);
     }
 }

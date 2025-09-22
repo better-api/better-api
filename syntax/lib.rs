@@ -139,6 +139,8 @@ pub enum Kind {
     NODE_TYPE_RECORD,
     NODE_RECORD_FIELD,
 
+    NODE_TYPE_ENUM,
+
     NODE_ERROR,
 
     NODE_ROOT, // Root node of the file that's parsed

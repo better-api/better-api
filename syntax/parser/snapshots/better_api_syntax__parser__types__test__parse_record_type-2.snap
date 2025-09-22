@@ -1,0 +1,34 @@
+---
+source: syntax/parser/types.rs
+expression: diagnostics
+---
+[
+    Report {
+        severity: Error,
+        title: "expected field name, found end of file",
+        label: Some(
+            Label {
+                message: "expected field name",
+                span: Span {
+                    start: 268,
+                    end: 269,
+                },
+            },
+        ),
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected new line, found end of file",
+        label: Some(
+            Label {
+                message: "unexpected token",
+                span: Span {
+                    start: 268,
+                    end: 269,
+                },
+            },
+        ),
+        note: None,
+    },
+]

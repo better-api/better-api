@@ -104,14 +104,14 @@ Enums are a way to limit the options. They can be integers or strings.
 
 ```text
 type Foo: enum(string) {
-  foo,
-  bar,
-  "non-ident like value",
+  foo
+  bar
+  "non-ident like value"
 }
 
 type Bar: enum(i32) {
-  -1,
-  42,
+  -1
+  42
 }
 ```
 
