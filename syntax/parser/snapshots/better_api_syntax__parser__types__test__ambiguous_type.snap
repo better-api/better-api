@@ -1,0 +1,24 @@
+---
+source: syntax/parser/types.rs
+expression: tree
+---
+NODE_ROOT@0..30
+  NODE_TYPE_DEF@0..30
+    TOKEN_KW_TYPE@0..4 "type"
+    TOKEN_SPACE@4..5 " "
+    NODE_NAME@5..8
+      TOKEN_IDENTIFIER@5..8 "Foo"
+    TOKEN_COLON@8..9 ":"
+    TOKEN_SPACE@9..10 " "
+    NODE_TYPE@10..29
+      NODE_ERROR@10..29
+        TOKEN_CURLY_LEFT@10..11 "{"
+        TOKEN_EOL@11..12 "\n"
+        TOKEN_SPACE@12..16 "    "
+        TOKEN_IDENTIFIER@16..19 "bar"
+        TOKEN_COLON@19..20 ":"
+        TOKEN_SPACE@20..21 " "
+        TOKEN_KW_STRING@21..27 "string"
+        TOKEN_EOL@27..28 "\n"
+        TOKEN_CURLY_RIGHT@28..29 "}"
+    TOKEN_EOL@29..30 "\n"

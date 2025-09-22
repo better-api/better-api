@@ -82,13 +82,36 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
             Some(TOKEN_KW_UNION) => todo!("parse union type"),
             Some(TOKEN_KW_RESP) => todo!("parse response type"),
 
-            Some(TOKEN_CURLY_LEFT) => match default_composite_type {
-                DefaultCompositeType::None => todo!("handle ambigous error"),
-                DefaultCompositeType::Record => self.parse_record_type(),
-                DefaultCompositeType::Enum => todo!("parse enum"),
-                DefaultCompositeType::Union => todo!("parse union"),
-                DefaultCompositeType::Response => todo!("parse response"),
-            },
+            Some(TOKEN_CURLY_LEFT) => {
+                match default_composite_type {
+                    DefaultCompositeType::None => {
+                        // We don't use self.parse_error here, because we don't want to stop at EOL.
+                        // We want to keep going until CURLY_RIGHT.
+                        let start = self.pos;
+
+                        self.builder.start_node(NODE_ERROR.into());
+                        self.advance_while(|token| token != TOKEN_CURLY_RIGHT);
+                        self.eat(TOKEN_CURLY_RIGHT);
+                        self.builder.finish_node();
+
+                        self.reports.push(
+                            Report::error("ambiguous type".to_string())
+                                .with_label(Label::new(
+                                    "ambiguous type".to_string(),
+                                    Span::new(start, self.pos),
+                                ))
+                                .with_note(
+                                    "help: use `rec`, `enum`, `union` or `resp` keyword to specify the type"
+                                        .to_string(),
+                                ),
+                        );
+                    }
+                    DefaultCompositeType::Record => self.parse_record_type(),
+                    DefaultCompositeType::Enum => self.parse_enum_type(),
+                    DefaultCompositeType::Union => todo!("parse union"),
+                    DefaultCompositeType::Response => todo!("parse response"),
+                }
+            }
 
             Some(kind) => {
                 let span = self.parse_error(&is_recovery);
@@ -379,6 +402,22 @@ mod test {
             // Very invalid enum
             type Bar: enum string {"foo" "bar"}
             // Should parse correctly!
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn ambiguous_type() {
+        let text = indoc! {r#"
+            type Foo: {
+                bar: string
+            }
         "#};
 
         let mut diagnostics = vec![];

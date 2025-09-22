@@ -1,0 +1,22 @@
+---
+source: syntax/parser/types.rs
+expression: diagnostics
+---
+[
+    Report {
+        severity: Error,
+        title: "ambiguous type",
+        label: Some(
+            Label {
+                message: "ambiguous type",
+                span: Span {
+                    start: 10,
+                    end: 29,
+                },
+            },
+        ),
+        note: Some(
+            "help: use `rec`, `enum`, `union` or `resp` keyword to specify the type",
+        ),
+    },
+]
