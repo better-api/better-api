@@ -1,4 +1,4 @@
-use better_api_diagnostic::Report;
+use better_api_diagnostic::{Label, Report};
 
 use crate::Kind::{self, *};
 use crate::{Token, node};
@@ -75,7 +75,15 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                     Some("server") => self.parse_root_node_field(NODE_SERVER, prologue, true),
                     Some("example") => todo!("Parse example"),
                     Some("path") => todo!("Parse path"),
-                    Some(_) => todo!("parse error node"),
+
+                    Some(field) => {
+                        let error_msg = format!("invalid property `{field}`");
+                        let span = self.parse_error(|_| false);
+                        self.reports.push(
+                            Report::error(error_msg)
+                                .with_label(Label::new("invalid property".to_string(), span)),
+                        );
+                    }
 
                     // Unreachable because `self.peek()` is token identifier.
                     None => unreachable!(),
@@ -90,7 +98,13 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
             | Some(TOKEN_KW_DELETE)
             | Some(TOKEN_KW_PATCH) => todo!("parse endpoint"),
 
-            Some(_) => todo!("parse error node"),
+            Some(token) => {
+                let span = self.parse_error(|_| false);
+                self.reports.push(
+                    Report::error(format!("unexpected token {token}"))
+                        .with_label(Label::new("unexpected token".to_string(), span)),
+                );
+            }
 
             // We reached end of the file
             None => (),
@@ -128,3 +142,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.builder.finish_node();
     }
 }
+
+// TODO: Test some errors
+// - a field that is not valid
+// - a token that is not valid
