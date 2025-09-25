@@ -10,9 +10,6 @@ pub enum DefaultCompositeType {
     #[default]
     None,
     Record,
-    Enum,
-    Union,
-    Response,
 }
 
 impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
@@ -80,7 +77,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
             Some(TOKEN_KW_REC) => self.parse_record_type(),
             Some(TOKEN_KW_ENUM) => self.parse_enum_type(),
             Some(TOKEN_KW_UNION) => self.parse_union_type(),
-            Some(TOKEN_KW_RESP) => todo!("parse response type"),
+            Some(TOKEN_KW_RESP) => self.parse_response_type(),
 
             Some(TOKEN_CURLY_LEFT) => {
                 match default_composite_type {
@@ -107,9 +104,6 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                         );
                     }
                     DefaultCompositeType::Record => self.parse_record_type(),
-                    DefaultCompositeType::Enum => self.parse_enum_type(),
-                    DefaultCompositeType::Union => self.parse_union_type(),
-                    DefaultCompositeType::Response => todo!("parse response"),
                 }
             }
 
@@ -242,6 +236,84 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.expect(TOKEN_CURLY_LEFT);
 
         self.parse_type_fields();
+
+        self.builder.finish_node();
+    }
+
+    fn parse_response_type(&mut self) {
+        self.builder.start_node(NODE_TYPE_RESPONSE.into());
+
+        self.eat(TOKEN_KW_RESP);
+
+        self.skip_whitespace();
+        self.expect(TOKEN_CURLY_LEFT);
+
+        loop {
+            self.skip_whitespace_eol();
+
+            match self.peek() {
+                Some(TOKEN_CURLY_RIGHT) => {
+                    self.advance();
+                    break;
+                }
+
+                Some(TOKEN_IDENTIFIER) => match self.peek_value() {
+                    Some("contentType") => self.parse_response_field(NODE_TYPE_RESP_CONTENT_TYPE),
+                    Some("headers") => self.parse_response_field(NODE_TYPE_RESP_HEADERS),
+                    Some("body") => self.parse_response_field(NODE_TYPE_RESP_BODY),
+                    Some(field) => {
+                        let report_msg = format!("invalid response field `{field}`");
+
+                        let span = self.parse_error(|token| token == TOKEN_CURLY_RIGHT);
+                        self.reports.push(
+                            Report::error(report_msg)
+                                .with_label(Label::new("invalid response field".to_string(), span)).with_note("help: valid response fields are `body`, `contentType` and `headers`".to_string()),
+                        )
+                    }
+                    None => unreachable!(),
+                },
+
+                Some(token) => {
+                    let span = self.parse_error(|token| token == TOKEN_CURLY_RIGHT);
+                    self.reports.push(
+                        Report::error(format!("expected response field, got {token}"))
+                            .with_label(Label::new("expected response field".to_string(), span)),
+                    );
+                }
+
+                None => {
+                    self.reports.push(
+                        Report::error("expected `}`, found end of file".to_string()).with_label(
+                            Label::new(
+                                "expected `}`".to_string(),
+                                Span::new(self.pos, self.pos + 1),
+                            ),
+                        ),
+                    );
+                    break;
+                }
+            }
+        }
+
+        self.builder.finish_node();
+    }
+
+    fn parse_response_field(&mut self, kind: Kind) {
+        let is_recovery = |token| token == TOKEN_CURLY_RIGHT;
+        self.builder.start_node(kind.into());
+
+        self.advance();
+        self.assignment();
+
+        match kind {
+            NODE_TYPE_RESP_CONTENT_TYPE => self.parse_value(is_recovery),
+            NODE_TYPE_RESP_HEADERS => self.parse_type(DefaultCompositeType::Record, is_recovery),
+            NODE_TYPE_RESP_BODY => self.parse_type(DefaultCompositeType::Record, is_recovery),
+            _ => unreachable!(),
+        }
+
+        self.skip_whitespace();
+        self.expect(TOKEN_EOL);
 
         self.builder.finish_node();
     }
@@ -458,6 +530,34 @@ mod test {
             // Very invalid union
             type Bar: union "type" {bar: Bar}
             // Should parse correctly!
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn parse_response() {
+        let text = indoc! {r#"
+            /// This is a valid response
+            type Foo: resp {
+                contentType: "application/json"
+                body: FooBody
+            }
+
+            // A bit invalid response
+            type Bar: resp {
+                body: {
+                    @default(true)
+                    shouldWork: bool
+                }
+
+                invalidField: "hello!"
+            }
         "#};
 
         let mut diagnostics = vec![];

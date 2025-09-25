@@ -1,0 +1,96 @@
+---
+source: syntax/parser/types.rs
+expression: tree
+---
+NODE_ROOT@0..242
+  NODE_TYPE_DEF@0..102
+    NODE_PROLOGUE@0..29
+      TOKEN_DOC_COMMENT@0..28 "/// This is a valid r ..."
+      TOKEN_EOL@28..29 "\n"
+    TOKEN_KW_TYPE@29..33 "type"
+    TOKEN_SPACE@33..34 " "
+    NODE_NAME@34..37
+      TOKEN_IDENTIFIER@34..37 "Foo"
+    TOKEN_COLON@37..38 ":"
+    TOKEN_SPACE@38..39 " "
+    NODE_TYPE@39..101
+      NODE_TYPE_RESPONSE@39..101
+        TOKEN_KW_RESP@39..43 "resp"
+        TOKEN_SPACE@43..44 " "
+        TOKEN_CURLY_LEFT@44..45 "{"
+        TOKEN_EOL@45..46 "\n"
+        TOKEN_SPACE@46..50 "    "
+        NODE_TYPE_RESP_CONTENT_TYPE@50..82
+          TOKEN_IDENTIFIER@50..61 "contentType"
+          TOKEN_COLON@61..62 ":"
+          TOKEN_SPACE@62..63 " "
+          NODE_VALUE@63..81
+            TOKEN_STRING@63..81 "\"application/json\""
+          TOKEN_EOL@81..82 "\n"
+        TOKEN_SPACE@82..86 "    "
+        NODE_TYPE_RESP_BODY@86..100
+          TOKEN_IDENTIFIER@86..90 "body"
+          TOKEN_COLON@90..91 ":"
+          TOKEN_SPACE@91..92 " "
+          NODE_TYPE@92..99
+            TOKEN_IDENTIFIER@92..99 "FooBody"
+          TOKEN_EOL@99..100 "\n"
+        TOKEN_CURLY_RIGHT@100..101 "}"
+    TOKEN_EOL@101..102 "\n"
+  TOKEN_EOL@102..103 "\n"
+  TOKEN_COMMENT@103..128 "// A bit invalid resp ..."
+  TOKEN_EOL@128..129 "\n"
+  NODE_TYPE_DEF@129..242
+    TOKEN_KW_TYPE@129..133 "type"
+    TOKEN_SPACE@133..134 " "
+    NODE_NAME@134..137
+      TOKEN_IDENTIFIER@134..137 "Bar"
+    TOKEN_COLON@137..138 ":"
+    TOKEN_SPACE@138..139 " "
+    NODE_TYPE@139..241
+      NODE_TYPE_RESPONSE@139..241
+        TOKEN_KW_RESP@139..143 "resp"
+        TOKEN_SPACE@143..144 " "
+        TOKEN_CURLY_LEFT@144..145 "{"
+        TOKEN_EOL@145..146 "\n"
+        TOKEN_SPACE@146..150 "    "
+        NODE_TYPE_RESP_BODY@150..212
+          TOKEN_IDENTIFIER@150..154 "body"
+          TOKEN_COLON@154..155 ":"
+          TOKEN_SPACE@155..156 " "
+          NODE_TYPE@156..211
+            NODE_TYPE_RECORD@156..211
+              TOKEN_CURLY_LEFT@156..157 "{"
+              TOKEN_EOL@157..158 "\n"
+              TOKEN_SPACE@158..166 "        "
+              NODE_TYPE_FIELD@166..206
+                NODE_PROLOGUE@166..189
+                  NODE_DEFAULT@166..181
+                    TOKEN_KW_DEFAULT@166..174 "@default"
+                    TOKEN_PAREN_LEFT@174..175 "("
+                    NODE_VALUE@175..179
+                      NODE_BOOL_VALUE@175..179
+                        TOKEN_KW_TRUE@175..179 "true"
+                    TOKEN_PAREN_RIGHT@179..180 ")"
+                    TOKEN_EOL@180..181 "\n"
+                  TOKEN_SPACE@181..189 "        "
+                NODE_NAME@189..199
+                  TOKEN_IDENTIFIER@189..199 "shouldWork"
+                TOKEN_COLON@199..200 ":"
+                TOKEN_SPACE@200..201 " "
+                NODE_TYPE@201..205
+                  TOKEN_KW_BOOL@201..205 "bool"
+                TOKEN_EOL@205..206 "\n"
+              TOKEN_SPACE@206..210 "    "
+              TOKEN_CURLY_RIGHT@210..211 "}"
+          TOKEN_EOL@211..212 "\n"
+        TOKEN_EOL@212..213 "\n"
+        TOKEN_SPACE@213..217 "    "
+        NODE_ERROR@217..239
+          TOKEN_IDENTIFIER@217..229 "invalidField"
+          TOKEN_COLON@229..230 ":"
+          TOKEN_SPACE@230..231 " "
+          TOKEN_STRING@231..239 "\"hello!\""
+        TOKEN_EOL@239..240 "\n"
+        TOKEN_CURLY_RIGHT@240..241 "}"
+    TOKEN_EOL@241..242 "\n"
