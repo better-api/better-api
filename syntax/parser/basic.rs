@@ -5,6 +5,20 @@ use better_api_diagnostic::{Label, Report, Span};
 use super::Parser;
 use crate::Kind::{self, *};
 use crate::Token;
+use crate::parser::prologue::Prologue;
+
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub enum PrologueBehavior {
+    /// Ignore the prologue.
+    Ignore,
+
+    /// Only parse doc comments and raise an error if there
+    /// is `@default` in the prologue
+    NoDefault,
+
+    /// Parse the full prologue
+    Full,
+}
 
 impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
     /// Advances to the next token.
@@ -108,6 +122,52 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.skip_whitespace();
         self.expect(TOKEN_COLON);
         self.skip_whitespace();
+    }
+
+    /// Starts a new node with given prologue and it's behavior.
+    pub fn start_node(
+        &mut self,
+        kind: Kind,
+        prologue: Option<Prologue>,
+        prologue_behavior: PrologueBehavior,
+    ) {
+        match (prologue, prologue_behavior) {
+            (None, _) | (_, PrologueBehavior::Ignore) => self.builder.start_node(kind.into()),
+            (Some(p), _) => {
+                // If only doc comment should be parsed,
+                // check there is no `@default`.
+                if prologue_behavior == PrologueBehavior::NoDefault
+                    && let Some(report) = p.expect_no_default()
+                {
+                    self.reports.push(report);
+                }
+
+                self.builder.start_node_at(p.start, kind.into());
+
+                self.builder.start_node_at(p.start, NODE_PROLOGUE.into());
+                self.builder.finish_node();
+            }
+        }
+    }
+
+    pub fn parse_field<F: Fn(&mut Self)>(
+        &mut self,
+        kind: Kind,
+        prologue: Option<Prologue>,
+        prologue_behavior: PrologueBehavior,
+        inner: F,
+    ) {
+        self.start_node(kind, prologue, prologue_behavior);
+
+        self.advance();
+        self.assignment();
+
+        inner(self);
+
+        self.skip_whitespace();
+        self.expect(TOKEN_EOL);
+
+        self.builder.finish_node();
     }
 }
 

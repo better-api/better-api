@@ -151,6 +151,18 @@ pub enum Kind {
     NODE_TYPE_RESP_HEADERS,
     NODE_TYPE_RESP_BODY,
 
+    NODE_ENDPOINT,
+    NODE_ENDPOINT_METHOD,
+    NODE_ENDPOINT_URL,
+    NODE_ENDPOINT_NAME,
+    NODE_ENDPOINT_PATH,            // Path parameters
+    NODE_ENDPOINT_QUERY,           // Query parameters
+    NODE_ENDPOINT_HEADERS,         // Header parameters
+    NODE_ENDPOINT_ACCEPT,          // Accept header / type of request body
+    NODE_ENDPOINT_REQUEST_BODY,    // Type of request body
+    NODE_ENDPOINT_RESPONSE,        // Response - `on 200: Foo`
+    NODE_ENDPOINT_RESPONSE_STATUS, // Response status - `200`, `default`, ...
+
     NODE_ERROR,
 
     NODE_ROOT, // Root node of the file that's parsed

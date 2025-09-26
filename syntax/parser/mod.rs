@@ -6,6 +6,7 @@ use crate::{Token, node};
 use prologue::Prologue;
 
 mod basic;
+mod endpoint;
 mod prologue;
 mod types;
 mod values;
@@ -96,7 +97,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
             | Some(TOKEN_KW_POST)
             | Some(TOKEN_KW_PUT)
             | Some(TOKEN_KW_DELETE)
-            | Some(TOKEN_KW_PATCH) => todo!("parse endpoint"),
+            | Some(TOKEN_KW_PATCH) => self.parse_endpoint(prologue),
 
             Some(token) => {
                 let span = self.parse_error(|_| false);

@@ -6,6 +6,8 @@ use crate::Token;
 
 pub struct Prologue {
     pub start: rowan::Checkpoint,
+
+    /// Span of the first `@default`
     pub default: Option<Span>,
 }
 

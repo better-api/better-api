@@ -4,6 +4,7 @@ use super::Parser;
 use super::prologue::Prologue;
 use crate::Kind::{self, *};
 use crate::Token;
+use crate::parser::basic::PrologueBehavior;
 
 #[derive(Clone, Copy, Default)]
 pub enum DefaultCompositeType {
@@ -14,20 +15,7 @@ pub enum DefaultCompositeType {
 
 impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
     pub fn parse_type_def(&mut self, prologue: Option<Prologue>) {
-        if let Some(prologue) = prologue {
-            if let Some(report) = prologue.expect_no_default() {
-                self.reports.push(report);
-            }
-
-            self.builder
-                .start_node_at(prologue.start, NODE_TYPE_DEF.into());
-
-            self.builder
-                .start_node_at(prologue.start, NODE_PROLOGUE.into());
-            self.builder.finish_node();
-        } else {
-            self.builder.start_node(NODE_TYPE_DEF.into());
-        }
+        self.start_node(NODE_TYPE_DEF, prologue, PrologueBehavior::NoDefault);
 
         debug_assert_eq!(self.peek_value(), Some("type"));
         self.advance();
@@ -204,20 +192,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 }
 
                 Some(_) => {
-                    if let Some(prologue) = prologue {
-                        if let Some(report) = prologue.expect_no_default() {
-                            self.reports.push(report);
-                        }
-
-                        self.builder
-                            .start_node_at(prologue.start, NODE_TYPE_ENUM_MEMBER.into());
-
-                        self.builder
-                            .start_node_at(prologue.start, NODE_PROLOGUE.into());
-                        self.builder.finish_node();
-                    } else {
-                        self.builder.start_node(NODE_TYPE_ENUM_MEMBER.into());
-                    }
+                    self.start_node(NODE_TYPE_ENUM_MEMBER, prologue, PrologueBehavior::NoDefault);
 
                     self.parse_value(|token| token == TOKEN_CURLY_RIGHT);
                     self.skip_whitespace();
@@ -264,6 +239,8 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
     }
 
     fn parse_response_type(&mut self) {
+        let is_recovery = |token| token == TOKEN_CURLY_RIGHT;
+
         self.builder.start_node(NODE_TYPE_RESPONSE.into());
 
         self.eat(TOKEN_KW_RESP);
@@ -286,31 +263,40 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                     break;
                 }
 
-                Some(TOKEN_IDENTIFIER) => {
-                    if let Some(prologue) = prologue
-                        && let Some(report) = prologue.expect_no_default()
-                    {
-                        self.reports.push(report);
+                Some(TOKEN_IDENTIFIER) => match self.peek_value() {
+                    Some("contentType") => {
+                        self.parse_field(
+                            NODE_TYPE_RESP_CONTENT_TYPE,
+                            prologue,
+                            PrologueBehavior::Ignore,
+                            |p| p.parse_value(is_recovery),
+                        );
                     }
+                    Some("headers") => {
+                        self.parse_field(
+                            NODE_TYPE_RESP_HEADERS,
+                            prologue,
+                            PrologueBehavior::Ignore,
+                            |p| p.parse_type(DefaultCompositeType::Record, is_recovery),
+                        );
+                    }
+                    Some("body") => self.parse_field(
+                        NODE_TYPE_RESP_BODY,
+                        prologue,
+                        PrologueBehavior::Ignore,
+                        |p| p.parse_type(DefaultCompositeType::Record, is_recovery),
+                    ),
+                    Some(field) => {
+                        let report_msg = format!("invalid response field `{field}`");
 
-                    match self.peek_value() {
-                        Some("contentType") => {
-                            self.parse_response_field(NODE_TYPE_RESP_CONTENT_TYPE)
-                        }
-                        Some("headers") => self.parse_response_field(NODE_TYPE_RESP_HEADERS),
-                        Some("body") => self.parse_response_field(NODE_TYPE_RESP_BODY),
-                        Some(field) => {
-                            let report_msg = format!("invalid response field `{field}`");
-
-                            let span = self.parse_error(|token| token == TOKEN_CURLY_RIGHT);
-                            self.reports.push(
+                        let span = self.parse_error(|token| token == TOKEN_CURLY_RIGHT);
+                        self.reports.push(
                             Report::error(report_msg)
                                 .with_label(Label::new("invalid response field".to_string(), span)).with_note("help: valid response fields are `body`, `contentType` and `headers`".to_string()),
                             );
-                        }
-                        None => unreachable!(),
                     }
-                }
+                    None => unreachable!(),
+                },
 
                 Some(token) => {
                     let span = self.parse_error(|token| token == TOKEN_CURLY_RIGHT);
@@ -337,42 +323,13 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.builder.finish_node();
     }
 
-    fn parse_response_field(&mut self, kind: Kind) {
-        let is_recovery = |token| token == TOKEN_CURLY_RIGHT;
-        self.builder.start_node(kind.into());
-
-        self.advance();
-        self.assignment();
-
-        match kind {
-            NODE_TYPE_RESP_CONTENT_TYPE => self.parse_value(is_recovery),
-            NODE_TYPE_RESP_HEADERS => self.parse_type(DefaultCompositeType::Record, is_recovery),
-            NODE_TYPE_RESP_BODY => self.parse_type(DefaultCompositeType::Record, is_recovery),
-            _ => unreachable!(),
-        }
-
-        self.skip_whitespace();
-        self.expect(TOKEN_EOL);
-
-        self.builder.finish_node();
-    }
-
     fn parse_type_fields(&mut self) {
         loop {
             let prologue = self.parse_prologue();
 
             match self.peek() {
                 Some(TOKEN_IDENTIFIER) | Some(TOKEN_STRING) => {
-                    if let Some(prologue) = prologue {
-                        self.builder
-                            .start_node_at(prologue.start, NODE_TYPE_FIELD.into());
-
-                        self.builder
-                            .start_node_at(prologue.start, NODE_PROLOGUE.into());
-                        self.builder.finish_node();
-                    } else {
-                        self.builder.start_node(NODE_TYPE_FIELD.into());
-                    }
+                    self.start_node(NODE_TYPE_FIELD, prologue, PrologueBehavior::Full);
 
                     self.builder.start_node(NODE_NAME.into());
                     self.advance();
