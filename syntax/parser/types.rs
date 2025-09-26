@@ -193,6 +193,12 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
             match self.peek() {
                 Some(TOKEN_CURLY_RIGHT) => {
+                    if let Some(prologue) = prologue
+                        && let Some(report) = prologue.expect_no_default()
+                    {
+                        self.reports.push(report);
+                    }
+
                     self.advance();
                     break;
                 }
@@ -266,29 +272,45 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.expect(TOKEN_CURLY_LEFT);
 
         loop {
-            self.skip_whitespace_eol();
+            let prologue = self.parse_prologue();
 
             match self.peek() {
                 Some(TOKEN_CURLY_RIGHT) => {
+                    if let Some(prologue) = prologue
+                        && let Some(report) = prologue.expect_no_default()
+                    {
+                        self.reports.push(report);
+                    }
+
                     self.advance();
                     break;
                 }
 
-                Some(TOKEN_IDENTIFIER) => match self.peek_value() {
-                    Some("contentType") => self.parse_response_field(NODE_TYPE_RESP_CONTENT_TYPE),
-                    Some("headers") => self.parse_response_field(NODE_TYPE_RESP_HEADERS),
-                    Some("body") => self.parse_response_field(NODE_TYPE_RESP_BODY),
-                    Some(field) => {
-                        let report_msg = format!("invalid response field `{field}`");
+                Some(TOKEN_IDENTIFIER) => {
+                    if let Some(prologue) = prologue
+                        && let Some(report) = prologue.expect_no_default()
+                    {
+                        self.reports.push(report);
+                    }
 
-                        let span = self.parse_error(|token| token == TOKEN_CURLY_RIGHT);
-                        self.reports.push(
+                    match self.peek_value() {
+                        Some("contentType") => {
+                            self.parse_response_field(NODE_TYPE_RESP_CONTENT_TYPE)
+                        }
+                        Some("headers") => self.parse_response_field(NODE_TYPE_RESP_HEADERS),
+                        Some("body") => self.parse_response_field(NODE_TYPE_RESP_BODY),
+                        Some(field) => {
+                            let report_msg = format!("invalid response field `{field}`");
+
+                            let span = self.parse_error(|token| token == TOKEN_CURLY_RIGHT);
+                            self.reports.push(
                             Report::error(report_msg)
                                 .with_label(Label::new("invalid response field".to_string(), span)).with_note("help: valid response fields are `body`, `contentType` and `headers`".to_string()),
-                        )
+                            );
+                        }
+                        None => unreachable!(),
                     }
-                    None => unreachable!(),
-                },
+                }
 
                 Some(token) => {
                     let span = self.parse_error(|token| token == TOKEN_CURLY_RIGHT);
@@ -571,6 +593,7 @@ mod test {
 
             // A bit invalid response
             type Bar: resp {
+                /// This doc comment should be ignored
                 body: {
                     @default(true)
                     shouldWork: bool

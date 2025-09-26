@@ -416,7 +416,8 @@ which are the primary way of adding documentation. Documentation can be added to
 - members of sum types
 - endpoints
 - path, query, header parameters
-- responses and request bodies
+- responses
+- request bodies
 
 Let's look at an example:
 

@@ -10,8 +10,8 @@ expression: diagnostics
             Label {
                 message: "invalid response field",
                 span: Span {
-                    start: 217,
-                    end: 229,
+                    start: 260,
+                    end: 272,
                 },
             },
         ),
