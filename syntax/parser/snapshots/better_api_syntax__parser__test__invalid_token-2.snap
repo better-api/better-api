@@ -1,0 +1,20 @@
+---
+source: syntax/parser/mod.rs
+expression: diagnostics
+---
+[
+    Report {
+        severity: Error,
+        title: "unexpected token an unknown token",
+        label: Some(
+            Label {
+                message: "unexpected token",
+                span: Span {
+                    start: 0,
+                    end: 1,
+                },
+            },
+        ),
+        note: None,
+    },
+]

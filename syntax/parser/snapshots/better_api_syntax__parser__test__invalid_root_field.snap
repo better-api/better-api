@@ -1,0 +1,18 @@
+---
+source: syntax/parser/mod.rs
+expression: tree
+---
+NODE_ROOT@0..35
+  NODE_ERROR@0..20
+    TOKEN_IDENTIFIER@0..12 "invalidField"
+    TOKEN_COLON@12..13 ":"
+    TOKEN_SPACE@13..14 " "
+    TOKEN_IDENTIFIER@14..20 "foobar"
+  TOKEN_EOL@20..21 "\n"
+  NODE_API_NAME@21..35
+    TOKEN_IDENTIFIER@21..25 "name"
+    TOKEN_COLON@25..26 ":"
+    TOKEN_SPACE@26..27 " "
+    NODE_VALUE@27..34
+      TOKEN_STRING@27..34 "\"hello\""
+    TOKEN_EOL@34..35 "\n"

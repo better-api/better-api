@@ -1,0 +1,20 @@
+---
+source: syntax/parser/mod.rs
+expression: diagnostics
+---
+[
+    Report {
+        severity: Error,
+        title: "invalid property `invalidField`",
+        label: Some(
+            Label {
+                message: "invalid property",
+                span: Span {
+                    start: 0,
+                    end: 12,
+                },
+            },
+        ),
+        note: None,
+    },
+]

@@ -143,6 +143,39 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
     }
 }
 
-// TODO: Test some errors
-// - a field that is not valid
-// - a token that is not valid
+#[cfg(test)]
+mod test {
+    use indoc::indoc;
+
+    use crate::{parse, tokenize};
+
+    #[test]
+    fn invalid_root_field() {
+        let text = indoc! {r#"
+            invalidField: foobar
+            name: "hello"
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn invalid_token() {
+        let text = indoc! {r#"
+            _invalid_token: foobar
+            name: "hello"
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+}
