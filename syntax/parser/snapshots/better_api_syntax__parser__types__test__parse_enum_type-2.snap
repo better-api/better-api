@@ -5,13 +5,27 @@ expression: diagnostics
 [
     Report {
         severity: Error,
+        title: "unexpected `@default`",
+        label: Some(
+            Label {
+                message: "unexpected `@default`",
+                span: Span {
+                    start: 78,
+                    end: 107,
+                },
+            },
+        ),
+        note: None,
+    },
+    Report {
+        severity: Error,
         title: "expected `(`, found `string`",
         label: Some(
             Label {
                 message: "unexpected token",
                 span: Span {
-                    start: 84,
-                    end: 90,
+                    start: 156,
+                    end: 162,
                 },
             },
         ),
@@ -24,8 +38,8 @@ expression: diagnostics
             Label {
                 message: "unexpected token",
                 span: Span {
-                    start: 91,
-                    end: 92,
+                    start: 163,
+                    end: 164,
                 },
             },
         ),
@@ -38,8 +52,8 @@ expression: diagnostics
             Label {
                 message: "unexpected token",
                 span: Span {
-                    start: 98,
-                    end: 103,
+                    start: 170,
+                    end: 175,
                 },
             },
         ),
@@ -52,8 +66,8 @@ expression: diagnostics
             Label {
                 message: "unexpected token",
                 span: Span {
-                    start: 103,
-                    end: 104,
+                    start: 175,
+                    end: 176,
                 },
             },
         ),

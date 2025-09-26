@@ -2,16 +2,16 @@
 source: syntax/parser/types.rs
 expression: tree
 ---
-NODE_ROOT@0..132
-  NODE_TYPE_DEF@0..47
+NODE_ROOT@0..204
+  NODE_TYPE_DEF@0..119
     TOKEN_KW_TYPE@0..4 "type"
     TOKEN_SPACE@4..5 " "
     NODE_NAME@5..8
       TOKEN_IDENTIFIER@5..8 "Foo"
     TOKEN_COLON@8..9 ":"
     TOKEN_SPACE@9..10 " "
-    NODE_TYPE@10..46
-      NODE_TYPE_ENUM@10..46
+    NODE_TYPE@10..118
+      NODE_TYPE_ENUM@10..118
         TOKEN_KW_ENUM@10..14 "enum"
         TOKEN_PAREN_LEFT@14..15 "("
         NODE_TYPE@15..21
@@ -21,39 +21,56 @@ NODE_ROOT@0..132
         TOKEN_CURLY_LEFT@23..24 "{"
         TOKEN_EOL@24..25 "\n"
         TOKEN_SPACE@25..29 "    "
-        NODE_VALUE@29..34
-          TOKEN_STRING@29..34 "\"foo\""
-        TOKEN_EOL@34..35 "\n"
-        TOKEN_SPACE@35..39 "    "
-        NODE_VALUE@39..44
-          TOKEN_STRING@39..44 "\"bar\""
-        TOKEN_EOL@44..45 "\n"
-        TOKEN_CURLY_RIGHT@45..46 "}"
-    TOKEN_EOL@46..47 "\n"
-  TOKEN_EOL@47..48 "\n"
-  TOKEN_COMMENT@48..68 "// Very invalid enum"
-  TOKEN_EOL@68..69 "\n"
-  NODE_TYPE_DEF@69..105
-    TOKEN_KW_TYPE@69..73 "type"
-    TOKEN_SPACE@73..74 " "
-    NODE_NAME@74..77
-      TOKEN_IDENTIFIER@74..77 "Bar"
-    TOKEN_COLON@77..78 ":"
-    TOKEN_SPACE@78..79 " "
-    NODE_TYPE@79..104
-      NODE_TYPE_ENUM@79..104
-        TOKEN_KW_ENUM@79..83 "enum"
-        TOKEN_SPACE@83..84 " "
-        NODE_TYPE@84..91
-          TOKEN_KW_STRING@84..90 "string"
-          TOKEN_SPACE@90..91 " "
-        TOKEN_CURLY_LEFT@91..92 "{"
-        NODE_VALUE@92..97
-          TOKEN_STRING@92..97 "\"foo\""
-        TOKEN_SPACE@97..98 " "
-        NODE_VALUE@98..103
-          TOKEN_STRING@98..103 "\"bar\""
-        TOKEN_CURLY_RIGHT@103..104 "}"
-    TOKEN_EOL@104..105 "\n"
-  TOKEN_COMMENT@105..131 "// Should parse corre ..."
-  TOKEN_EOL@131..132 "\n"
+        NODE_TYPE_ENUM_MEMBER@29..35
+          NODE_VALUE@29..34
+            TOKEN_STRING@29..34 "\"foo\""
+          TOKEN_EOL@34..35 "\n"
+        TOKEN_EOL@35..36 "\n"
+        TOKEN_SPACE@36..40 "    "
+        NODE_TYPE_ENUM_MEMBER@40..117
+          NODE_PROLOGUE@40..111
+            TOKEN_DOC_COMMENT@40..73 "/// Documentation for ..."
+            TOKEN_EOL@73..74 "\n"
+            TOKEN_SPACE@74..78 "    "
+            NODE_DEFAULT@78..107
+              TOKEN_KW_DEFAULT@78..86 "@default"
+              TOKEN_PAREN_LEFT@86..87 "("
+              NODE_VALUE@87..105
+                TOKEN_STRING@87..105 "\"this is an error\""
+              TOKEN_PAREN_RIGHT@105..106 ")"
+              TOKEN_EOL@106..107 "\n"
+            TOKEN_SPACE@107..111 "    "
+          NODE_VALUE@111..116
+            TOKEN_STRING@111..116 "\"bar\""
+          TOKEN_EOL@116..117 "\n"
+        TOKEN_CURLY_RIGHT@117..118 "}"
+    TOKEN_EOL@118..119 "\n"
+  TOKEN_EOL@119..120 "\n"
+  TOKEN_COMMENT@120..140 "// Very invalid enum"
+  TOKEN_EOL@140..141 "\n"
+  NODE_TYPE_DEF@141..177
+    TOKEN_KW_TYPE@141..145 "type"
+    TOKEN_SPACE@145..146 " "
+    NODE_NAME@146..149
+      TOKEN_IDENTIFIER@146..149 "Bar"
+    TOKEN_COLON@149..150 ":"
+    TOKEN_SPACE@150..151 " "
+    NODE_TYPE@151..176
+      NODE_TYPE_ENUM@151..176
+        TOKEN_KW_ENUM@151..155 "enum"
+        TOKEN_SPACE@155..156 " "
+        NODE_TYPE@156..163
+          TOKEN_KW_STRING@156..162 "string"
+          TOKEN_SPACE@162..163 " "
+        TOKEN_CURLY_LEFT@163..164 "{"
+        NODE_TYPE_ENUM_MEMBER@164..170
+          NODE_VALUE@164..169
+            TOKEN_STRING@164..169 "\"foo\""
+          TOKEN_SPACE@169..170 " "
+        NODE_TYPE_ENUM_MEMBER@170..175
+          NODE_VALUE@170..175
+            TOKEN_STRING@170..175 "\"bar\""
+        TOKEN_CURLY_RIGHT@175..176 "}"
+    TOKEN_EOL@176..177 "\n"
+  TOKEN_COMMENT@177..203 "// Should parse corre ..."
+  TOKEN_EOL@203..204 "\n"

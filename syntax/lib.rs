@@ -143,6 +143,9 @@ pub enum Kind {
     /// Field used in records and unions
     NODE_TYPE_FIELD,
 
+    /// Member of an enum type. Contains prologue and NODE_VALUE
+    NODE_TYPE_ENUM_MEMBER,
+
     NODE_TYPE_RESPONSE,
     NODE_TYPE_RESP_CONTENT_TYPE,
     NODE_TYPE_RESP_HEADERS,

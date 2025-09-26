@@ -189,7 +189,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.expect(TOKEN_CURLY_LEFT);
 
         loop {
-            self.skip_whitespace_eol();
+            let prologue = self.parse_prologue();
 
             match self.peek() {
                 Some(TOKEN_CURLY_RIGHT) => {
@@ -198,9 +198,26 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 }
 
                 Some(_) => {
-                    self.parse_value(|token| token == TOKEN_COMMA || token == TOKEN_CURLY_RIGHT);
+                    if let Some(prologue) = prologue {
+                        if let Some(report) = prologue.expect_no_default() {
+                            self.reports.push(report);
+                        }
+
+                        self.builder
+                            .start_node_at(prologue.start, NODE_TYPE_ENUM_MEMBER.into());
+
+                        self.builder
+                            .start_node_at(prologue.start, NODE_PROLOGUE.into());
+                        self.builder.finish_node();
+                    } else {
+                        self.builder.start_node(NODE_TYPE_ENUM_MEMBER.into());
+                    }
+
+                    self.parse_value(|token| token == TOKEN_CURLY_RIGHT);
                     self.skip_whitespace();
                     self.expect(TOKEN_EOL);
+
+                    self.builder.finish_node();
                 }
 
                 None => {
@@ -487,6 +504,9 @@ mod test {
         let text = indoc! {r#"
             type Foo: enum(string) {
                 "foo"
+
+                /// Documentation for enum member
+                @default("this is an error")
                 "bar"
             }
 
