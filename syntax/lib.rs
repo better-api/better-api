@@ -154,7 +154,6 @@ pub enum Kind {
     NODE_ENDPOINT,
     NODE_ENDPOINT_METHOD,
     NODE_ENDPOINT_URL,
-    NODE_ENDPOINT_NAME,
     NODE_ENDPOINT_PATH,            // Path parameters
     NODE_ENDPOINT_QUERY,           // Query parameters
     NODE_ENDPOINT_HEADERS,         // Header parameters

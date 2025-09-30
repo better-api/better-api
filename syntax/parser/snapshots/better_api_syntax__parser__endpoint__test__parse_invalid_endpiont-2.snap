@@ -1,0 +1,90 @@
+---
+source: syntax/parser/endpoint.rs
+expression: diagnostics
+---
+[
+    Report {
+        severity: Error,
+        title: "unexpected `@default`",
+        label: Some(
+            Label {
+                message: "unexpected `@default`",
+                span: Span {
+                    start: 21,
+                    end: 30,
+                },
+            },
+        ),
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected endpoint url, found `{`",
+        label: Some(
+            Label {
+                message: "expected endpoint url",
+                span: Span {
+                    start: 34,
+                    end: 35,
+                },
+            },
+        ),
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "invalid endpoint field `foobar`",
+        label: Some(
+            Label {
+                message: "invalid endpoint field",
+                span: Span {
+                    start: 40,
+                    end: 46,
+                },
+            },
+        ),
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected response status, got `:`",
+        label: Some(
+            Label {
+                message: "expected response status",
+                span: Span {
+                    start: 108,
+                    end: 109,
+                },
+            },
+        ),
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected type, found a string",
+        label: Some(
+            Label {
+                message: "expected value",
+                span: Span {
+                    start: 205,
+                    end: 230,
+                },
+            },
+        ),
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected new line, found `}`",
+        label: Some(
+            Label {
+                message: "unexpected token",
+                span: Span {
+                    start: 231,
+                    end: 232,
+                },
+            },
+        ),
+        note: None,
+    },
+]

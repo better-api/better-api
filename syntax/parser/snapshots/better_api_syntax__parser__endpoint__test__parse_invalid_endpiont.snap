@@ -1,0 +1,62 @@
+---
+source: syntax/parser/endpoint.rs
+expression: tree
+---
+NODE_ROOT@0..233
+  NODE_ENDPOINT@0..232
+    NODE_PROLOGUE@0..30
+      TOKEN_DOC_COMMENT@0..20 "/// Greet the caller"
+      TOKEN_EOL@20..21 "\n"
+      NODE_DEFAULT@21..30
+        TOKEN_KW_DEFAULT@21..29 "@default"
+        TOKEN_EOL@29..30 "\n"
+    NODE_ENDPOINT_METHOD@30..33
+      TOKEN_KW_GET@30..33 "GET"
+    TOKEN_SPACE@33..34 " "
+    NODE_ENDPOINT_URL@34..34
+      NODE_ERROR@34..34
+    TOKEN_CURLY_LEFT@34..35 "{"
+    TOKEN_EOL@35..36 "\n"
+    TOKEN_SPACE@36..40 "    "
+    NODE_ERROR@40..67
+      TOKEN_IDENTIFIER@40..46 "foobar"
+      TOKEN_COLON@46..47 ":"
+      TOKEN_SPACE@47..48 " "
+      TOKEN_STRING@48..67 "\"Not a valid field\""
+    TOKEN_EOL@67..68 "\n"
+    TOKEN_EOL@68..69 "\n"
+    TOKEN_SPACE@69..73 "    "
+    TOKEN_COMMENT@73..100 "// This is missing a  ..."
+    TOKEN_EOL@100..101 "\n"
+    TOKEN_SPACE@101..105 "    "
+    NODE_ENDPOINT_RESPONSE@105..117
+      TOKEN_IDENTIFIER@105..107 "on"
+      TOKEN_SPACE@107..108 " "
+      NODE_ENDPOINT_RESPONSE_STATUS@108..108
+        NODE_ERROR@108..108
+      TOKEN_COLON@108..109 ":"
+      TOKEN_SPACE@109..110 " "
+      NODE_TYPE@110..116
+        TOKEN_KW_STRING@110..116 "string"
+      TOKEN_EOL@116..117 "\n"
+    TOKEN_EOL@117..118 "\n"
+    TOKEN_SPACE@118..122 "    "
+    TOKEN_COMMENT@122..162 "// This one is a valu ..."
+    TOKEN_EOL@162..163 "\n"
+    TOKEN_SPACE@163..167 "    "
+    TOKEN_COMMENT@167..188 "// and ends abruptly."
+    TOKEN_EOL@188..189 "\n"
+    TOKEN_SPACE@189..193 "    "
+    NODE_ENDPOINT_RESPONSE@193..231
+      TOKEN_IDENTIFIER@193..195 "on"
+      TOKEN_SPACE@195..196 " "
+      NODE_ENDPOINT_RESPONSE_STATUS@196..203
+        TOKEN_IDENTIFIER@196..203 "default"
+      TOKEN_COLON@203..204 ":"
+      TOKEN_SPACE@204..205 " "
+      NODE_TYPE@205..231
+        NODE_ERROR@205..231
+          TOKEN_STRING@205..230 "\"value instead of a t ..."
+          TOKEN_SPACE@230..231 " "
+    TOKEN_CURLY_RIGHT@231..232 "}"
+  TOKEN_EOL@232..233 "\n"
