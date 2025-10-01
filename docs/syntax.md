@@ -12,7 +12,7 @@ It is very much a work in progress and will probably change during implementatio
   - [Aliases](#aliases)
   - [Response](#response)
   - [Examples](#examples)
-- [Path](#path)
+- [Routes](#routes)
 - [Endpoint](#endpoint)
 - [Comments and Documentation](#comments-and-documentation)
 - [Optionals and Defaults](#optionals-and-defaults)
@@ -270,30 +270,10 @@ You can also specify an example as a default example. This is used mostly for di
 example for Foo: "hey!"
 ```
 
-## Path
-
-Path is a segment that contains multiple [endpoints](#endpoint). You can look at it as a path prefix:
-
-```text
-path "/hello" {
-  // ...
-}
-```
-
-Paths can also be nested:
-
-```text
-path "/hello" {
-  path "/world" {
-    // ...
-  }
-}
-```
-
 ## Endpoint
 
 Endpoints are actual endpoints of the API. Usually it's most convenient to nest them inside a
-[`path`](#path). This way you don't need to repeat the prefix.
+[`route`](#routes). This way you don't need to repeat the prefix.
 
 Endpoints start with one or more methods, followed by an optional path. The following are equivalent:
 
@@ -302,7 +282,7 @@ GET "/hello" {
   // ...
 }
 
-path "/hello" {
+route "/hello" {
   GET {
     // ...
   }
@@ -402,6 +382,26 @@ POST "/hello/{id}" {
   // Default 200 response
   on 200: Greet
   on 404: ErrorNotFound
+}
+```
+
+## Routes
+
+Route is a segment that contains multiple [endpoints](#endpoint). You can look at it as a path prefix:
+
+```text
+route "/hello" {
+  // ...
+}
+```
+
+Paths can also be nested:
+
+```text
+route "/hello" {
+  route "/world" {
+    // ...
+  }
 }
 ```
 
@@ -610,7 +610,7 @@ For the generated client code, it works symmetrically.
 
 We already mentioned that you can specify error responses for individual endpoints.
 To make working with errors easier, Better API makes responses scoped
-within endpoints, paths, and the `defaults` block.
+within endpoints, routes, and the `defaults` block.
 
 > [!TIP]
 > It's recommended that you specify a default response in the `defaults` block. This way
@@ -625,9 +625,9 @@ defaults: {
   on default: Error
 }
 
-path "/limited" {
+route "/limited" {
   // We specify a default rate limiting error, since
-  // all endpoints in this path are rate limited.
+  // all endpoints in this route are rate limited.
   on 429: ErrorTooManyRequests
 
   // In this endpoint we don't have to specify fallback or
@@ -791,14 +791,14 @@ defines a 401 response. This means that an endpoint can't redefine a 403 respons
 
 ### Scopes
 
-Authentication and permissions can be declared for the whole path
+Authentication and permissions can be declared for the whole route
 
 ```text
-path "/protected" {
+route "/protected" {
   auth: ApiKey
   permissions: "read"
 
-  /// This endpoint is protected by the path's auth
+  /// This endpoint is protected by the route's auth
   GET "/foo" {
     // ...
   }
@@ -810,10 +810,10 @@ path "/protected" {
 }
 ```
 
-Inner path or endpoint can override the authentication and/or permissions.
+Inner route or endpoint can override the authentication and/or permissions.
 
 ```text
-path "/general_protection" {
+route "/general_protection" {
   auth: ApiKey
   permissions: "read"
 
@@ -822,7 +822,7 @@ path "/general_protection" {
     // ...
   }
 
-  path "/strict" {
+  route "/strict" {
     permissions: "write"
 
     /// Requires ApiKey with permission "write"
@@ -851,8 +851,8 @@ path "/general_protection" {
     // ...
   }
 
-  /// All endpoints inside this path are now unauthenticated.
-  path "/ignore" {
+  /// All endpoints inside this route are now unauthenticated.
+  route "/ignore" {
     auth: null
     permissions: null
     // ...
@@ -861,14 +861,14 @@ path "/general_protection" {
 ```
 
 Auth and permissions are read for an endpoint. If one (or both) of them are not set,
-they are read from the parent path. If that doesn't have them set, the parent is considered again,
+they are read from the parent route. If that doesn't have them set, the parent is considered again,
 and so forth until the top.
 
 > [!NOTE]
 > If you set auth to `null`, permissions must also be set to `null`.
 
 > [!NOTE]
-> Specifying auth and permissions for a path defines 401 and 403 responses for all endpoints in the path.
+> Specifying auth and permissions for a route defines 401 and 403 responses for all endpoints in the route.
 
 ### Default Auth
 
