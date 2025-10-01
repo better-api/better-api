@@ -52,7 +52,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                     self.expect(TOKEN_EOL);
                 }
 
-                Some(TOKEN_KW_DEFAULT) => {
+                Some(TOKEN_DECORATOR_DEFAULT) => {
                     if res.is_none() {
                         res = Some(Prologue {
                             start: self.builder.checkpoint(),
@@ -95,7 +95,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
     /// Parses `@default` node
     fn parse_default(&mut self) {
-        debug_assert_eq!(self.peek(), Some(TOKEN_KW_DEFAULT));
+        debug_assert_eq!(self.peek(), Some(TOKEN_DECORATOR_DEFAULT));
         self.builder.start_node(NODE_DEFAULT.into());
 
         self.advance();

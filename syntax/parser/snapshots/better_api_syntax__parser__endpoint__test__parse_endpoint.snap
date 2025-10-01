@@ -40,7 +40,7 @@ NODE_ROOT@0..278
               TOKEN_EOL@111..112 "\n"
               TOKEN_SPACE@112..120 "        "
               NODE_DEFAULT@120..138
-                TOKEN_KW_DEFAULT@120..128 "@default"
+                TOKEN_DECORATOR_DEFAULT@120..128 "@default"
                 TOKEN_PAREN_LEFT@128..129 "("
                 NODE_VALUE@129..136
                   TOKEN_STRING@129..136 "\"World\""
@@ -65,7 +65,7 @@ NODE_ROOT@0..278
         TOKEN_DOC_COMMENT@171..195 "/// Successfull greeting"
         TOKEN_EOL@195..196 "\n"
         TOKEN_SPACE@196..200 "    "
-      TOKEN_IDENTIFIER@200..202 "on"
+      TOKEN_KW_ON@200..202 "on"
       TOKEN_SPACE@202..203 " "
       NODE_ENDPOINT_RESPONSE_STATUS@203..206
         TOKEN_INTEGER@203..206 "200"
@@ -92,10 +92,10 @@ NODE_ROOT@0..278
     TOKEN_EOL@245..246 "\n"
     TOKEN_SPACE@246..250 "    "
     NODE_ENDPOINT_RESPONSE@250..276
-      TOKEN_IDENTIFIER@250..252 "on"
+      TOKEN_KW_ON@250..252 "on"
       TOKEN_SPACE@252..253 " "
       NODE_ENDPOINT_RESPONSE_STATUS@253..260
-        TOKEN_IDENTIFIER@253..260 "default"
+        TOKEN_KW_DEFAULT@253..260 "default"
       TOKEN_COLON@260..261 ":"
       TOKEN_SPACE@261..262 " "
       NODE_TYPE@262..275

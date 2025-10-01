@@ -68,8 +68,12 @@ pub enum Kind {
     TOKEN_KW_TRUE, // true
     #[display("`false`")]
     TOKEN_KW_FALSE, // false
-    #[display("`@default`")]
-    TOKEN_KW_DEFAULT, // @default
+    #[display("`default`")]
+    TOKEN_KW_DEFAULT, // default
+    #[display("`on`")]
+    TOKEN_KW_ON,
+    #[display("`for`")]
+    TOKEN_KW_FOR,
     #[display("`i32`")]
     TOKEN_KW_I32, // i32
     #[display("`i64`")]
@@ -102,6 +106,11 @@ pub enum Kind {
     TOKEN_KW_UNION, // union
     #[display("`resp`")]
     TOKEN_KW_RESP, // response
+    #[display("`route`")]
+    TOKEN_KW_ROUTE,
+
+    #[display("`@default`")]
+    TOKEN_DECORATOR_DEFAULT, // @default
 
     /// Name of the API
     NODE_API_NAME,

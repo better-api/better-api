@@ -223,6 +223,10 @@ impl<'s, 'd> Tokenizer<'s, 'd> {
             "true" => TOKEN_KW_TRUE,
             "false" => TOKEN_KW_FALSE,
 
+            "default" => TOKEN_KW_DEFAULT,
+            "on" => TOKEN_KW_ON,
+            "for" => TOKEN_KW_FOR,
+
             "i32" => TOKEN_KW_I32,
             "i64" => TOKEN_KW_I64,
             "u32" => TOKEN_KW_U32,
@@ -240,6 +244,7 @@ impl<'s, 'd> Tokenizer<'s, 'd> {
             "enum" => TOKEN_KW_ENUM,
             "union" => TOKEN_KW_UNION,
             "resp" => TOKEN_KW_RESP,
+            "route" => TOKEN_KW_ROUTE,
 
             _ => TOKEN_IDENTIFIER,
         };
@@ -275,7 +280,7 @@ impl<'s, 'd> Iterator for Tokenizer<'s, 'd> {
                 self.read_ident();
                 let value = self.current_value();
                 match value {
-                    "@default" => self.emit(TOKEN_KW_DEFAULT),
+                    "@default" => self.emit(TOKEN_DECORATOR_DEFAULT),
 
                     _ => {
                         self.reports.push(
@@ -362,54 +367,16 @@ mod test {
                 bool
                 string
                 file
+                on
+                default
+                for
+                route
             "#},
             &mut diagnostics,
         )
         .collect();
 
-        assert_eq!(
-            tokens,
-            vec![
-                (TOKEN_KW_GET, "GET"),
-                (TOKEN_EOL, "\n"),
-                (TOKEN_KW_POST, "POST"),
-                (TOKEN_EOL, "\n"),
-                (TOKEN_KW_PUT, "PUT"),
-                (TOKEN_EOL, "\n"),
-                (TOKEN_KW_DELETE, "DELETE"),
-                (TOKEN_EOL, "\n"),
-                (TOKEN_KW_PATCH, "PATCH"),
-                (TOKEN_EOL, "\n"),
-                (TOKEN_KW_TRUE, "true"),
-                (TOKEN_EOL, "\n"),
-                (TOKEN_KW_FALSE, "false"),
-                (TOKEN_EOL, "\n"),
-                (TOKEN_IDENTIFIER, "this_is_Ident213-890asdf"),
-                (TOKEN_EOL, "\n"),
-                (TOKEN_KW_I32, "i32"),
-                (TOKEN_EOL, "\n"),
-                (TOKEN_KW_I64, "i64"),
-                (TOKEN_EOL, "\n"),
-                (TOKEN_KW_F32, "f32"),
-                (TOKEN_EOL, "\n"),
-                (TOKEN_KW_F64, "f64"),
-                (TOKEN_EOL, "\n"),
-                (TOKEN_KW_U32, "u32"),
-                (TOKEN_EOL, "\n"),
-                (TOKEN_KW_U64, "u64"),
-                (TOKEN_EOL, "\n"),
-                (TOKEN_KW_DATE, "date"),
-                (TOKEN_EOL, "\n"),
-                (TOKEN_KW_TIMESTAMP, "timestamp"),
-                (TOKEN_EOL, "\n"),
-                (TOKEN_KW_BOOL, "bool"),
-                (TOKEN_EOL, "\n"),
-                (TOKEN_KW_STRING, "string"),
-                (TOKEN_EOL, "\n"),
-                (TOKEN_KW_FILE, "file"),
-                (TOKEN_EOL, "\n"),
-            ]
-        );
+        insta::assert_debug_snapshot!(tokens);
         assert_eq!(diagnostics, vec![]);
     }
 
@@ -421,7 +388,7 @@ mod test {
         assert_eq!(
             tokens,
             vec![
-                (TOKEN_KW_DEFAULT, "@default"),
+                (TOKEN_DECORATOR_DEFAULT, "@default"),
                 (TOKEN_SPACE, " "),
                 (TOKEN_ERROR, "@error"),
             ]

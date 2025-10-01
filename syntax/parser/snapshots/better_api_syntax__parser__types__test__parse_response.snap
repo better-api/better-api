@@ -69,7 +69,7 @@ NODE_ROOT@0..285
               NODE_TYPE_FIELD@209..249
                 NODE_PROLOGUE@209..232
                   NODE_DEFAULT@209..224
-                    TOKEN_KW_DEFAULT@209..217 "@default"
+                    TOKEN_DECORATOR_DEFAULT@209..217 "@default"
                     TOKEN_PAREN_LEFT@217..218 "("
                     NODE_VALUE@218..222
                       NODE_BOOL_VALUE@218..222

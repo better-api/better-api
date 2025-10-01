@@ -129,8 +129,6 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                         );
                     }
 
-                    Some("on") => self.parse_endpoint_response(prologue),
-
                     Some(field) => {
                         let report_msg = format!("invalid endpoint field `{field}`");
 
@@ -142,6 +140,8 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                     }
                     None => unreachable!(),
                 },
+
+                Some(TOKEN_KW_ON) => self.parse_endpoint_response(prologue),
 
                 Some(kind) => {
                     let span = self.parse_error(|_| false);
@@ -173,7 +173,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
             PrologueBehavior::NoDefault,
         );
 
-        debug_assert!(self.peek_value() == Some("on"));
+        debug_assert!(self.peek() == Some(TOKEN_KW_ON));
         self.advance();
 
         self.skip_whitespace();
@@ -182,25 +182,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.builder
             .start_node(NODE_ENDPOINT_RESPONSE_STATUS.into());
         match self.peek() {
-            Some(TOKEN_IDENTIFIER) => {
-                if self.peek_value() == Some("default") {
-                    self.advance();
-                } else {
-                    let report_message = format!(
-                        "expected response status, got {}",
-                        self.peek_value().expect("Value of an identifier is None")
-                    );
-
-                    let span = self
-                        .parse_error(|token| token == TOKEN_COLON || token == TOKEN_CURLY_RIGHT);
-
-                    self.reports.push(
-                        Report::error(report_message)
-                            .with_label(Label::new("expected response status".to_string(), span)),
-                    );
-                }
-            }
-            Some(TOKEN_INTEGER) => self.advance(),
+            Some(TOKEN_KW_DEFAULT) | Some(TOKEN_INTEGER) => self.advance(),
 
             Some(token) => {
                 let span =

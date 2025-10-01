@@ -40,7 +40,7 @@ NODE_ROOT@0..268
             TOKEN_EOL@90..91 "\n"
             TOKEN_SPACE@91..95 "    "
             NODE_DEFAULT@95..114
-              TOKEN_KW_DEFAULT@95..103 "@default"
+              TOKEN_DECORATOR_DEFAULT@95..103 "@default"
               TOKEN_PAREN_LEFT@103..104 "("
               NODE_VALUE@104..112
                 TOKEN_STRING@104..112 "\"foobar\""
@@ -84,7 +84,7 @@ NODE_ROOT@0..268
               NODE_TYPE_FIELD@190..226
                 NODE_PROLOGUE@190..213
                   NODE_DEFAULT@190..205
-                    TOKEN_KW_DEFAULT@190..198 "@default"
+                    TOKEN_DECORATOR_DEFAULT@190..198 "@default"
                     TOKEN_PAREN_LEFT@198..199 "("
                     NODE_VALUE@199..203
                       NODE_BOOL_VALUE@199..203

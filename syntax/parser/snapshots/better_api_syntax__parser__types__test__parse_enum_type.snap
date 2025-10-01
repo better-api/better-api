@@ -33,7 +33,7 @@ NODE_ROOT@0..204
             TOKEN_EOL@73..74 "\n"
             TOKEN_SPACE@74..78 "    "
             NODE_DEFAULT@78..107
-              TOKEN_KW_DEFAULT@78..86 "@default"
+              TOKEN_DECORATOR_DEFAULT@78..86 "@default"
               TOKEN_PAREN_LEFT@86..87 "("
               NODE_VALUE@87..105
                 TOKEN_STRING@87..105 "\"this is an error\""

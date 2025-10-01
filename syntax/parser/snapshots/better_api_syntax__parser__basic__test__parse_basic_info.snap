@@ -1,5 +1,5 @@
 ---
-source: syntax/parser.rs
+source: syntax/parser/basic.rs
 expression: tree
 ---
 NODE_ROOT@0..205
@@ -24,7 +24,7 @@ NODE_ROOT@0..205
   TOKEN_EOL@152..153 "\n"
   NODE_BETTER_API@153..189
     NODE_DEFAULT@153..170
-      TOKEN_KW_DEFAULT@153..161 "@default"
+      TOKEN_DECORATOR_DEFAULT@153..161 "@default"
       TOKEN_PAREN_LEFT@161..162 "("
       NODE_VALUE@162..168
         TOKEN_STRING@162..168 "\"asdf\""
