@@ -22,36 +22,37 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
         self.skip_whitespace();
 
-        // Parse endpoint url
-        self.builder.start_node(NODE_ENDPOINT_URL.into());
-        if self.peek() == Some(TOKEN_STRING) {
-            self.advance();
-        } else {
-            match self.peek() {
-                Some(kind) => {
-                    let span = self.parse_error(|token| token == TOKEN_CURLY_LEFT);
+        // Parse optional endpoint url
+        match self.peek() {
+            Some(TOKEN_STRING) => {
+                self.builder.start_node(NODE_ENDPOINT_URL.into());
+                self.advance();
+                self.builder.finish_node();
+            }
+            Some(TOKEN_CURLY_LEFT) => (), // Do nothing
 
-                    self.reports.push(
-                        Report::error(format!("expected endpoint url, found {kind}"))
-                            .with_label(Label::new("expected endpoint url".to_string(), span)),
-                    );
-                }
-                None => {
-                    self.reports.push(
-                        Report::error("expected endpoint url, found end of file".to_string())
-                            .with_label(Label::new(
-                                "expected endpoint url".to_string(),
-                                Span::new(self.pos, self.pos + 1),
-                            )),
-                    );
+            Some(kind) => {
+                let span = self.parse_error(|token| token == TOKEN_CURLY_LEFT);
 
-                    self.builder.finish_node(); // Finish endpoint url
-                    self.builder.finish_node(); // Finish endpoint
-                    return;
-                }
+                self.reports.push(
+                    Report::error(format!("expected endpoint url, found {kind}"))
+                        .with_label(Label::new("expected endpoint url".to_string(), span)),
+                );
+            }
+
+            None => {
+                self.reports.push(
+                    Report::error("expected endpoint url, found end of file".to_string())
+                        .with_label(Label::new(
+                            "expected endpoint url".to_string(),
+                            Span::new(self.pos, self.pos + 1),
+                        )),
+                );
+
+                self.builder.finish_node(); // Finish endpoint
+                return;
             }
         }
-        self.builder.finish_node();
 
         self.skip_whitespace();
         self.expect(TOKEN_CURLY_LEFT);

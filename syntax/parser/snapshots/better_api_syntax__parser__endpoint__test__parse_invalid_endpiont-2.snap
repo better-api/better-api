@@ -19,20 +19,6 @@ expression: diagnostics
     },
     Report {
         severity: Error,
-        title: "expected endpoint url, found `{`",
-        label: Some(
-            Label {
-                message: "expected endpoint url",
-                span: Span {
-                    start: 34,
-                    end: 35,
-                },
-            },
-        ),
-        note: None,
-    },
-    Report {
-        severity: Error,
         title: "invalid endpoint field `foobar`",
         label: Some(
             Label {
