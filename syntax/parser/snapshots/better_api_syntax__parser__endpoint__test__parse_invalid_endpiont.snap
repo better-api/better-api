@@ -3,7 +3,7 @@ source: syntax/parser/endpoint.rs
 expression: tree
 ---
 NODE_ROOT@0..233
-  NODE_ENDPOINT@0..232
+  NODE_ENDPOINT@0..233
     NODE_PROLOGUE@0..30
       TOKEN_DOC_COMMENT@0..20 "/// Greet the caller"
       TOKEN_EOL@20..21 "\n"
@@ -57,4 +57,4 @@ NODE_ROOT@0..233
           TOKEN_STRING@205..230 "\"value instead of a t ..."
           TOKEN_SPACE@230..231 " "
     TOKEN_CURLY_RIGHT@231..232 "}"
-  TOKEN_EOL@232..233 "\n"
+    TOKEN_EOL@232..233 "\n"

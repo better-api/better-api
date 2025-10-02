@@ -1,0 +1,64 @@
+---
+source: syntax/parser/endpoint.rs
+expression: diagnostics
+---
+[
+    Report {
+        severity: Error,
+        title: "expected route path, found `{`",
+        label: Some(
+            Label {
+                message: "expected route path",
+                span: Span {
+                    start: 28,
+                    end: 29,
+                },
+            },
+        ),
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected new line, found an identifier",
+        label: Some(
+            Label {
+                message: "unexpected token",
+                span: Span {
+                    start: 30,
+                    end: 33,
+                },
+            },
+        ),
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected endpoint or response, found an identifier",
+        label: Some(
+            Label {
+                message: "expected endpoint or response",
+                span: Span {
+                    start: 30,
+                    end: 33,
+                },
+            },
+        ),
+        note: Some(
+            "help: route can only contain enpdoints and responses",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "expected new line, found `}`",
+        label: Some(
+            Label {
+                message: "unexpected token",
+                span: Span {
+                    start: 97,
+                    end: 98,
+                },
+            },
+        ),
+        note: None,
+    },
+]

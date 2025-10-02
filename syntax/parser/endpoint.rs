@@ -25,7 +25,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         // Parse optional endpoint url
         match self.peek() {
             Some(TOKEN_STRING) => {
-                self.builder.start_node(NODE_ENDPOINT_URL.into());
+                self.builder.start_node(NODE_PATH.into());
                 self.advance();
                 self.builder.finish_node();
             }
@@ -35,16 +35,15 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 let span = self.parse_error(|token| token == TOKEN_CURLY_LEFT);
 
                 self.reports.push(
-                    Report::error(format!("expected endpoint url, found {kind}"))
-                        .with_label(Label::new("expected endpoint url".to_string(), span)),
+                    Report::error(format!("expected endpoint path, found {kind}"))
+                        .with_label(Label::new("expected endpoint path".to_string(), span)),
                 );
             }
-
             None => {
                 self.reports.push(
-                    Report::error("expected endpoint url, found end of file".to_string())
+                    Report::error("expected endpoint path, found end of file".to_string())
                         .with_label(Label::new(
-                            "expected endpoint url".to_string(),
+                            "expected endpoint path".to_string(),
                             Span::new(self.pos, self.pos + 1),
                         )),
                 );
@@ -60,6 +59,59 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.expect(TOKEN_EOL);
 
         self.parse_endpoint_properties();
+
+        self.skip_whitespace();
+        self.expect(TOKEN_EOL);
+
+        self.builder.finish_node();
+    }
+
+    pub fn parse_route(&mut self, prologue: Option<Prologue>) {
+        self.start_node(NODE_ROUTE, prologue, PrologueBehavior::Ignore);
+
+        debug_assert!(self.peek() == Some(TOKEN_KW_ROUTE));
+        self.advance();
+        self.skip_whitespace();
+
+        match self.peek() {
+            Some(TOKEN_STRING) => {
+                self.builder.start_node(NODE_PATH.into());
+                self.advance();
+                self.builder.finish_node();
+            }
+
+            Some(kind) => {
+                let span = self.parse_error(|token| token == TOKEN_CURLY_LEFT);
+
+                self.reports.push(
+                    Report::error(format!("expected route path, found {kind}"))
+                        .with_label(Label::new("expected route path".to_string(), span)),
+                );
+            }
+            None => {
+                self.reports.push(
+                    Report::error("expected route path, found end of file".to_string()).with_label(
+                        Label::new(
+                            "expected route path".to_string(),
+                            Span::new(self.pos, self.pos + 1),
+                        ),
+                    ),
+                );
+
+                self.builder.finish_node(); // Finish route
+                return;
+            }
+        }
+
+        self.skip_whitespace();
+        self.expect(TOKEN_CURLY_LEFT);
+        self.skip_whitespace();
+        self.expect(TOKEN_EOL);
+
+        self.parse_route_properties();
+
+        self.skip_whitespace();
+        self.expect(TOKEN_EOL);
 
         self.builder.finish_node();
     }
@@ -144,14 +196,13 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 Some(TOKEN_KW_ON) => self.parse_endpoint_response(prologue),
 
                 Some(kind) => {
-                    let span = self.parse_error(|_| false);
+                    let span = self.parse_error(is_recovery);
 
                     self.reports.push(
                         Report::error(format!("expected field name, found {kind}"))
                             .with_label(Label::new("expected field name".to_string(), span)),
                     );
                 }
-
                 None => {
                     self.reports.push(
                         Report::error("expected field name, found end of file".to_string())
@@ -159,6 +210,64 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                                 "expected field name".to_string(),
                                 Span::new(self.pos, self.pos + 1),
                             )),
+                    );
+                    break;
+                }
+            }
+        }
+    }
+
+    fn parse_route_properties(&mut self) {
+        let is_recovery = |token| token == TOKEN_CURLY_RIGHT;
+
+        loop {
+            let prologue = self.parse_prologue();
+
+            match self.peek() {
+                Some(TOKEN_CURLY_RIGHT) => {
+                    if let Some(prologue) = prologue
+                        && let Some(report) = prologue.expect_no_default()
+                    {
+                        self.reports.push(report);
+                    }
+                    self.advance();
+                    break;
+                }
+
+                Some(TOKEN_KW_ON) => self.parse_endpoint_response(prologue),
+
+                Some(TOKEN_KW_GET)
+                | Some(TOKEN_KW_POST)
+                | Some(TOKEN_KW_PUT)
+                | Some(TOKEN_KW_DELETE)
+                | Some(TOKEN_KW_PATCH) => self.parse_endpoint(prologue),
+
+                Some(kind) => {
+                    let span = self.parse_error(is_recovery);
+
+                    self.reports.push(
+                        Report::error(format!("expected endpoint or response, found {kind}"))
+                            .with_label(Label::new(
+                                "expected endpoint or response".to_string(),
+                                span,
+                            ))
+                            .with_note(
+                                "help: route can only contain enpdoints and responses".to_string(),
+                            ),
+                    );
+                }
+                None => {
+                    self.reports.push(
+                        Report::error(
+                            "expected endpoint or resopnse, found end of file".to_string(),
+                        )
+                        .with_label(Label::new(
+                            "expected endpoint or resopnse".to_string(),
+                            Span::new(self.pos, self.pos + 1),
+                        ))
+                        .with_note(
+                            "help: route can only contain enpdoints and responses".to_string(),
+                        ),
                     );
                     break;
                 }
@@ -228,7 +337,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 mod test {
     use indoc::indoc;
 
-    use crate::{parse, tokenize};
+    use crate::{parse, parser::endpoint::test, tokenize};
 
     #[test]
     fn parse_endpoint() {
@@ -274,6 +383,56 @@ mod test {
                 // This one is a value instead of a type
                 // and ends abruptly.
                 on default: "value instead of a type" }
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn parse_route() {
+        let text = indoc! {r#"
+            /// This should be ignored
+            route "/hello" {
+                /// Greet the caller
+                GET {
+                    name: "hello"
+
+                    /// Successfull greeting
+                    on 200: rec {
+                        greeting: string
+                    }
+                }
+
+                /// Revoke the greeting
+                DELETE {
+                    name: "goodbye"
+                }
+            }
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let (tree, diagnostics) = parse(tokens);
+        insta::assert_debug_snapshot!(tree);
+        assert_eq!(diagnostics, vec![]);
+    }
+
+    #[test]
+    fn parse_invalid_route() {
+        let text = indoc! {r#"
+            // Incorrect
+            @default
+            route { foo: "foo isn't valid!"
+
+                DELETE {
+                    name: "goodbye"
+                }}
         "#};
 
         let mut diagnostics = vec![];

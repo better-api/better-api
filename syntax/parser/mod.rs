@@ -75,7 +75,6 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                     Some("version") => self.parse_root_node_field(NODE_VERSION, prologue, false),
                     Some("server") => self.parse_root_node_field(NODE_SERVER, prologue, true),
                     Some("example") => todo!("Parse example"),
-                    Some("path") => todo!("Parse path"),
 
                     Some(field) => {
                         let error_msg = format!("invalid property `{field}`");
@@ -98,6 +97,8 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
             | Some(TOKEN_KW_PUT)
             | Some(TOKEN_KW_DELETE)
             | Some(TOKEN_KW_PATCH) => self.parse_endpoint(prologue),
+
+            Some(TOKEN_KW_ROUTE) => self.parse_route(prologue),
 
             Some(token) => {
                 let span = self.parse_error(|_| false);

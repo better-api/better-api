@@ -3,14 +3,14 @@ source: syntax/parser/endpoint.rs
 expression: tree
 ---
 NODE_ROOT@0..278
-  NODE_ENDPOINT@0..277
+  NODE_ENDPOINT@0..278
     NODE_PROLOGUE@0..21
       TOKEN_DOC_COMMENT@0..20 "/// Greet the caller"
       TOKEN_EOL@20..21 "\n"
     NODE_ENDPOINT_METHOD@21..24
       TOKEN_KW_GET@21..24 "GET"
     TOKEN_SPACE@24..25 " "
-    NODE_ENDPOINT_URL@25..33
+    NODE_PATH@25..33
       TOKEN_STRING@25..33 "\"/hello\""
     TOKEN_SPACE@33..34 " "
     TOKEN_CURLY_LEFT@34..35 "{"
@@ -102,4 +102,4 @@ NODE_ROOT@0..278
         TOKEN_IDENTIFIER@262..275 "ErrorResponse"
       TOKEN_EOL@275..276 "\n"
     TOKEN_CURLY_RIGHT@276..277 "}"
-  TOKEN_EOL@277..278 "\n"
+    TOKEN_EOL@277..278 "\n"

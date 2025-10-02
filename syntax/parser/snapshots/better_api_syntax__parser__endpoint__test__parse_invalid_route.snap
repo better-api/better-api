@@ -1,0 +1,42 @@
+---
+source: syntax/parser/endpoint.rs
+expression: tree
+---
+NODE_ROOT@0..99
+  TOKEN_COMMENT@0..12 "// Incorrect"
+  TOKEN_EOL@12..13 "\n"
+  NODE_DEFAULT@13..22
+    TOKEN_DECORATOR_DEFAULT@13..21 "@default"
+    TOKEN_EOL@21..22 "\n"
+  NODE_ROUTE@22..99
+    TOKEN_KW_ROUTE@22..27 "route"
+    TOKEN_SPACE@27..28 " "
+    NODE_ERROR@28..28
+    TOKEN_CURLY_LEFT@28..29 "{"
+    TOKEN_SPACE@29..30 " "
+    NODE_ERROR@30..53
+      TOKEN_IDENTIFIER@30..33 "foo"
+      TOKEN_COLON@33..34 ":"
+      TOKEN_SPACE@34..35 " "
+      TOKEN_STRING@35..53 "\"foo isn't valid!\""
+    TOKEN_EOL@53..54 "\n"
+    TOKEN_EOL@54..55 "\n"
+    TOKEN_SPACE@55..59 "    "
+    NODE_ENDPOINT@59..97
+      NODE_ENDPOINT_METHOD@59..65
+        TOKEN_KW_DELETE@59..65 "DELETE"
+      TOKEN_SPACE@65..66 " "
+      TOKEN_CURLY_LEFT@66..67 "{"
+      TOKEN_EOL@67..68 "\n"
+      TOKEN_SPACE@68..76 "        "
+      NODE_NAME@76..92
+        TOKEN_IDENTIFIER@76..80 "name"
+        TOKEN_COLON@80..81 ":"
+        TOKEN_SPACE@81..82 " "
+        NODE_VALUE@82..91
+          TOKEN_STRING@82..91 "\"goodbye\""
+        TOKEN_EOL@91..92 "\n"
+      TOKEN_SPACE@92..96 "    "
+      TOKEN_CURLY_RIGHT@96..97 "}"
+    TOKEN_CURLY_RIGHT@97..98 "}"
+    TOKEN_EOL@98..99 "\n"

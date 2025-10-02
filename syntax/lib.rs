@@ -160,9 +160,11 @@ pub enum Kind {
     NODE_TYPE_RESP_HEADERS,
     NODE_TYPE_RESP_BODY,
 
+    /// Node containing a path (string) of an endpoint or route.
+    NODE_PATH,
+
     NODE_ENDPOINT,
     NODE_ENDPOINT_METHOD,
-    NODE_ENDPOINT_URL,
     NODE_ENDPOINT_PATH,            // Path parameters
     NODE_ENDPOINT_QUERY,           // Query parameters
     NODE_ENDPOINT_HEADERS,         // Header parameters
@@ -170,6 +172,8 @@ pub enum Kind {
     NODE_ENDPOINT_REQUEST_BODY,    // Type of request body
     NODE_ENDPOINT_RESPONSE,        // Response - `on 200: Foo`
     NODE_ENDPOINT_RESPONSE_STATUS, // Response status - `200`, `default`, ...
+
+    NODE_ROUTE, // Route group
 
     NODE_ERROR,
 
