@@ -3,7 +3,7 @@ mod tokenizer;
 
 pub mod node;
 
-pub use parser::parse;
+pub use parser::{Parse, parse};
 pub use tokenizer::{Token, tokenize};
 
 /// All possible kinds of tokens and composite nodes.

@@ -197,10 +197,10 @@ mod test {
         let mut diagnostics = vec![];
         let tokens = tokenize(text, &mut diagnostics);
 
-        let (tree, diagnostics) = parse(tokens);
-        insta::assert_debug_snapshot!(tree);
+        let res = parse(tokens);
+        insta::assert_debug_snapshot!(res.node);
         assert_eq!(
-            diagnostics,
+            res.reports,
             vec![
                 Report::error("unexpected `@default`".to_string()).with_label(Label::new(
                     "unexpected `@default`".to_string(),
@@ -223,9 +223,9 @@ mod test {
         let mut diagnostics = vec![];
         let tokens = tokenize(text, &mut diagnostics);
 
-        let (tree, diagnostics) = parse(tokens);
-        insta::assert_debug_snapshot!(tree);
-        assert_eq!(diagnostics, vec![]);
+        let res = parse(tokens);
+        insta::assert_debug_snapshot!(res.node);
+        assert_eq!(res.reports, vec![]);
     }
 
     #[test]
@@ -242,8 +242,8 @@ mod test {
         let mut diagnostics = vec![];
         let tokens = tokenize(text, &mut diagnostics);
 
-        let (tree, diagnostics) = parse(tokens);
-        insta::assert_debug_snapshot!(tree);
-        insta::assert_debug_snapshot!(diagnostics);
+        let res = parse(tokens);
+        insta::assert_debug_snapshot!(res.node);
+        insta::assert_debug_snapshot!(res.reports);
     }
 }

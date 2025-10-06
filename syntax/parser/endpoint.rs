@@ -337,7 +337,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 mod test {
     use indoc::indoc;
 
-    use crate::{parse, parser::endpoint::test, tokenize};
+    use crate::{parse, tokenize};
 
     #[test]
     fn parse_endpoint() {
@@ -364,9 +364,9 @@ mod test {
         let mut diagnostics = vec![];
         let tokens = tokenize(text, &mut diagnostics);
 
-        let (tree, diagnostics) = parse(tokens);
-        insta::assert_debug_snapshot!(tree);
-        assert_eq!(diagnostics, vec![]);
+        let res = parse(tokens);
+        insta::assert_debug_snapshot!(res.node);
+        assert_eq!(res.reports, vec![]);
     }
 
     #[test]
@@ -388,9 +388,9 @@ mod test {
         let mut diagnostics = vec![];
         let tokens = tokenize(text, &mut diagnostics);
 
-        let (tree, diagnostics) = parse(tokens);
-        insta::assert_debug_snapshot!(tree);
-        insta::assert_debug_snapshot!(diagnostics);
+        let res = parse(tokens);
+        insta::assert_debug_snapshot!(res.node);
+        insta::assert_debug_snapshot!(res.reports);
     }
 
     #[test]
@@ -418,9 +418,9 @@ mod test {
         let mut diagnostics = vec![];
         let tokens = tokenize(text, &mut diagnostics);
 
-        let (tree, diagnostics) = parse(tokens);
-        insta::assert_debug_snapshot!(tree);
-        assert_eq!(diagnostics, vec![]);
+        let res = parse(tokens);
+        insta::assert_debug_snapshot!(res.node);
+        assert_eq!(res.reports, vec![]);
     }
 
     #[test]
@@ -438,8 +438,8 @@ mod test {
         let mut diagnostics = vec![];
         let tokens = tokenize(text, &mut diagnostics);
 
-        let (tree, diagnostics) = parse(tokens);
-        insta::assert_debug_snapshot!(tree);
-        insta::assert_debug_snapshot!(diagnostics);
+        let res = parse(tokens);
+        insta::assert_debug_snapshot!(res.node);
+        insta::assert_debug_snapshot!(res.reports);
     }
 }

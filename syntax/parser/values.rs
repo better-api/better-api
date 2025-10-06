@@ -125,8 +125,8 @@ mod test {
         let mut diagnostics = vec![];
         let tokens = tokenize(text, &mut diagnostics);
 
-        let (tree, diagnostics) = parse(tokens);
-        insta::assert_debug_snapshot!(tree);
-        assert_eq!(diagnostics, vec![]);
+        let res = parse(tokens);
+        insta::assert_debug_snapshot!(res.node);
+        assert_eq!(res.reports, vec![]);
     }
 }

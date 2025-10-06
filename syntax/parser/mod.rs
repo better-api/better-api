@@ -11,12 +11,31 @@ mod prologue;
 mod types;
 mod values;
 
-pub fn parse<'a, T: Iterator<Item = Token<'a>>>(tokens: T) -> (node::SyntaxNode, Vec<Report>) {
+/// A parse result contains a node and list of [`Report`]s.
+pub struct Parse {
+    /// Root node
+    pub root: node::Root,
+
+    /// Underlying green node.
+    pub node: node::SyntaxNode,
+
+    /// Issues reported during parsing
+    pub reports: Vec<Report>,
+}
+
+/// Parse a stream of tokens and returns a [`Parse`] result
+pub fn parse<'a, T: Iterator<Item = Token<'a>>>(tokens: T) -> Parse {
     let mut parser = Parser::new(tokens);
     parser.parse();
 
     let node = node::SyntaxNode::new_root(parser.builder.finish());
-    (node, parser.reports)
+    let root = node::Root::cast(node.clone()).expect("parse result must be a root node");
+
+    Parse {
+        root,
+        node,
+        reports: parser.reports,
+    }
 }
 
 struct Parser<'a, T: Iterator<Item = Token<'a>>> {
@@ -161,9 +180,9 @@ mod test {
         let mut diagnostics = vec![];
         let tokens = tokenize(text, &mut diagnostics);
 
-        let (tree, diagnostics) = parse(tokens);
-        insta::assert_debug_snapshot!(tree);
-        insta::assert_debug_snapshot!(diagnostics);
+        let res = parse(tokens);
+        insta::assert_debug_snapshot!(res.node);
+        insta::assert_debug_snapshot!(res.reports);
     }
 
     #[test]
@@ -176,8 +195,8 @@ mod test {
         let mut diagnostics = vec![];
         let tokens = tokenize(text, &mut diagnostics);
 
-        let (tree, diagnostics) = parse(tokens);
-        insta::assert_debug_snapshot!(tree);
-        insta::assert_debug_snapshot!(diagnostics);
+        let res = parse(tokens);
+        insta::assert_debug_snapshot!(res.node);
+        insta::assert_debug_snapshot!(res.reports);
     }
 }
