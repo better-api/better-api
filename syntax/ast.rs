@@ -1,3 +1,5 @@
+use rowan::ast::AstNode;
+
 use crate::Kind;
 use crate::Kind::*;
 use crate::Language;
@@ -18,14 +20,25 @@ macro_rules! ast_node {
 
         impl $name {
             pub const KIND: Kind = $kind;
+        }
 
-            #[allow(unused)]
-            pub(crate) fn cast(node: SyntaxNode) -> Option<Self> {
+        impl AstNode for $name {
+            type Language = Language;
+
+            fn can_cast(kind: Kind) -> bool {
+                kind == $kind
+            }
+
+            fn cast(node: SyntaxNode) -> Option<Self> {
                 if node.kind() == $kind {
                     Some(Self(node))
                 } else {
                     None
-                }
+               }
+            }
+
+            fn syntax(&self) -> &SyntaxNode {
+                &self.0
             }
         }
     };
@@ -40,14 +53,29 @@ macro_rules! ast_node {
         pub enum $name {
             $($variant($variant)),+
         }
-        impl $name {
-            #[allow(unused)]
-            pub(crate) fn cast(node: SyntaxNode) -> Option<Self> {
+
+        impl AstNode for $name {
+            type Language = Language;
+
+            fn can_cast(kind: Kind) -> bool {
+                match kind {
+                    $($variant::KIND => true,)+
+                    _ => false
+                }
+            }
+
+            fn cast(node: SyntaxNode) -> Option<Self> {
                 let node = match node.kind() {
                     $($variant::KIND => Self::$variant($variant::cast(node)?),)+
                     _ => return None,
                 };
                 Some(node)
+            }
+
+            fn syntax(&self) -> &SyntaxNode {
+                match self {
+                    $(Self::$variant(v) => v.syntax(),)+
+                }
             }
         }
     };
@@ -73,6 +101,12 @@ ast_node! {
     ///
     /// Can be name of an object/record field, endpoint name, ...
     struct Name;
+}
+
+ast_node! {
+    #[from(NODE_PROLOGUE)]
+    /// Prologue of type, property, endpoint, ...
+    struct Prologue;
 }
 
 //////////////////////////////////

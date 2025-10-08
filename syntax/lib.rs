@@ -1,7 +1,7 @@
 mod parser;
 mod tokenizer;
 
-pub mod node;
+pub mod ast;
 
 pub use parser::{Parse, parse};
 pub use tokenizer::{Token, tokenize};

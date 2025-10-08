@@ -1,7 +1,9 @@
+use rowan::ast::AstNode;
+
 use better_api_diagnostic::{Label, Report};
 
 use crate::Kind::{self, *};
-use crate::{Token, node};
+use crate::{Token, ast};
 
 use prologue::Prologue;
 
@@ -14,10 +16,10 @@ mod values;
 /// A parse result contains a node and list of [`Report`]s.
 pub struct Parse {
     /// Root node
-    pub root: node::Root,
+    pub root: ast::Root,
 
     /// Underlying green node.
-    pub node: node::SyntaxNode,
+    pub node: ast::SyntaxNode,
 
     /// Issues reported during parsing
     pub reports: Vec<Report>,
@@ -28,8 +30,8 @@ pub fn parse<'a, T: Iterator<Item = Token<'a>>>(tokens: T) -> Parse {
     let mut parser = Parser::new(tokens);
     parser.parse();
 
-    let node = node::SyntaxNode::new_root(parser.builder.finish());
-    let root = node::Root::cast(node.clone()).expect("parse result must be a root node");
+    let node = ast::SyntaxNode::new_root(parser.builder.finish());
+    let root = ast::Root::cast(node.clone()).expect("parse result must be a root node");
 
     Parse {
         root,
