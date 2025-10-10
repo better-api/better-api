@@ -45,6 +45,7 @@ macro_rules! ast_node {
 
     (
         #[from($($variant:ident),+ $(,)?)]
+        #[wraps($wraps:ident)]
         $(#[$attr:meta])*
         enum $name:ident;
     ) => {
@@ -59,17 +60,18 @@ macro_rules! ast_node {
 
             fn can_cast(kind: Kind) -> bool {
                 match kind {
+                    $wraps => true,
                     $($variant::KIND => true,)+
                     _ => false
                 }
             }
 
             fn cast(node: SyntaxNode) -> Option<Self> {
-                let node = match node.kind() {
-                    $($variant::KIND => Self::$variant($variant::cast(node)?),)+
-                    _ => return None,
-                };
-                Some(node)
+                match node.kind() {
+                    $wraps => node.children().find_map(Self::cast),
+                    $($variant::KIND => Some(Self::$variant($variant::cast(node)?)),)+
+                    _ => None,
+                }
             }
 
             fn syntax(&self) -> &SyntaxNode {
@@ -173,6 +175,180 @@ ast_node! {
         Bool,
         Object,
     )]
+    #[wraps(NODE_VALUE)]
     /// A value of any type.
     enum Value;
+}
+
+///////////
+// Types //
+///////////
+
+ast_node! {
+    #[from(NODE_TYPE_DEF)]
+    /// Type definition
+    struct TypeDefinition;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_OPTION)]
+    /// Option type.
+    struct TypeOption;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_ARRAY)]
+    /// Array type
+    struct TypeArray;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_RECORD)]
+    /// Record type
+    struct Record;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_ENUM)]
+    /// Enum type
+    struct Enum;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_UNION)]
+    /// Union type
+    struct Union;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_FIELD)]
+    /// Field used in records and unions
+    struct TypeField;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_ENUM_MEMBER)]
+    /// Member of an enum type.
+    struct EnumMember;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_RESPONSE)]
+    /// Response type.
+    struct TypeResponse;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_RESP_CONTENT_TYPE)]
+    /// Response content type.
+    struct ResponseContentType;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_RESP_HEADERS)]
+    /// Response headers.
+    struct ResponseHeaders;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_RESP_BODY)]
+    /// Response body.
+    struct ResponseBody;
+}
+
+ast_node! {
+    #[from(TOKEN_IDENTIFIER)]
+    /// Reference to a type.
+    struct TypeRef;
+}
+
+ast_node! {
+    #[from(TOKEN_KW_I32)]
+    /// 32 bit signed integer
+    struct TypeI32;
+}
+
+ast_node! {
+    #[from(TOKEN_KW_I64)]
+    /// 64 bit signed integer
+    struct TypeI64;
+}
+
+ast_node! {
+    #[from(TOKEN_KW_U32)]
+    /// 32 bit unsigned integer
+    struct TypeU32;
+}
+
+ast_node! {
+    #[from(TOKEN_KW_U64)]
+    /// 64 bit unsigned integer
+    struct TypeU64;
+}
+
+ast_node! {
+    #[from(TOKEN_KW_F32)]
+    /// 32 bit float
+    struct TypeF32;
+}
+
+ast_node! {
+    #[from(TOKEN_KW_F64)]
+    /// 64 bit float
+    struct TypeF64;
+}
+
+ast_node! {
+    #[from(TOKEN_KW_DATE)]
+    /// Date type
+    struct TypeDate;
+}
+
+ast_node! {
+    #[from(TOKEN_KW_TIMESTAMP)]
+    /// Timestamp type
+    struct TypeTimestamp;
+}
+
+ast_node! {
+    #[from(TOKEN_KW_BOOL)]
+    /// Boolean type
+    struct TypeBool;
+}
+
+ast_node! {
+    #[from(TOKEN_KW_STRING)]
+    /// String type
+    struct TypeString;
+}
+
+ast_node! {
+    #[from(TOKEN_KW_FILE)]
+    /// File type
+    struct TypeFile;
+}
+
+ast_node! {
+    #[from(
+        TypeOption,
+        TypeArray,
+        Record,
+        Enum,
+        Union,
+        TypeResponse,
+        TypeRef,
+        TypeI32,
+        TypeI64,
+        TypeU32,
+        TypeU64,
+        TypeF32,
+        TypeF64,
+        TypeDate,
+        TypeTimestamp,
+        TypeBool,
+        TypeString,
+        TypeFile,
+    )]
+    #[wraps(NODE_TYPE)]
+    enum Type;
 }
