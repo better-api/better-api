@@ -417,13 +417,13 @@ ast_node! {
 }
 
 ast_node! {
-    #[from(NODE_ENDPOINT_RESPONSE)]
+    #[from(NODE_RESPONSE)]
     /// Endpoint's response.
     struct EndpointResponse;
 }
 
 ast_node! {
-    #[from(NODE_ENDPOINT_RESPONSE_STATUS)]
+    #[from(NODE_RESPONSE_STATUS)]
     /// Status code of an endpoint response.
     ///
     /// This is a child node of [`EndpointResponse`]

@@ -1,6 +1,6 @@
 ---
 source: syntax/parser/endpoint.rs
-expression: tree
+expression: res.node
 ---
 NODE_ROOT@0..278
   NODE_ENDPOINT@0..278
@@ -60,14 +60,14 @@ NODE_ROOT@0..278
       TOKEN_EOL@165..166 "\n"
     TOKEN_EOL@166..167 "\n"
     TOKEN_SPACE@167..171 "    "
-    NODE_ENDPOINT_RESPONSE@171..245
+    NODE_RESPONSE@171..245
       NODE_PROLOGUE@171..200
         TOKEN_DOC_COMMENT@171..195 "/// Successfull greeting"
         TOKEN_EOL@195..196 "\n"
         TOKEN_SPACE@196..200 "    "
       TOKEN_KW_ON@200..202 "on"
       TOKEN_SPACE@202..203 " "
-      NODE_ENDPOINT_RESPONSE_STATUS@203..206
+      NODE_RESPONSE_STATUS@203..206
         TOKEN_INTEGER@203..206 "200"
       TOKEN_COLON@206..207 ":"
       TOKEN_SPACE@207..208 " "
@@ -91,10 +91,10 @@ NODE_ROOT@0..278
       TOKEN_EOL@244..245 "\n"
     TOKEN_EOL@245..246 "\n"
     TOKEN_SPACE@246..250 "    "
-    NODE_ENDPOINT_RESPONSE@250..276
+    NODE_RESPONSE@250..276
       TOKEN_KW_ON@250..252 "on"
       TOKEN_SPACE@252..253 " "
-      NODE_ENDPOINT_RESPONSE_STATUS@253..260
+      NODE_RESPONSE_STATUS@253..260
         TOKEN_KW_DEFAULT@253..260 "default"
       TOKEN_COLON@260..261 ":"
       TOKEN_SPACE@261..262 " "

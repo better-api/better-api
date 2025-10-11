@@ -1,6 +1,6 @@
 ---
 source: syntax/parser/endpoint.rs
-expression: tree
+expression: res.node
 ---
 NODE_ROOT@0..233
   NODE_ENDPOINT@0..233
@@ -27,10 +27,10 @@ NODE_ROOT@0..233
     TOKEN_COMMENT@73..100 "// This is missing a  ..."
     TOKEN_EOL@100..101 "\n"
     TOKEN_SPACE@101..105 "    "
-    NODE_ENDPOINT_RESPONSE@105..117
+    NODE_RESPONSE@105..117
       TOKEN_KW_ON@105..107 "on"
       TOKEN_SPACE@107..108 " "
-      NODE_ENDPOINT_RESPONSE_STATUS@108..108
+      NODE_RESPONSE_STATUS@108..108
         NODE_ERROR@108..108
       TOKEN_COLON@108..109 ":"
       TOKEN_SPACE@109..110 " "
@@ -45,10 +45,10 @@ NODE_ROOT@0..233
     TOKEN_COMMENT@167..188 "// and ends abruptly."
     TOKEN_EOL@188..189 "\n"
     TOKEN_SPACE@189..193 "    "
-    NODE_ENDPOINT_RESPONSE@193..231
+    NODE_RESPONSE@193..231
       TOKEN_KW_ON@193..195 "on"
       TOKEN_SPACE@195..196 " "
-      NODE_ENDPOINT_RESPONSE_STATUS@196..203
+      NODE_RESPONSE_STATUS@196..203
         TOKEN_KW_DEFAULT@196..203 "default"
       TOKEN_COLON@203..204 ":"
       TOKEN_SPACE@204..205 " "

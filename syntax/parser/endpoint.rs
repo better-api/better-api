@@ -276,11 +276,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
     }
 
     fn parse_endpoint_response(&mut self, prologue: Option<Prologue>) {
-        self.start_node(
-            NODE_ENDPOINT_RESPONSE,
-            prologue,
-            PrologueBehavior::NoDefault,
-        );
+        self.start_node(NODE_RESPONSE, prologue, PrologueBehavior::NoDefault);
 
         debug_assert!(self.peek() == Some(TOKEN_KW_ON));
         self.advance();
@@ -288,8 +284,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.skip_whitespace();
 
         // Parse response status
-        self.builder
-            .start_node(NODE_ENDPOINT_RESPONSE_STATUS.into());
+        self.builder.start_node(NODE_RESPONSE_STATUS.into());
         match self.peek() {
             Some(TOKEN_KW_DEFAULT) | Some(TOKEN_INTEGER) => self.advance(),
 
