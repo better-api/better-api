@@ -98,6 +98,12 @@ ast_node! {
 /////////////////
 
 ast_node! {
+    #[from(NODE_ERROR)]
+    /// Error node
+    struct Error;
+}
+
+ast_node! {
     #[from(NODE_NAME)]
     /// Represents a name.
     ///
@@ -351,4 +357,86 @@ ast_node! {
     )]
     #[wraps(NODE_TYPE)]
     enum Type;
+}
+
+///////////////
+// Endpoints //
+///////////////
+
+ast_node! {
+    #[from(NODE_ENDPOINT)]
+    /// An endpoint
+    struct Endpoint;
+}
+
+ast_node! {
+    #[from(NODE_ENDPOINT_METHOD)]
+    /// Endpoint method
+    struct EndpointMethod;
+}
+
+ast_node! {
+    #[from(NODE_PATH)]
+    /// Path of an endpoint or a route.
+    struct Path;
+}
+
+ast_node! {
+    #[from(NODE_ENDPOINT_PATH)]
+    /// Endpoint's path parameters
+    struct EndpointPathParams;
+}
+
+ast_node! {
+    #[from(NODE_ENDPOINT_QUERY)]
+    /// Endpoint's query parameters
+    struct EndpointQueryParams;
+}
+
+ast_node! {
+    #[from(NODE_ENDPOINT_HEADERS)]
+    /// Endpoint's header parameters
+    struct EndpointHeaderParams;
+}
+
+ast_node! {
+    #[from(NODE_ENDPOINT_ACCEPT)]
+    /// Content type of the endpoint's request body.
+    ///
+    /// Represents how the request body is encoded as a MIME type.
+    struct EndpointAccept;
+}
+
+ast_node! {
+    #[from(NODE_ENDPOINT_REQUEST_BODY)]
+    /// Type of the endpoint's request body.
+    ///
+    /// Represents the type of the endpoint's request body
+    /// as a Better API type.
+    struct EndpointRequestBody;
+}
+
+ast_node! {
+    #[from(NODE_ENDPOINT_RESPONSE)]
+    /// Endpoint's response.
+    struct EndpointResponse;
+}
+
+ast_node! {
+    #[from(NODE_ENDPOINT_RESPONSE_STATUS)]
+    /// Status code of an endpoint response.
+    ///
+    /// This is a child node of [`EndpointResponse`]
+    /// and represents the status of a single response.
+    struct EndpointResponseStatus;
+}
+
+////////////
+// Routes //
+////////////
+
+ast_node! {
+    #[from(NODE_ROUTE)]
+    /// Route group
+    struct Route;
 }
