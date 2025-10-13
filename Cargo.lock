@@ -11,6 +11,13 @@ name = "better-api-diagnostic"
 version = "0.1.0"
 
 [[package]]
+name = "better-api-semantics"
+version = "0.1.0"
+dependencies = [
+ "insta",
+]
+
+[[package]]
 name = "better-api-syntax"
 version = "0.1.0"
 dependencies = [

@@ -1,6 +1,6 @@
 [workspace]
-members = ["diagnostic", "syntax"]
-default-members = [".", "diagnostic", "syntax"]
+members = ["diagnostic", "semantics", "syntax"]
+default-members = [".", "diagnostic", "syntax", "semantics"]
 
 [workspace.package]
 authors = ["Vid Drobnič <me@viddrobnic.com>"]
