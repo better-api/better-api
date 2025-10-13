@@ -1,6 +1,6 @@
 ---
 source: syntax/parser/types.rs
-expression: tree
+expression: res.node
 ---
 NODE_ROOT@0..204
   NODE_TYPE_DEF@0..119
@@ -10,40 +10,39 @@ NODE_ROOT@0..204
       TOKEN_IDENTIFIER@5..8 "Foo"
     TOKEN_COLON@8..9 ":"
     TOKEN_SPACE@9..10 " "
-    NODE_TYPE@10..118
-      NODE_TYPE_ENUM@10..118
-        TOKEN_KW_ENUM@10..14 "enum"
-        TOKEN_PAREN_LEFT@14..15 "("
-        NODE_TYPE@15..21
-          TOKEN_KW_STRING@15..21 "string"
-        TOKEN_PAREN_RIGHT@21..22 ")"
-        TOKEN_SPACE@22..23 " "
-        TOKEN_CURLY_LEFT@23..24 "{"
-        TOKEN_EOL@24..25 "\n"
-        TOKEN_SPACE@25..29 "    "
-        NODE_TYPE_ENUM_MEMBER@29..35
-          NODE_VALUE@29..34
-            TOKEN_STRING@29..34 "\"foo\""
-          TOKEN_EOL@34..35 "\n"
-        TOKEN_EOL@35..36 "\n"
-        TOKEN_SPACE@36..40 "    "
-        NODE_TYPE_ENUM_MEMBER@40..117
-          NODE_PROLOGUE@40..111
-            TOKEN_DOC_COMMENT@40..73 "/// Documentation for ..."
-            TOKEN_EOL@73..74 "\n"
-            TOKEN_SPACE@74..78 "    "
-            NODE_DEFAULT@78..107
-              TOKEN_DECORATOR_DEFAULT@78..86 "@default"
-              TOKEN_PAREN_LEFT@86..87 "("
-              NODE_VALUE@87..105
-                TOKEN_STRING@87..105 "\"this is an error\""
-              TOKEN_PAREN_RIGHT@105..106 ")"
-              TOKEN_EOL@106..107 "\n"
-            TOKEN_SPACE@107..111 "    "
-          NODE_VALUE@111..116
-            TOKEN_STRING@111..116 "\"bar\""
-          TOKEN_EOL@116..117 "\n"
-        TOKEN_CURLY_RIGHT@117..118 "}"
+    NODE_TYPE_ENUM@10..118
+      TOKEN_KW_ENUM@10..14 "enum"
+      TOKEN_PAREN_LEFT@14..15 "("
+      NODE_TYPE_STRING@15..21
+        TOKEN_KW_STRING@15..21 "string"
+      TOKEN_PAREN_RIGHT@21..22 ")"
+      TOKEN_SPACE@22..23 " "
+      TOKEN_CURLY_LEFT@23..24 "{"
+      TOKEN_EOL@24..25 "\n"
+      TOKEN_SPACE@25..29 "    "
+      NODE_TYPE_ENUM_MEMBER@29..35
+        NODE_VALUE_STRING@29..34
+          TOKEN_STRING@29..34 "\"foo\""
+        TOKEN_EOL@34..35 "\n"
+      TOKEN_EOL@35..36 "\n"
+      TOKEN_SPACE@36..40 "    "
+      NODE_TYPE_ENUM_MEMBER@40..117
+        NODE_PROLOGUE@40..111
+          TOKEN_DOC_COMMENT@40..73 "/// Documentation for ..."
+          TOKEN_EOL@73..74 "\n"
+          TOKEN_SPACE@74..78 "    "
+          NODE_DEFAULT@78..107
+            TOKEN_DECORATOR_DEFAULT@78..86 "@default"
+            TOKEN_PAREN_LEFT@86..87 "("
+            NODE_VALUE_STRING@87..105
+              TOKEN_STRING@87..105 "\"this is an error\""
+            TOKEN_PAREN_RIGHT@105..106 ")"
+            TOKEN_EOL@106..107 "\n"
+          TOKEN_SPACE@107..111 "    "
+        NODE_VALUE_STRING@111..116
+          TOKEN_STRING@111..116 "\"bar\""
+        TOKEN_EOL@116..117 "\n"
+      TOKEN_CURLY_RIGHT@117..118 "}"
     TOKEN_EOL@118..119 "\n"
   TOKEN_EOL@119..120 "\n"
   TOKEN_COMMENT@120..140 "// Very invalid enum"
@@ -55,22 +54,21 @@ NODE_ROOT@0..204
       TOKEN_IDENTIFIER@146..149 "Bar"
     TOKEN_COLON@149..150 ":"
     TOKEN_SPACE@150..151 " "
-    NODE_TYPE@151..176
-      NODE_TYPE_ENUM@151..176
-        TOKEN_KW_ENUM@151..155 "enum"
-        TOKEN_SPACE@155..156 " "
-        NODE_TYPE@156..163
-          TOKEN_KW_STRING@156..162 "string"
-          TOKEN_SPACE@162..163 " "
-        TOKEN_CURLY_LEFT@163..164 "{"
-        NODE_TYPE_ENUM_MEMBER@164..170
-          NODE_VALUE@164..169
-            TOKEN_STRING@164..169 "\"foo\""
-          TOKEN_SPACE@169..170 " "
-        NODE_TYPE_ENUM_MEMBER@170..175
-          NODE_VALUE@170..175
-            TOKEN_STRING@170..175 "\"bar\""
-        TOKEN_CURLY_RIGHT@175..176 "}"
+    NODE_TYPE_ENUM@151..176
+      TOKEN_KW_ENUM@151..155 "enum"
+      TOKEN_SPACE@155..156 " "
+      NODE_TYPE_STRING@156..162
+        TOKEN_KW_STRING@156..162 "string"
+      TOKEN_SPACE@162..163 " "
+      TOKEN_CURLY_LEFT@163..164 "{"
+      NODE_TYPE_ENUM_MEMBER@164..170
+        NODE_VALUE_STRING@164..169
+          TOKEN_STRING@164..169 "\"foo\""
+        TOKEN_SPACE@169..170 " "
+      NODE_TYPE_ENUM_MEMBER@170..175
+        NODE_VALUE_STRING@170..175
+          TOKEN_STRING@170..175 "\"bar\""
+      TOKEN_CURLY_RIGHT@175..176 "}"
     TOKEN_EOL@176..177 "\n"
   TOKEN_COMMENT@177..203 "// Should parse corre ..."
   TOKEN_EOL@203..204 "\n"

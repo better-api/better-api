@@ -169,6 +169,12 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
         self.builder.finish_node();
     }
+
+    pub fn with<F: Fn(&mut Self)>(&mut self, kind: Kind, inner: F) {
+        self.builder.start_node(kind.into());
+        inner(self);
+        self.builder.finish_node();
+    }
 }
 
 #[cfg(test)]

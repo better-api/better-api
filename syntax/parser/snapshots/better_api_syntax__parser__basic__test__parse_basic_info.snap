@@ -1,6 +1,6 @@
 ---
 source: syntax/parser/basic.rs
-expression: tree
+expression: res.node
 ---
 NODE_ROOT@0..205
   TOKEN_TOP_COMMENT@0..25 "//! This is a top com ..."
@@ -16,7 +16,7 @@ NODE_ROOT@0..205
     TOKEN_IDENTIFIER@105..109 "name"
     TOKEN_COLON@109..110 ":"
     TOKEN_SPACE@110..112 "  "
-    NODE_VALUE@112..120
+    NODE_VALUE_STRING@112..120
       TOKEN_STRING@112..120 "\"foobar\""
     TOKEN_EOL@120..121 "\n"
   TOKEN_EOL@121..122 "\n"
@@ -26,14 +26,14 @@ NODE_ROOT@0..205
     NODE_DEFAULT@153..170
       TOKEN_DECORATOR_DEFAULT@153..161 "@default"
       TOKEN_PAREN_LEFT@161..162 "("
-      NODE_VALUE@162..168
+      NODE_VALUE_STRING@162..168
         TOKEN_STRING@162..168 "\"asdf\""
       TOKEN_PAREN_RIGHT@168..169 ")"
       TOKEN_EOL@169..170 "\n"
     TOKEN_IDENTIFIER@170..179 "betterApi"
     TOKEN_COLON@179..180 ":"
     TOKEN_SPACE@180..181 " "
-    NODE_VALUE@181..188
+    NODE_VALUE_STRING@181..188
       TOKEN_STRING@181..188 "\"1.0.0\""
     TOKEN_EOL@188..189 "\n"
   TOKEN_EOL@189..190 "\n"
@@ -41,6 +41,6 @@ NODE_ROOT@0..205
     TOKEN_IDENTIFIER@190..197 "version"
     TOKEN_COLON@197..198 ":"
     TOKEN_SPACE@198..199 " "
-    NODE_VALUE@199..204
+    NODE_VALUE_STRING@199..204
       TOKEN_STRING@199..204 "\"1.0\""
     TOKEN_EOL@204..205 "\n"

@@ -45,7 +45,6 @@ macro_rules! ast_node {
 
     (
         #[from($($variant:ident),+ $(,)?)]
-        #[wraps($wraps:ident)]
         $(#[$attr:meta])*
         enum $name:ident;
     ) => {
@@ -60,18 +59,18 @@ macro_rules! ast_node {
 
             fn can_cast(kind: Kind) -> bool {
                 match kind {
-                    $wraps => true,
                     $($variant::KIND => true,)+
                     _ => false
                 }
             }
 
             fn cast(node: SyntaxNode) -> Option<Self> {
-                match node.kind() {
-                    $wraps => node.children().find_map(Self::cast),
-                    $($variant::KIND => Some(Self::$variant($variant::cast(node)?)),)+
-                    _ => None,
-                }
+                let node = match node.kind() {
+                    $($variant::KIND => Self::$variant($variant::cast(node)?),)+
+                    _ => return None,
+                };
+
+                Some(node)
             }
 
             fn syntax(&self) -> &SyntaxNode {
@@ -138,25 +137,25 @@ impl ApiName {
 ////////////
 
 ast_node! {
-    #[from(TOKEN_STRING)]
+    #[from(NODE_VALUE_STRING)]
     /// String value.
     struct String;
 }
 
 ast_node! {
-    #[from(TOKEN_INTEGER)]
+    #[from(NODE_VALUE_INTEGER)]
     /// Integer value.
     struct Integer;
 }
 
 ast_node! {
-    #[from(TOKEN_FLOAT)]
+    #[from(NODE_VALUE_FLOAT)]
     /// Float value.
     struct Float;
 }
 
 ast_node! {
-    #[from(NODE_BOOL_VALUE)]
+    #[from(NODE_VALUE_BOOL)]
     /// Boolean value.
     struct Bool;
 }
@@ -181,7 +180,6 @@ ast_node! {
         Bool,
         Object,
     )]
-    #[wraps(NODE_VALUE)]
     /// A value of any type.
     enum Value;
 }
@@ -194,6 +192,78 @@ ast_node! {
     #[from(NODE_TYPE_DEF)]
     /// Type definition
     struct TypeDefinition;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_REF)]
+    /// Reference to a type. Holds an identifier.
+    struct TypeRef;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_I32)]
+    /// 32 bit signed integer
+    struct TypeI32;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_I64)]
+    /// 64 bit signed integer
+    struct TypeI64;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_U32)]
+    /// 32 bit unsigned integer
+    struct TypeU32;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_U64)]
+    /// 64 bit unsigned integer
+    struct TypeU64;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_F32)]
+    /// 32 bit float
+    struct TypeF32;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_F64)]
+    /// 64 bit float
+    struct TypeF64;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_DATE)]
+    /// Date type
+    struct TypeDate;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_TIMESTAMP)]
+    /// Timestamp type
+    struct TypeTimestamp;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_BOOL)]
+    /// Boolean type
+    struct TypeBool;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_STRING)]
+    /// String type
+    struct TypeString;
+}
+
+ast_node! {
+    #[from(NODE_TYPE_FILE)]
+    /// File type
+    struct TypeFile;
 }
 
 ast_node! {
@@ -263,78 +333,6 @@ ast_node! {
 }
 
 ast_node! {
-    #[from(TOKEN_IDENTIFIER)]
-    /// Reference to a type.
-    struct TypeRef;
-}
-
-ast_node! {
-    #[from(TOKEN_KW_I32)]
-    /// 32 bit signed integer
-    struct TypeI32;
-}
-
-ast_node! {
-    #[from(TOKEN_KW_I64)]
-    /// 64 bit signed integer
-    struct TypeI64;
-}
-
-ast_node! {
-    #[from(TOKEN_KW_U32)]
-    /// 32 bit unsigned integer
-    struct TypeU32;
-}
-
-ast_node! {
-    #[from(TOKEN_KW_U64)]
-    /// 64 bit unsigned integer
-    struct TypeU64;
-}
-
-ast_node! {
-    #[from(TOKEN_KW_F32)]
-    /// 32 bit float
-    struct TypeF32;
-}
-
-ast_node! {
-    #[from(TOKEN_KW_F64)]
-    /// 64 bit float
-    struct TypeF64;
-}
-
-ast_node! {
-    #[from(TOKEN_KW_DATE)]
-    /// Date type
-    struct TypeDate;
-}
-
-ast_node! {
-    #[from(TOKEN_KW_TIMESTAMP)]
-    /// Timestamp type
-    struct TypeTimestamp;
-}
-
-ast_node! {
-    #[from(TOKEN_KW_BOOL)]
-    /// Boolean type
-    struct TypeBool;
-}
-
-ast_node! {
-    #[from(TOKEN_KW_STRING)]
-    /// String type
-    struct TypeString;
-}
-
-ast_node! {
-    #[from(TOKEN_KW_FILE)]
-    /// File type
-    struct TypeFile;
-}
-
-ast_node! {
     #[from(
         TypeOption,
         TypeArray,
@@ -355,7 +353,7 @@ ast_node! {
         TypeString,
         TypeFile,
     )]
-    #[wraps(NODE_TYPE)]
+    /// Represents a type.
     enum Type;
 }
 

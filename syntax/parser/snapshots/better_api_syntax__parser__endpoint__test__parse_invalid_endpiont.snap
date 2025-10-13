@@ -34,7 +34,7 @@ NODE_ROOT@0..233
         NODE_ERROR@108..108
       TOKEN_COLON@108..109 ":"
       TOKEN_SPACE@109..110 " "
-      NODE_TYPE@110..116
+      NODE_TYPE_STRING@110..116
         TOKEN_KW_STRING@110..116 "string"
       TOKEN_EOL@116..117 "\n"
     TOKEN_EOL@117..118 "\n"
@@ -52,9 +52,8 @@ NODE_ROOT@0..233
         TOKEN_KW_DEFAULT@196..203 "default"
       TOKEN_COLON@203..204 ":"
       TOKEN_SPACE@204..205 " "
-      NODE_TYPE@205..231
-        NODE_ERROR@205..231
-          TOKEN_STRING@205..230 "\"value instead of a t ..."
-          TOKEN_SPACE@230..231 " "
+      NODE_ERROR@205..231
+        TOKEN_STRING@205..230 "\"value instead of a t ..."
+        TOKEN_SPACE@230..231 " "
     TOKEN_CURLY_RIGHT@231..232 "}"
     TOKEN_EOL@232..233 "\n"

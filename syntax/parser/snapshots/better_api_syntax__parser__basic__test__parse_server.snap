@@ -1,6 +1,6 @@
 ---
-source: syntax/parser.rs
-expression: tree
+source: syntax/parser/basic.rs
+expression: res.node
 ---
 NODE_ROOT@0..61
   NODE_SERVER@0..61
@@ -10,28 +10,27 @@ NODE_ROOT@0..61
     TOKEN_IDENTIFIER@16..22 "server"
     TOKEN_COLON@22..23 ":"
     TOKEN_SPACE@23..24 " "
-    NODE_VALUE@24..60
-      NODE_OBJECT@24..60
-        TOKEN_CURLY_LEFT@24..25 "{"
-        TOKEN_EOL@25..26 "\n"
-        TOKEN_SPACE@26..30 "    "
-        NODE_OBJECT_FIELD@30..44
-          NODE_NAME@30..34
-            TOKEN_IDENTIFIER@30..34 "name"
-          TOKEN_COLON@34..35 ":"
-          TOKEN_SPACE@35..36 " "
-          NODE_VALUE@36..41
-            TOKEN_STRING@36..41 "\"foo\""
-          TOKEN_SPACE@41..43 "  "
-          TOKEN_EOL@43..44 "\n"
-        TOKEN_SPACE@44..48 "    "
-        NODE_OBJECT_FIELD@48..59
-          NODE_NAME@48..51
-            TOKEN_IDENTIFIER@48..51 "url"
-          TOKEN_COLON@51..52 ":"
-          TOKEN_SPACE@52..53 " "
-          NODE_VALUE@53..58
-            TOKEN_STRING@53..58 "\"bar\""
-          TOKEN_EOL@58..59 "\n"
-        TOKEN_CURLY_RIGHT@59..60 "}"
+    NODE_OBJECT@24..60
+      TOKEN_CURLY_LEFT@24..25 "{"
+      TOKEN_EOL@25..26 "\n"
+      TOKEN_SPACE@26..30 "    "
+      NODE_OBJECT_FIELD@30..44
+        NODE_NAME@30..34
+          TOKEN_IDENTIFIER@30..34 "name"
+        TOKEN_COLON@34..35 ":"
+        TOKEN_SPACE@35..36 " "
+        NODE_VALUE_STRING@36..41
+          TOKEN_STRING@36..41 "\"foo\""
+        TOKEN_SPACE@41..43 "  "
+        TOKEN_EOL@43..44 "\n"
+      TOKEN_SPACE@44..48 "    "
+      NODE_OBJECT_FIELD@48..59
+        NODE_NAME@48..51
+          TOKEN_IDENTIFIER@48..51 "url"
+        TOKEN_COLON@51..52 ":"
+        TOKEN_SPACE@52..53 " "
+        NODE_VALUE_STRING@53..58
+          TOKEN_STRING@53..58 "\"bar\""
+        TOKEN_EOL@58..59 "\n"
+      TOKEN_CURLY_RIGHT@59..60 "}"
     TOKEN_EOL@60..61 "\n"

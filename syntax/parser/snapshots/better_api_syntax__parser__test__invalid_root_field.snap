@@ -1,6 +1,6 @@
 ---
 source: syntax/parser/mod.rs
-expression: tree
+expression: res.node
 ---
 NODE_ROOT@0..35
   NODE_ERROR@0..20
@@ -13,6 +13,6 @@ NODE_ROOT@0..35
     TOKEN_IDENTIFIER@21..25 "name"
     TOKEN_COLON@25..26 ":"
     TOKEN_SPACE@26..27 " "
-    NODE_VALUE@27..34
+    NODE_VALUE_STRING@27..34
       TOKEN_STRING@27..34 "\"hello\""
     TOKEN_EOL@34..35 "\n"

@@ -125,11 +125,6 @@ pub enum Kind {
     /// name of the field, name of the endpoint, ...
     NODE_NAME,
 
-    /// Represents a value. Should have exactly one child.
-    NODE_VALUE,
-    /// Represents a type. Should have exactly one child
-    NODE_TYPE,
-
     /// Represents a prologue of type, property, endpoint, ...
     NODE_PROLOGUE,
 
@@ -137,10 +132,27 @@ pub enum Kind {
 
     NODE_OBJECT,
     NODE_OBJECT_FIELD,
-    NODE_BOOL_VALUE,
+    NODE_VALUE_BOOL,
+    NODE_VALUE_STRING,
+    NODE_VALUE_INTEGER,
+    NODE_VALUE_FLOAT,
 
     /// Represents definition of a type connected to an ident.
     NODE_TYPE_DEF,
+
+    /// Reference to a type. Holds an identifier.
+    NODE_TYPE_REF,
+    NODE_TYPE_I32,
+    NODE_TYPE_I64,
+    NODE_TYPE_U32,
+    NODE_TYPE_U64,
+    NODE_TYPE_F32,
+    NODE_TYPE_F64,
+    NODE_TYPE_DATE,
+    NODE_TYPE_TIMESTAMP,
+    NODE_TYPE_BOOL,
+    NODE_TYPE_STRING,
+    NODE_TYPE_FILE,
 
     NODE_TYPE_OPTION,
     NODE_TYPE_ARRAY,

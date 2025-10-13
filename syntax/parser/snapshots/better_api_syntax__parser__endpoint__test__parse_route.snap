@@ -29,7 +29,7 @@ NODE_ROOT@0..276
         TOKEN_IDENTIFIER@87..91 "name"
         TOKEN_COLON@91..92 ":"
         TOKEN_SPACE@92..93 " "
-        NODE_VALUE@93..100
+        NODE_VALUE_STRING@93..100
           TOKEN_STRING@93..100 "\"hello\""
         TOKEN_EOL@100..101 "\n"
       TOKEN_EOL@101..102 "\n"
@@ -45,23 +45,22 @@ NODE_ROOT@0..276
           TOKEN_INTEGER@146..149 "200"
         TOKEN_COLON@149..150 ":"
         TOKEN_SPACE@150..151 " "
-        NODE_TYPE@151..195
-          NODE_TYPE_RECORD@151..195
-            TOKEN_KW_REC@151..154 "rec"
-            TOKEN_SPACE@154..155 " "
-            TOKEN_CURLY_LEFT@155..156 "{"
-            TOKEN_EOL@156..157 "\n"
-            TOKEN_SPACE@157..169 "            "
-            NODE_TYPE_FIELD@169..186
-              NODE_NAME@169..177
-                TOKEN_IDENTIFIER@169..177 "greeting"
-              TOKEN_COLON@177..178 ":"
-              TOKEN_SPACE@178..179 " "
-              NODE_TYPE@179..185
-                TOKEN_KW_STRING@179..185 "string"
-              TOKEN_EOL@185..186 "\n"
-            TOKEN_SPACE@186..194 "        "
-            TOKEN_CURLY_RIGHT@194..195 "}"
+        NODE_TYPE_RECORD@151..195
+          TOKEN_KW_REC@151..154 "rec"
+          TOKEN_SPACE@154..155 " "
+          TOKEN_CURLY_LEFT@155..156 "{"
+          TOKEN_EOL@156..157 "\n"
+          TOKEN_SPACE@157..169 "            "
+          NODE_TYPE_FIELD@169..186
+            NODE_NAME@169..177
+              TOKEN_IDENTIFIER@169..177 "greeting"
+            TOKEN_COLON@177..178 ":"
+            TOKEN_SPACE@178..179 " "
+            NODE_TYPE_STRING@179..185
+              TOKEN_KW_STRING@179..185 "string"
+            TOKEN_EOL@185..186 "\n"
+          TOKEN_SPACE@186..194 "        "
+          TOKEN_CURLY_RIGHT@194..195 "}"
         TOKEN_EOL@195..196 "\n"
       TOKEN_SPACE@196..200 "    "
       TOKEN_CURLY_RIGHT@200..201 "}"
@@ -83,7 +82,7 @@ NODE_ROOT@0..276
         TOKEN_IDENTIFIER@252..256 "name"
         TOKEN_COLON@256..257 ":"
         TOKEN_SPACE@257..258 " "
-        NODE_VALUE@258..267
+        NODE_VALUE_STRING@258..267
           TOKEN_STRING@258..267 "\"goodbye\""
         TOKEN_EOL@267..268 "\n"
       TOKEN_SPACE@268..272 "    "

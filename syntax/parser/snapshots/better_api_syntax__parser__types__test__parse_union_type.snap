@@ -1,6 +1,6 @@
 ---
 source: syntax/parser/types.rs
-expression: tree
+expression: res.node
 ---
 NODE_ROOT@0..144
   NODE_TYPE_DEF@0..60
@@ -10,35 +10,34 @@ NODE_ROOT@0..144
       TOKEN_IDENTIFIER@5..8 "Foo"
     TOKEN_COLON@8..9 ":"
     TOKEN_SPACE@9..10 " "
-    NODE_TYPE@10..59
-      NODE_TYPE_UNION@10..59
-        TOKEN_KW_UNION@10..15 "union"
-        TOKEN_PAREN_LEFT@15..16 "("
-        NODE_VALUE@16..22
-          TOKEN_STRING@16..22 "\"type\""
-        TOKEN_PAREN_RIGHT@22..23 ")"
-        TOKEN_SPACE@23..24 " "
-        TOKEN_CURLY_LEFT@24..25 "{"
-        TOKEN_EOL@25..26 "\n"
-        TOKEN_SPACE@26..30 "    "
-        NODE_TYPE_FIELD@30..39
-          NODE_NAME@30..33
-            TOKEN_IDENTIFIER@30..33 "bar"
-          TOKEN_COLON@33..34 ":"
-          TOKEN_SPACE@34..35 " "
-          NODE_TYPE@35..38
-            TOKEN_IDENTIFIER@35..38 "Bar"
-          TOKEN_EOL@38..39 "\n"
-        TOKEN_SPACE@39..43 "    "
-        NODE_TYPE_FIELD@43..58
-          NODE_NAME@43..52
-            TOKEN_STRING@43..52 "\"baz str\""
-          TOKEN_COLON@52..53 ":"
-          TOKEN_SPACE@53..54 " "
-          NODE_TYPE@54..57
-            TOKEN_IDENTIFIER@54..57 "Baz"
-          TOKEN_EOL@57..58 "\n"
-        TOKEN_CURLY_RIGHT@58..59 "}"
+    NODE_TYPE_UNION@10..59
+      TOKEN_KW_UNION@10..15 "union"
+      TOKEN_PAREN_LEFT@15..16 "("
+      NODE_VALUE_STRING@16..22
+        TOKEN_STRING@16..22 "\"type\""
+      TOKEN_PAREN_RIGHT@22..23 ")"
+      TOKEN_SPACE@23..24 " "
+      TOKEN_CURLY_LEFT@24..25 "{"
+      TOKEN_EOL@25..26 "\n"
+      TOKEN_SPACE@26..30 "    "
+      NODE_TYPE_FIELD@30..39
+        NODE_NAME@30..33
+          TOKEN_IDENTIFIER@30..33 "bar"
+        TOKEN_COLON@33..34 ":"
+        TOKEN_SPACE@34..35 " "
+        NODE_TYPE_REF@35..38
+          TOKEN_IDENTIFIER@35..38 "Bar"
+        TOKEN_EOL@38..39 "\n"
+      TOKEN_SPACE@39..43 "    "
+      NODE_TYPE_FIELD@43..58
+        NODE_NAME@43..52
+          TOKEN_STRING@43..52 "\"baz str\""
+        TOKEN_COLON@52..53 ":"
+        TOKEN_SPACE@53..54 " "
+        NODE_TYPE_REF@54..57
+          TOKEN_IDENTIFIER@54..57 "Baz"
+        TOKEN_EOL@57..58 "\n"
+      TOKEN_CURLY_RIGHT@58..59 "}"
     TOKEN_EOL@59..60 "\n"
   TOKEN_EOL@60..61 "\n"
   TOKEN_COMMENT@61..82 "// Very invalid union"
@@ -50,22 +49,21 @@ NODE_ROOT@0..144
       TOKEN_IDENTIFIER@88..91 "Bar"
     TOKEN_COLON@91..92 ":"
     TOKEN_SPACE@92..93 " "
-    NODE_TYPE@93..116
-      NODE_TYPE_UNION@93..116
-        TOKEN_KW_UNION@93..98 "union"
-        TOKEN_SPACE@98..99 " "
-        NODE_VALUE@99..105
-          TOKEN_STRING@99..105 "\"type\""
-        TOKEN_SPACE@105..106 " "
-        TOKEN_CURLY_LEFT@106..107 "{"
-        NODE_TYPE_FIELD@107..115
-          NODE_NAME@107..110
-            TOKEN_IDENTIFIER@107..110 "bar"
-          TOKEN_COLON@110..111 ":"
-          TOKEN_SPACE@111..112 " "
-          NODE_TYPE@112..115
-            TOKEN_IDENTIFIER@112..115 "Bar"
-        TOKEN_CURLY_RIGHT@115..116 "}"
+    NODE_TYPE_UNION@93..116
+      TOKEN_KW_UNION@93..98 "union"
+      TOKEN_SPACE@98..99 " "
+      NODE_VALUE_STRING@99..105
+        TOKEN_STRING@99..105 "\"type\""
+      TOKEN_SPACE@105..106 " "
+      TOKEN_CURLY_LEFT@106..107 "{"
+      NODE_TYPE_FIELD@107..115
+        NODE_NAME@107..110
+          TOKEN_IDENTIFIER@107..110 "bar"
+        TOKEN_COLON@110..111 ":"
+        TOKEN_SPACE@111..112 " "
+        NODE_TYPE_REF@112..115
+          TOKEN_IDENTIFIER@112..115 "Bar"
+      TOKEN_CURLY_RIGHT@115..116 "}"
     TOKEN_EOL@116..117 "\n"
   TOKEN_COMMENT@117..143 "// Should parse corre ..."
   TOKEN_EOL@143..144 "\n"

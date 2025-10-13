@@ -1,6 +1,6 @@
 ---
 source: syntax/parser/endpoint.rs
-expression: tree
+expression: res.node
 ---
 NODE_ROOT@0..99
   TOKEN_COMMENT@0..12 "// Incorrect"
@@ -33,7 +33,7 @@ NODE_ROOT@0..99
         TOKEN_IDENTIFIER@76..80 "name"
         TOKEN_COLON@80..81 ":"
         TOKEN_SPACE@81..82 " "
-        NODE_VALUE@82..91
+        NODE_VALUE_STRING@82..91
           TOKEN_STRING@82..91 "\"goodbye\""
         TOKEN_EOL@91..92 "\n"
       TOKEN_SPACE@92..96 "    "

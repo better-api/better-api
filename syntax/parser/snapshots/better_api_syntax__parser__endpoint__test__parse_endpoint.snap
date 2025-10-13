@@ -20,7 +20,7 @@ NODE_ROOT@0..278
       TOKEN_IDENTIFIER@40..44 "name"
       TOKEN_COLON@44..45 ":"
       TOKEN_SPACE@45..46 " "
-      NODE_VALUE@46..53
+      NODE_VALUE_STRING@46..53
         TOKEN_STRING@46..53 "\"hello\""
       TOKEN_EOL@53..54 "\n"
     TOKEN_EOL@54..55 "\n"
@@ -29,34 +29,33 @@ NODE_ROOT@0..278
       TOKEN_IDENTIFIER@59..64 "query"
       TOKEN_COLON@64..65 ":"
       TOKEN_SPACE@65..66 " "
-      NODE_TYPE@66..165
-        NODE_TYPE_RECORD@66..165
-          TOKEN_CURLY_LEFT@66..67 "{"
-          TOKEN_EOL@67..68 "\n"
-          TOKEN_SPACE@68..76 "        "
-          NODE_TYPE_FIELD@76..160
-            NODE_PROLOGUE@76..146
-              TOKEN_DOC_COMMENT@76..111 "/// Name that endpoin ..."
-              TOKEN_EOL@111..112 "\n"
-              TOKEN_SPACE@112..120 "        "
-              NODE_DEFAULT@120..138
-                TOKEN_DECORATOR_DEFAULT@120..128 "@default"
-                TOKEN_PAREN_LEFT@128..129 "("
-                NODE_VALUE@129..136
-                  TOKEN_STRING@129..136 "\"World\""
-                TOKEN_PAREN_RIGHT@136..137 ")"
-                TOKEN_EOL@137..138 "\n"
-              TOKEN_SPACE@138..146 "        "
-            NODE_NAME@146..150
-              TOKEN_IDENTIFIER@146..150 "name"
-            TOKEN_COLON@150..151 ":"
-            TOKEN_SPACE@151..152 " "
-            NODE_TYPE@152..159
-              TOKEN_KW_STRING@152..158 "string"
-              TOKEN_SPACE@158..159 " "
-            TOKEN_EOL@159..160 "\n"
-          TOKEN_SPACE@160..164 "    "
-          TOKEN_CURLY_RIGHT@164..165 "}"
+      NODE_TYPE_RECORD@66..165
+        TOKEN_CURLY_LEFT@66..67 "{"
+        TOKEN_EOL@67..68 "\n"
+        TOKEN_SPACE@68..76 "        "
+        NODE_TYPE_FIELD@76..160
+          NODE_PROLOGUE@76..146
+            TOKEN_DOC_COMMENT@76..111 "/// Name that endpoin ..."
+            TOKEN_EOL@111..112 "\n"
+            TOKEN_SPACE@112..120 "        "
+            NODE_DEFAULT@120..138
+              TOKEN_DECORATOR_DEFAULT@120..128 "@default"
+              TOKEN_PAREN_LEFT@128..129 "("
+              NODE_VALUE_STRING@129..136
+                TOKEN_STRING@129..136 "\"World\""
+              TOKEN_PAREN_RIGHT@136..137 ")"
+              TOKEN_EOL@137..138 "\n"
+            TOKEN_SPACE@138..146 "        "
+          NODE_NAME@146..150
+            TOKEN_IDENTIFIER@146..150 "name"
+          TOKEN_COLON@150..151 ":"
+          TOKEN_SPACE@151..152 " "
+          NODE_TYPE_STRING@152..158
+            TOKEN_KW_STRING@152..158 "string"
+          TOKEN_SPACE@158..159 " "
+          TOKEN_EOL@159..160 "\n"
+        TOKEN_SPACE@160..164 "    "
+        TOKEN_CURLY_RIGHT@164..165 "}"
       TOKEN_EOL@165..166 "\n"
     TOKEN_EOL@166..167 "\n"
     TOKEN_SPACE@167..171 "    "
@@ -71,23 +70,22 @@ NODE_ROOT@0..278
         TOKEN_INTEGER@203..206 "200"
       TOKEN_COLON@206..207 ":"
       TOKEN_SPACE@207..208 " "
-      NODE_TYPE@208..244
-        NODE_TYPE_RECORD@208..244
-          TOKEN_KW_REC@208..211 "rec"
-          TOKEN_SPACE@211..212 " "
-          TOKEN_CURLY_LEFT@212..213 "{"
-          TOKEN_EOL@213..214 "\n"
-          TOKEN_SPACE@214..222 "        "
-          NODE_TYPE_FIELD@222..239
-            NODE_NAME@222..230
-              TOKEN_IDENTIFIER@222..230 "greeting"
-            TOKEN_COLON@230..231 ":"
-            TOKEN_SPACE@231..232 " "
-            NODE_TYPE@232..238
-              TOKEN_KW_STRING@232..238 "string"
-            TOKEN_EOL@238..239 "\n"
-          TOKEN_SPACE@239..243 "    "
-          TOKEN_CURLY_RIGHT@243..244 "}"
+      NODE_TYPE_RECORD@208..244
+        TOKEN_KW_REC@208..211 "rec"
+        TOKEN_SPACE@211..212 " "
+        TOKEN_CURLY_LEFT@212..213 "{"
+        TOKEN_EOL@213..214 "\n"
+        TOKEN_SPACE@214..222 "        "
+        NODE_TYPE_FIELD@222..239
+          NODE_NAME@222..230
+            TOKEN_IDENTIFIER@222..230 "greeting"
+          TOKEN_COLON@230..231 ":"
+          TOKEN_SPACE@231..232 " "
+          NODE_TYPE_STRING@232..238
+            TOKEN_KW_STRING@232..238 "string"
+          TOKEN_EOL@238..239 "\n"
+        TOKEN_SPACE@239..243 "    "
+        TOKEN_CURLY_RIGHT@243..244 "}"
       TOKEN_EOL@244..245 "\n"
     TOKEN_EOL@245..246 "\n"
     TOKEN_SPACE@246..250 "    "
@@ -98,7 +96,7 @@ NODE_ROOT@0..278
         TOKEN_KW_DEFAULT@253..260 "default"
       TOKEN_COLON@260..261 ":"
       TOKEN_SPACE@261..262 " "
-      NODE_TYPE@262..275
+      NODE_TYPE_REF@262..275
         TOKEN_IDENTIFIER@262..275 "ErrorResponse"
       TOKEN_EOL@275..276 "\n"
     TOKEN_CURLY_RIGHT@276..277 "}"

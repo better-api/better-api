@@ -41,24 +41,22 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         default_composite_type: DefaultCompositeType,
         is_recovery: F,
     ) {
-        self.builder.start_node(NODE_TYPE.into());
-
         // Checkpoint for wrapping the type into OPTION
         let checkpoint = self.builder.checkpoint();
 
         match self.peek() {
-            Some(TOKEN_IDENTIFIER) => self.advance(),
-            Some(TOKEN_KW_I32)
-            | Some(TOKEN_KW_I64)
-            | Some(TOKEN_KW_U32)
-            | Some(TOKEN_KW_U64)
-            | Some(TOKEN_KW_F32)
-            | Some(TOKEN_KW_F64)
-            | Some(TOKEN_KW_DATE)
-            | Some(TOKEN_KW_TIMESTAMP)
-            | Some(TOKEN_KW_BOOL)
-            | Some(TOKEN_KW_STRING)
-            | Some(TOKEN_KW_FILE) => self.advance(),
+            Some(TOKEN_IDENTIFIER) => self.with(NODE_TYPE_REF, Self::advance),
+            Some(TOKEN_KW_I32) => self.with(NODE_TYPE_I32, Self::advance),
+            Some(TOKEN_KW_I64) => self.with(NODE_TYPE_I64, Self::advance),
+            Some(TOKEN_KW_U32) => self.with(NODE_TYPE_U32, Self::advance),
+            Some(TOKEN_KW_U64) => self.with(NODE_TYPE_U64, Self::advance),
+            Some(TOKEN_KW_F32) => self.with(NODE_TYPE_F32, Self::advance),
+            Some(TOKEN_KW_F64) => self.with(NODE_TYPE_F64, Self::advance),
+            Some(TOKEN_KW_DATE) => self.with(NODE_TYPE_DATE, Self::advance),
+            Some(TOKEN_KW_TIMESTAMP) => self.with(NODE_TYPE_TIMESTAMP, Self::advance),
+            Some(TOKEN_KW_BOOL) => self.with(NODE_TYPE_BOOL, Self::advance),
+            Some(TOKEN_KW_STRING) => self.with(NODE_TYPE_STRING, Self::advance),
+            Some(TOKEN_KW_FILE) => self.with(NODE_TYPE_FILE, Self::advance),
 
             Some(TOKEN_BRACKET_LEFT) => self.parse_array_type(),
 
@@ -118,15 +116,9 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         if self.peek() == Some(TOKEN_OPTION) {
             self.builder
                 .start_node_at(checkpoint, NODE_TYPE_OPTION.into());
-            self.builder.start_node_at(checkpoint, NODE_TYPE.into());
-            self.builder.finish_node();
-
             self.advance();
-
             self.builder.finish_node();
         }
-
-        self.builder.finish_node();
     }
 
     fn parse_array_type(&mut self) {

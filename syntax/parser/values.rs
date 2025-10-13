@@ -10,18 +10,11 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
     /// If error is found, error node will be emitted. Error node consumes
     /// until EOF is reached, or until recovery token is found `is_recovery(token) == true`
     pub fn parse_value<F: Fn(Kind) -> bool>(&mut self, is_recovery: F) {
-        self.builder.start_node(NODE_VALUE.into());
-
         match self.peek() {
-            Some(TOKEN_STRING) => self.advance(),
-            Some(TOKEN_INTEGER) => self.advance(),
-            Some(TOKEN_FLOAT) => self.advance(),
-
-            Some(TOKEN_KW_TRUE) | Some(TOKEN_KW_FALSE) => {
-                self.builder.start_node(NODE_BOOL_VALUE.into());
-                self.advance();
-                self.builder.finish_node();
-            }
+            Some(TOKEN_STRING) => self.with(NODE_VALUE_STRING, Self::advance),
+            Some(TOKEN_INTEGER) => self.with(NODE_VALUE_INTEGER, Self::advance),
+            Some(TOKEN_FLOAT) => self.with(NODE_VALUE_FLOAT, Self::advance),
+            Some(TOKEN_KW_TRUE) | Some(TOKEN_KW_FALSE) => self.with(NODE_VALUE_BOOL, Self::advance),
 
             Some(TOKEN_CURLY_LEFT) => self.parse_object(),
 
@@ -43,8 +36,6 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 );
             }
         }
-
-        self.builder.finish_node();
     }
 
     fn parse_object(&mut self) {
