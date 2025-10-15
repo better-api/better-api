@@ -1,10 +1,7 @@
-use rowan::ast::AstNode;
-
-use crate::Kind;
 use crate::Kind::*;
-use crate::Language;
+use crate::{Kind, Language, SyntaxNode, SyntaxToken};
 
-pub type SyntaxNode = rowan::SyntaxNode<Language>;
+pub use rowan::ast::AstNode;
 
 // Helper macros to generator AST nodes as structs.
 macro_rules! ast_node {
@@ -108,6 +105,21 @@ ast_node! {
     ///
     /// Can be name of an object/record field, endpoint name, ...
     struct Name;
+}
+
+pub enum NameToken {
+    Identifier(SyntaxToken),
+    String(SyntaxToken),
+}
+
+impl Name {
+    pub fn token(&self) -> Option<NameToken> {
+        self.syntax().first_token().and_then(|t| match t.kind() {
+            TOKEN_IDENTIFIER => Some(NameToken::Identifier(t)),
+            TOKEN_STRING => Some(NameToken::String(t)),
+            _ => None,
+        })
+    }
 }
 
 ast_node! {

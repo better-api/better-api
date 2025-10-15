@@ -100,9 +100,8 @@ impl<'s, 'd> Tokenizer<'s, 'd> {
             let ch = self.chars.next().unwrap();
 
             // If we have escape sequence, we "ignore" the next character.
-            // The validity of escape sequences is checked during tree parsing.
-            // This was we can have ERROR_NODE and STRING_TOKEN as child, which
-            // preserves more information than ERROR_TOKEN.
+            // The validity of escape sequences is checked during semantic checking
+            // when string is being "materialized".
             if ch == '\\' {
                 let ch = self.chars.next();
                 self.pos += ch.map_or(0, |c| c.len_utf8());
@@ -460,6 +459,21 @@ mod test {
             ]
         );
         assert_eq!(diagnostics, vec![]);
+    }
+
+    #[test]
+    fn invalid_string_escape() {
+        let mut diagnostics = vec![];
+        let tokens: Vec<_> = tokenize(r#" "\" "#, &mut diagnostics).collect();
+        assert_eq!(tokens, vec![(TOKEN_SPACE, " "), (TOKEN_ERROR, "\"\\\" "),]);
+        assert_eq!(
+            diagnostics,
+            vec![
+                Report::error("missing string ending quotes '\"'".to_string()).with_label(
+                    Label::new("expected '\"' before EOF".to_string(), Span::new(4, 5,))
+                )
+            ]
+        );
     }
 
     #[test]

@@ -1,0 +1,34 @@
+---
+source: semantics/text.rs
+expression: diagnostics
+---
+[
+    Report {
+        severity: Error,
+        title: "missing string ending quotes '\"'",
+        label: Some(
+            Label {
+                message: "expected '\"' before new line",
+                span: Span {
+                    start: 28,
+                    end: 29,
+                },
+            },
+        ),
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "got invalid escape character `i`",
+        label: Some(
+            Label {
+                message: "invalid escape character",
+                span: Span {
+                    start: 40,
+                    end: 41,
+                },
+            },
+        ),
+        note: None,
+    },
+]

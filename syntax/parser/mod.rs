@@ -3,7 +3,7 @@ use rowan::ast::AstNode;
 use better_api_diagnostic::{Label, Report};
 
 use crate::Kind::{self, *};
-use crate::{Token, ast};
+use crate::{SyntaxNode, Token, ast};
 
 use prologue::Prologue;
 
@@ -19,7 +19,7 @@ pub struct Parse {
     pub root: ast::Root,
 
     /// Underlying green node.
-    pub node: ast::SyntaxNode,
+    pub node: SyntaxNode,
 
     /// Issues reported during parsing
     pub reports: Vec<Report>,
@@ -30,7 +30,7 @@ pub fn parse<'a, T: Iterator<Item = Token<'a>>>(tokens: T) -> Parse {
     let mut parser = Parser::new(tokens);
     parser.parse();
 
-    let node = ast::SyntaxNode::new_root(parser.builder.finish());
+    let node = SyntaxNode::new_root(parser.builder.finish());
     let root = ast::Root::cast(node.clone()).expect("parse result must be a root node");
 
     Parse {

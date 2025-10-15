@@ -11,6 +11,9 @@ version.workspace = true
 path = "lib.rs"
 
 [dependencies]
+better-api-syntax = { path = "../syntax" }
+better-api-diagnostic = { path = "../diagnostic" }
 
 [dev-dependencies]
 insta.workspace = true
+indoc.workspace = true

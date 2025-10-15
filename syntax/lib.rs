@@ -218,3 +218,8 @@ impl rowan::Language for Language {
         kind.into()
     }
 }
+
+pub type SyntaxNode = rowan::SyntaxNode<Language>;
+pub type SyntaxToken = rowan::SyntaxToken<Language>;
+
+pub use rowan::{NodeOrToken, TextRange, TextSize};
