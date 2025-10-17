@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 use better_api_diagnostic::{Label, Report, Span};
 use better_api_syntax::ast::AstNode;
-use better_api_syntax::{Kind, SyntaxToken, ast};
+use better_api_syntax::{ast, Kind, SyntaxToken};
 use better_api_syntax::{NodeOrToken, TextRange};
 
 /// Cache of all the strings in the AST.
@@ -20,6 +20,7 @@ use better_api_syntax::{NodeOrToken, TextRange};
 pub struct StringCache(HashMap<TextRange, String>);
 
 impl StringCache {
+    /// Creates a new StringCache from the root note.
     pub fn new(root: &ast::Root, diagnostics: &mut Vec<Report>) -> Self {
         let mut cache = Self(HashMap::default());
 
@@ -37,6 +38,9 @@ impl StringCache {
         cache
     }
 
+    /// Get string for a specific token.
+    ///
+    /// Syntax token should be a TOKEN_STRING, otherwise None is returned.
     pub fn get(&self, token: &SyntaxToken) -> Option<&str> {
         if token.kind() != Kind::TOKEN_STRING {
             return None;
