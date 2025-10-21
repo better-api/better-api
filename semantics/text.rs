@@ -9,29 +9,36 @@
 // This errors are mostly around invalid escape sequences.
 
 use std::collections::HashMap;
+use std::ops::Range;
 
 use better_api_diagnostic::{Label, Report, Span};
 use better_api_syntax::ast::AstNode;
-use better_api_syntax::{ast, Kind, SyntaxToken};
+use better_api_syntax::{Kind, SyntaxToken, ast};
 use better_api_syntax::{NodeOrToken, TextRange};
 
 /// Cache of all the strings in the AST.
 #[derive(Debug)]
-pub struct StringCache(HashMap<TextRange, String>);
+pub struct StringCache {
+    data: String,
+    ranges: HashMap<TextRange, Range<usize>>,
+}
 
 impl StringCache {
     /// Creates a new StringCache from the root note.
     pub fn new(root: &ast::Root, diagnostics: &mut Vec<Report>) -> Self {
-        let mut cache = Self(HashMap::default());
+        let mut cache = Self {
+            data: Default::default(),
+            ranges: Default::default(),
+        };
 
         for node in root.syntax().descendants_with_tokens() {
             match node {
                 NodeOrToken::Node(_) => (),
-                NodeOrToken::Token(t) => {
-                    if t.kind() == Kind::TOKEN_STRING {
-                        cache.add_string(t, diagnostics);
-                    }
-                }
+                NodeOrToken::Token(t) => match t.kind() {
+                    Kind::TOKEN_STRING => cache.add_string(t, diagnostics),
+                    Kind::TOKEN_IDENTIFIER => cache.add_ident(t),
+                    _ => (),
+                },
             }
         }
 
@@ -42,11 +49,24 @@ impl StringCache {
     ///
     /// Syntax token should be a TOKEN_STRING, otherwise None is returned.
     pub fn get(&self, token: &SyntaxToken) -> Option<&str> {
-        if token.kind() != Kind::TOKEN_STRING {
+        if !matches!(token.kind(), Kind::TOKEN_STRING | Kind::TOKEN_IDENTIFIER) {
             return None;
         }
 
-        self.0.get(&token.text_range()).map(|s| s.as_str())
+        let range = self.ranges.get(&token.text_range())?;
+        Some(&self.data[range.clone()])
+    }
+
+    fn add_ident(&mut self, token: SyntaxToken) {
+        let start = self.data.len();
+        self.data.push_str(token.text());
+        self.ranges.insert(
+            token.text_range(),
+            Range {
+                start,
+                end: self.data.len(),
+            },
+        );
     }
 
     fn add_string(&mut self, token: SyntaxToken, diagnostics: &mut Vec<Report>) {
@@ -54,14 +74,14 @@ impl StringCache {
         debug_assert!(&text[0..1] == "\"" && &text[text.len() - 1..text.len()] == "\"");
         text = &text[1..text.len() - 1]; // Remove start and end `"`
 
-        let start: usize = token.text_range().start().into();
+        let token_start: usize = token.text_range().start().into();
+        let start = self.data.len();
 
         let mut chars = text.char_indices();
-        let mut res = String::new();
 
         while let Some((idx, ch)) = chars.next() {
             if ch != '\\' {
-                res.push(ch);
+                self.data.push(ch);
                 continue;
             }
 
@@ -70,7 +90,7 @@ impl StringCache {
                     Report::error("expected escaped character, got '\"'".to_string()).with_label(
                         Label::new(
                             "expected escaped character".to_string(),
-                            Span::new(start + idx, start + idx + 1),
+                            Span::new(token_start + idx, token_start + idx + 1),
                         ),
                     ),
                 );
@@ -78,30 +98,38 @@ impl StringCache {
             };
 
             match esc {
-                'n' => res.push('\n'),
-                't' => res.push('\t'),
-                '"' => res.push('"'),
-                '\\' => res.push('\\'),
+                'n' => self.data.push('\n'),
+                't' => self.data.push('\t'),
+                '"' => self.data.push('"'),
+                '\\' => self.data.push('\\'),
                 _ => {
                     diagnostics.push(
                         Report::error(format!("got invalid escape character `{esc}`")).with_label(
                             Label::new(
                                 "invalid escape character".to_string(),
-                                Span::new(start + idx, start + end),
+                                Span::new(token_start + idx, token_start + end),
                             ),
                         ),
                     );
-                    res.push(esc);
+                    self.data.push(esc);
                 }
             }
         }
 
-        self.0.insert(token.text_range(), res);
+        self.ranges.insert(
+            token.text_range(),
+            Range {
+                start,
+                end: self.data.len(),
+            },
+        );
     }
 }
 
 #[cfg(test)]
 mod test {
+    use std::ops::Range;
+
     use indoc::indoc;
 
     use better_api_syntax::TextRange;
@@ -123,18 +151,22 @@ mod test {
         let res = parse(tokens);
 
         let strings = StringCache::new(&res.root, &mut diagnostics);
-        assert_eq!(strings.0.len(), 3);
+        assert_eq!(strings.ranges.len(), 7);
         assert_eq!(
-            strings.0.get(&TextRange::new(6.into(), 11.into())),
-            Some(&"foo".to_string())
+            strings.ranges.get(&TextRange::new(6.into(), 11.into())),
+            Some(&Range { start: 4, end: 7 })
         );
         assert_eq!(
-            strings.0.get(&TextRange::new(35.into(), 45.into())),
-            Some(&"invalid".to_string())
+            strings.ranges.get(&TextRange::new(35.into(), 45.into())),
+            Some(&Range { start: 15, end: 22 })
         );
         assert_eq!(
-            strings.0.get(&TextRange::new(52.into(), 75.into())),
-            Some(&"valid \t \n \\ \" foo".to_string())
+            strings.ranges.get(&TextRange::new(52.into(), 75.into())),
+            Some(&Range { start: 26, end: 43 })
+        );
+        assert_eq!(
+            strings.data,
+            "namefoonamenameinvalidnamevalid \t \n \\ \" foo"
         );
 
         insta::assert_debug_snapshot!(diagnostics);
