@@ -32,7 +32,7 @@ use better_api_diagnostic::Report;
 ///
 /// More details about what a valid name is can be found in
 /// the [module documentation](self).
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NameBuf(Box<str>);
 
 impl NameBuf {
@@ -70,7 +70,7 @@ impl Borrow<Name> for NameBuf {
 ///
 /// More details about what a valid name is can be found in
 /// the [module documentation](self).
-#[derive(PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Name(str);
 

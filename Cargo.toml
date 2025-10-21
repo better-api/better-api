@@ -22,3 +22,4 @@ version.workspace = true
 [workspace.dependencies]
 insta = "1.43"
 indoc = "2"
+derive_more = { version = "2.0", features = ["display", "debug"] }
