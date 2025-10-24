@@ -23,25 +23,31 @@
 //!
 //! Composite types are represented with [`Array`] and [`Object`]. These two types
 //! allow you to iterate through the values inside the composite type.
-
+//!
+//! ## Strings and Names
+//!
+//! Some values hold a [`&Name`](Name) which is a wrapper around a &str.
+//! Ownership of names and strings should be handled by [`StringCache`](crate::text::StringCache)
+//!
+//! ## Lifetimes
+//!
+//! - `'s` represents the lifetime of string slices stored in the
+//!   [`StringCache`](crate::text::StringCache).
+//! - `'a` ties a value to the lifetime of the [`ValueArena`].
 use better_api_syntax::SyntaxNode;
 
 use crate::Tracked;
 use crate::name::Name;
 
 /// Representation of a value.
-#[derive(derive_more::Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Value<'s, 'a> {
     Null,
     String(&'s str),
     Bool(bool),
     Integer(i128), // i128 is large enough for i64 and u64
     Float(f64),
-
-    #[debug("Object")]
     Object(Object<'s, 'a>),
-
-    #[debug("Array")]
     Array(Array<'s, 'a>),
 }
 
@@ -93,8 +99,9 @@ pub type TrackedValue<'s, 'a> = Tracked<Value<'s, 'a>>;
 /// Object value returned by the [`ValueArena`].
 ///
 /// It's an iterator where each item is an [`TrackedObjectField`].
-#[derive(PartialEq)]
+#[derive(derive_more::Debug, PartialEq)]
 pub struct Object<'s, 'a> {
+    #[debug(skip)]
     arena: &'a ValueArena<'s>,
     current: ValueId,
     end: ValueId,
@@ -140,8 +147,9 @@ impl<'s, 'a> Iterator for Object<'s, 'a> {
 /// Array value returned by the [`ValueArena`].
 ///
 /// It's an iterator where each item is an [`TrackedValue`].
-#[derive(PartialEq)]
+#[derive(derive_more::Debug, PartialEq)]
 pub struct Array<'s, 'a> {
+    #[debug(skip)]
     arena: &'a ValueArena<'s>,
     current: ValueId,
     end: ValueId,
@@ -171,7 +179,7 @@ impl<'s, 'a> Iterator for Array<'s, 'a> {
     }
 }
 
-/// Non-composite type
+/// Non-composite value
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PrimitiveValue<'s> {
     Null,
@@ -286,7 +294,7 @@ pub struct ObjectBuilder<'s, 'p> {
     /// Index in the arena that contains Slot::Object of this object.
     start: ValueId,
 
-    /// Was finished called, used by drop implementation
+    /// Was finished called, used by drop implementation.
     finished: bool,
 }
 
@@ -407,7 +415,7 @@ enum Slot<'s> {
         // Used for skipping the whole object during iteration.
         end: ValueId,
     },
-    // Name of the object.
+    // Name of the field in the object.
     // In TrackedSlot syntax pointer points to the whole field
     // and not just the name.
     ObjectField(&'s Name),
@@ -422,7 +430,7 @@ impl<'s> From<PrimitiveValue<'s>> for Slot<'s> {
 type TrackedSlot<'s> = Tracked<Slot<'s>>;
 
 /// Arena that holds the values.
-#[derive(Default, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub struct ValueArena<'s> {
     data: Vec<TrackedSlot<'s>>,
 }
@@ -541,11 +549,11 @@ mod test {
         // let names: Vec<_> = inner.map(|f| f.data.value.data).collect();
         // assert_eq!(names, vec![]);
 
-        let arr = match arena.get(arr_id).data {
+        let mut arr = match arena.get(arr_id).data {
             Value::Array(arr) => arr,
             _ => unreachable!(),
         };
-        let vals: Vec<_> = arr.map(|v| v.data).collect();
+        let vals: Vec<_> = arr.by_ref().map(|v| v.data).collect();
         assert_eq!(vals, vec![]);
     }
 }
