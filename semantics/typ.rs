@@ -58,41 +58,48 @@ pub enum Type<'s, 'a> {
 }
 
 impl<'s, 'a> Type<'s, 'a> {
-    fn from_simple(arena: &'a TypeArena<'s>, simple: SimpleType) -> Self {
+    fn from_primitive(arena: &'a TypeArena<'s>, simple: PrimitiveType) -> Self {
         match simple {
-            SimpleType::I32 => Type::I32,
-            SimpleType::I64 => Type::I64,
-            SimpleType::U32 => Type::U32,
-            SimpleType::U64 => Type::U64,
-            SimpleType::F32 => Type::F32,
-            SimpleType::F64 => Type::F64,
-            SimpleType::Date => Type::Date,
-            SimpleType::Timestamp => Type::Timestamp,
-            SimpleType::Bool => Type::Bool,
-            SimpleType::String => Type::String,
-            SimpleType::File => Type::File,
-            SimpleType::Reference(id) => Type::Reference(Reference { arena, id }),
-            SimpleType::Option(id) => Type::Option(Reference { arena, id }),
-            SimpleType::Array(id) => Type::Array(Reference { arena, id }),
-            SimpleType::Enum { typ, values } => Type::Enum(Enum {
-                typ: typ.map(|id| Reference { arena, id }),
-                values,
+            PrimitiveType::I32 => Type::I32,
+            PrimitiveType::I64 => Type::I64,
+            PrimitiveType::U32 => Type::U32,
+            PrimitiveType::U64 => Type::U64,
+            PrimitiveType::F32 => Type::F32,
+            PrimitiveType::F64 => Type::F64,
+            PrimitiveType::Date => Type::Date,
+            PrimitiveType::Timestamp => Type::Timestamp,
+            PrimitiveType::Bool => Type::Bool,
+            PrimitiveType::String => Type::String,
+            PrimitiveType::File => Type::File,
+            PrimitiveType::Reference(id) => Type::Reference(Reference { arena, id }),
+        }
+    }
+
+    fn from_slot(arena: &'a TypeArena<'s>, id: TypeId, slot: &'a Slot<'s>) -> Self {
+        match slot {
+            Slot::Primitive(simple) => Type::from_primitive(arena, *simple),
+            Slot::Array { .. } => Type::Array(Reference {
+                arena,
+                id: TypeId(id.0 + 1),
             }),
-            SimpleType::Response {
+            Slot::Option { .. } => Type::Option(Reference {
+                arena,
+                id: TypeId(id.0 + 1),
+            }),
+            Slot::Enum { typ, values } => Type::Enum(Enum {
+                typ: typ.map(|id| Reference { arena, id }),
+                values: *values,
+            }),
+            Slot::Response {
                 body,
                 headers,
                 content_type,
             } => Type::Response(Response {
                 body: body.map(|id| Reference { arena, id }),
                 headers: headers.map(|id| Reference { arena, id }),
-                content_type,
+                content_type: *content_type,
             }),
-        }
-    }
 
-    fn from_slot(arena: &'a TypeArena<'s>, id: TypeId, slot: &'a Slot<'s>) -> Self {
-        match slot {
-            Slot::Simple(simple) => Type::from_simple(arena, *simple),
             Slot::Record { end } => Type::Record(TypeFieldIterator {
                 arena,
                 current: id,
@@ -170,7 +177,12 @@ impl<'s, 'a> Iterator for TypeFieldIterator<'s, 'a> {
 
         let typ = Type::from_slot(self.arena, TypeId(self.current.0 + 1), &typ_slot.data);
 
-        self.current.0 += 2;
+        self.current = match &typ_slot.data {
+            Slot::Option { end } => *end,
+            Slot::Array { end } => *end,
+            Slot::Primitive(_) => TypeId(self.current.0 + 2),
+            typ => unreachable!("invalid type's field type in arena: {typ:?}"),
+        };
 
         Some(TrackedTypeField {
             syntax: field_slot.syntax,
@@ -221,7 +233,7 @@ pub struct TypeId(u32);
 ///
 /// These types can be constructed without using a builder.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum SimpleType {
+pub enum PrimitiveType {
     I32,
     I64,
     U32,
@@ -234,8 +246,37 @@ pub enum SimpleType {
     String,
     File,
     Reference(TypeId),
-    Option(TypeId),
-    Array(TypeId),
+}
+
+/// Slot in the type arena.
+///
+/// Most of the representations are obvious, the two notable that deserve a separate
+/// comment are Array and Option. Array and Option can be intertwined to form a complex
+/// nested type (ie. `[[[i32?]]?]?`). They can also be nested this way inside Record or Union
+/// field, which means we need an efficient way to skip the whole composition.
+///
+/// Array and Object work by having the next type in the arena be the type wrapped in them.
+/// For instance `[i32]` in arena is represented as `[Slot::Array, Slot::Primitive(_)]`
+/// This allows us to nest stuff, like example above:
+/// ```
+/// [Slot::Option, Slot::Array, Slot::Option, Slot::Array, Slot::Array, Slot::Option,
+/// Slot::Primitive(_)]
+/// ```
+/// The `end` property of Array and Option represent the TypeId of the type after the whole nesting
+/// and can be used to skip the whole nested type when doing field iteration.
+#[derive(Debug, PartialEq)]
+enum Slot<'s> {
+    Primitive(PrimitiveType),
+    Option {
+        // Id after the last type in the nested Option<...> type.
+        // Used for skipping the whole Option during iteration.
+        end: TypeId,
+    },
+    Array {
+        // Id after the last type in the nested Array<...> type.
+        // Used for skipping the whole Array during iteration.
+        end: TypeId,
+    },
     Enum {
         typ: Option<TypeId>,
         values: value::ValueId,
@@ -245,12 +286,6 @@ pub enum SimpleType {
         headers: Option<TypeId>,
         content_type: Option<value::ValueId>,
     },
-}
-
-/// Slot in the type arena.
-#[derive(Debug, PartialEq)]
-enum Slot<'s> {
-    Simple(SimpleType),
     Record {
         // Id after the last field in the record.
         // Used for skipping the whole record during iteration.
@@ -271,13 +306,21 @@ enum Slot<'s> {
     },
 }
 
-impl<'s> From<SimpleType> for Slot<'s> {
-    fn from(value: SimpleType) -> Self {
-        Self::Simple(value)
+impl<'s> From<PrimitiveType> for Slot<'s> {
+    fn from(value: PrimitiveType) -> Self {
+        Self::Primitive(value)
     }
 }
 
 type TrackedSlot<'s> = Tracked<Slot<'s>>;
+
+trait BuilderParent<'s> {
+    fn arena(&mut self) -> &mut TypeArena<'s>;
+
+    fn data(&mut self) -> &mut Vec<TrackedSlot<'s>> {
+        &mut self.arena().data
+    }
+}
 
 /// Helper type for adding records and unions to arena.
 ///
@@ -285,8 +328,8 @@ type TrackedSlot<'s> = Tracked<Slot<'s>>;
 /// Call [`finish`](FieldBuilder::finish) once all fields are added.
 ///
 /// Dropping the builder without finishing rolls back any changes.
-pub struct FieldBuilder<'s, 'a> {
-    arena: &'a mut TypeArena<'s>,
+pub struct FieldBuilder<'s, 'p> {
+    arena: &'p mut TypeArena<'s>,
 
     /// Index in the arena that contains Slot::Record or Slot::Union.
     start: TypeId,
@@ -344,12 +387,46 @@ impl<'s, 'p> FieldBuilder<'s, 'p> {
         field_node: &SyntaxNode,
         name: &'s Name,
         typ_node: &SyntaxNode,
-        typ: SimpleType,
+        typ: PrimitiveType,
         default: Option<value::ValueId>,
     ) {
         self.data()
             .push(Tracked::new(field_node, Slot::TypeField { name, default }));
         self.data().push(Tracked::new(typ_node, typ.into()));
+    }
+
+    /// Add a new field of array type.
+    ///
+    /// `field_node` should be the node of the whole field (name & type).
+    /// `array_node` should be the node of only the array that will be built (field type).
+    pub fn start_array<'a>(
+        &'a mut self,
+        field_node: &SyntaxNode,
+        name: &'s Name,
+        array_node: &SyntaxNode,
+        default: Option<value::ValueId>,
+    ) -> OptionArrayBuilder<'s, 'a> {
+        self.data()
+            .push(Tracked::new(field_node, Slot::TypeField { name, default }));
+
+        OptionArrayBuilder::new_array(self, array_node)
+    }
+
+    /// Add a new field of option type.
+    ///
+    /// `field_node` should be the node of the whole field (name & type).
+    /// `option_node` should be the node of only the option that will be built (field type).
+    pub fn start_option<'a>(
+        &'a mut self,
+        field_node: &SyntaxNode,
+        name: &'s Name,
+        option_node: &SyntaxNode,
+        default: Option<value::ValueId>,
+    ) -> OptionArrayBuilder<'s, 'a> {
+        self.data()
+            .push(Tracked::new(field_node, Slot::TypeField { name, default }));
+
+        OptionArrayBuilder::new_option(self, option_node)
     }
 
     /// Finalize the record or union currently being built.
@@ -380,6 +457,105 @@ impl<'s, 'a> Drop for FieldBuilder<'s, 'a> {
 
         let len = self.start.0 as usize;
         self.data().truncate(len);
+    }
+}
+
+impl<'s, 'a> BuilderParent<'s> for FieldBuilder<'s, 'a> {
+    fn arena(&mut self) -> &mut TypeArena<'s> {
+        self.arena
+    }
+}
+
+/// Helper type for adding Array and Option type to arena.
+///
+/// This type is constructed with [`TypeArena::start_array`],
+/// [`TypeArena::start_option`] or [`FieldBuilder`] equivalent.
+/// After you are done, you should call [`finish`](OptionArrayBuilder::finish),
+/// which returns the id of the final type in the arena.
+///
+/// If builder is dropped before calling finish, added types are removed from the arena.
+pub struct OptionArrayBuilder<'s, 'p> {
+    parent: &'p mut dyn BuilderParent<'s>,
+
+    /// Index in the arena that contains the first Slot::Array or Slot::Option.
+    start: TypeId,
+
+    /// Was finished called, used by drop implementation.
+    finished: bool,
+}
+
+impl<'s, 'p> OptionArrayBuilder<'s, 'p> {
+    fn new_array(parent: &'p mut dyn BuilderParent<'s>, node: &SyntaxNode) -> Self {
+        let idx = parent.data().len();
+        parent
+            .data()
+            .push(Tracked::new(node, Slot::Array { end: TypeId(0) }));
+
+        Self {
+            parent,
+            start: TypeId(idx as u32),
+            finished: false,
+        }
+    }
+
+    fn new_option(parent: &'p mut dyn BuilderParent<'s>, node: &SyntaxNode) -> Self {
+        let idx = parent.data().len();
+        parent
+            .data()
+            .push(Tracked::new(node, Slot::Option { end: TypeId(0) }));
+
+        Self {
+            parent,
+            start: TypeId(idx as u32),
+            finished: false,
+        }
+    }
+
+    /// Start a new array inside the current array or option.
+    pub fn start_array(&mut self, node: &SyntaxNode) {
+        self.parent
+            .data()
+            .push(Tracked::new(node, Slot::Array { end: TypeId(0) }));
+    }
+
+    /// Start a new option inside the current array or option.
+    pub fn start_option(&mut self, node: &SyntaxNode) {
+        self.parent
+            .data()
+            .push(Tracked::new(node, Slot::Option { end: TypeId(0) }));
+    }
+
+    /// Finish building this type.
+    pub fn finish(mut self, node: &SyntaxNode, typ: PrimitiveType) -> TypeId {
+        self.finished = true;
+
+        let start = self.start.0 as usize;
+        let len = self.parent.data().len();
+        let end_id = TypeId(len as u32 + 1);
+
+        // Update the in between types
+        for slot in &mut self.parent.data()[start..len] {
+            match &mut slot.data {
+                Slot::Option { end } => *end = end_id,
+                Slot::Array { end } => *end = end_id,
+                _ => unreachable!(),
+            }
+        }
+
+        self.parent.data().push(Tracked::new(node, typ.into()));
+
+        end_id
+    }
+}
+
+impl<'s, 'p> Drop for OptionArrayBuilder<'s, 'p> {
+    fn drop(&mut self) {
+        if self.finished {
+            return;
+        }
+
+        let len = self.start.0 as usize;
+        self.parent.data().truncate(len);
     }
 }
 
@@ -414,12 +590,60 @@ impl<'s> TypeArena<'s> {
         }
     }
 
-    /// Add a simple type to the arena.
+    /// Add a primitive type to the arena.
     ///
     /// Returns the [`TypeId`] assigned to the new type.
-    pub fn add_simple(&mut self, node: &SyntaxNode, typ: SimpleType) -> TypeId {
+    pub fn add_primitive(&mut self, node: &SyntaxNode, typ: PrimitiveType) -> TypeId {
         let idx = self.data.len();
         self.data.push(Tracked::new(node, typ.into()));
+        TypeId(idx as u32)
+    }
+
+    /// Add an enum to the arena.
+    ///
+    /// - `typ` is the type of the values in the enum.
+    /// - `values` should be a [`ValueId`](value::ValueId) pointing to array of possible values for
+    ///   this arena.
+    /// - `node` is the syntax node of the whole enum.
+    ///
+    /// Returns the [`TypeId`] assigned to the enum.
+    pub fn add_enum(
+        &mut self,
+        node: &SyntaxNode,
+        typ: Option<TypeId>,
+        values: value::ValueId,
+    ) -> TypeId {
+        let idx = self.data.len();
+        self.data
+            .push(Tracked::new(node, Slot::Enum { typ, values }));
+        TypeId(idx as u32)
+    }
+
+    /// Add a response to the arena.
+    ///
+    /// - `body` is the type of the response body.
+    /// - `headers` is the type of the headers.
+    /// - `content_type` should be a [`ValueId`](value::ValueId) pointing to a string defining the
+    ///   content type.
+    /// - `node` is the syntax node of the whole response.
+    ///
+    /// Returns the [`TypeId`] assigned to the response.
+    pub fn add_response(
+        &mut self,
+        node: &SyntaxNode,
+        body: Option<TypeId>,
+        headers: Option<TypeId>,
+        content_type: Option<value::ValueId>,
+    ) -> TypeId {
+        let idx = self.data.len();
+        self.data.push(Tracked::new(
+            node,
+            Slot::Response {
+                body,
+                headers,
+                content_type,
+            },
+        ));
         TypeId(idx as u32)
     }
 
@@ -440,4 +664,43 @@ impl<'s> TypeArena<'s> {
     ) -> FieldBuilder<'s, 'a> {
         FieldBuilder::new_union(self, node, discriminator)
     }
+
+    /// Add array to the arena.
+    ///
+    /// Returns a [`OptionArrayBuilder`] that allows building a nested array.
+    pub fn start_array<'a>(&'a mut self, node: &SyntaxNode) -> OptionArrayBuilder<'s, 'a> {
+        OptionArrayBuilder::new_array(self, node)
+    }
+
+    /// Add option to the arena.
+    ///
+    /// Returns a [`OptionArrayBuilder`] that allows building a nested option.
+    pub fn start_option<'a>(&'a mut self, node: &SyntaxNode) -> OptionArrayBuilder<'s, 'a> {
+        OptionArrayBuilder::new_option(self, node)
+    }
+}
+
+impl<'s> BuilderParent<'s> for TypeArena<'s> {
+    fn arena(&mut self) -> &mut TypeArena<'s> {
+        self
+    }
+}
+
+#[cfg(test)]
+mod test {
+    // use better_api_syntax::{ast::AstNode, parse, tokenize};
+    //
+    // use crate::typ::TypeArena;
+
+    // #[test]
+    // fn asdf() {
+    //     let mut diags = vec![];
+    //     let tokens = tokenize("", &mut diags);
+    //     let res = parse(tokens);
+    //
+    //     let node = res.root.syntax();
+    //
+    //     let mut arena = TypeArena::new();
+    //     let mut r1 = arena.start_record(node);
+    // }
 }
