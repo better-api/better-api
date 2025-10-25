@@ -192,6 +192,8 @@ pub enum PrimitiveValue<'s> {
 trait BuilderParent<'s> {
     fn arena(&mut self) -> &mut ValueArena<'s>;
 
+    fn is_field(&self) -> bool;
+
     fn data(&mut self) -> &mut Vec<TrackedSlot<'s>> {
         &mut self.arena().data
     }
@@ -218,6 +220,10 @@ pub struct ArrayBuilder<'s, 'p> {
 impl<'s, 'p> BuilderParent<'s> for ArrayBuilder<'s, 'p> {
     fn arena(&mut self) -> &mut ValueArena<'s> {
         self.parent.arena()
+    }
+
+    fn is_field(&self) -> bool {
+        false
     }
 }
 
@@ -275,7 +281,13 @@ impl<'s, 'p> Drop for ArrayBuilder<'s, 'p> {
             return;
         }
 
-        let len = self.start.0 as usize;
+        let mut len = self.start.0 as usize;
+
+        // Also remove the field name of the parent.
+        if self.parent.is_field() {
+            len -= 1;
+        }
+
         self.data().truncate(len);
     }
 }
@@ -301,6 +313,10 @@ pub struct ObjectBuilder<'s, 'p> {
 impl<'s, 'p> BuilderParent<'s> for ObjectBuilder<'s, 'p> {
     fn arena(&mut self) -> &mut ValueArena<'s> {
         self.parent.arena()
+    }
+
+    fn is_field(&self) -> bool {
+        true
     }
 }
 
@@ -391,7 +407,13 @@ impl<'s, 'p> Drop for ObjectBuilder<'s, 'p> {
             return;
         }
 
-        let len = self.start.0 as usize;
+        let mut len = self.start.0 as usize;
+
+        // Also remove the field name of the parent.
+        if self.parent.is_field() {
+            len -= 1;
+        }
+
         self.data().truncate(len);
     }
 }
@@ -481,6 +503,10 @@ impl<'s> ValueArena<'s> {
 impl<'s> BuilderParent<'s> for ValueArena<'s> {
     fn arena(&mut self) -> &mut ValueArena<'s> {
         self
+    }
+
+    fn is_field(&self) -> bool {
+        false
     }
 }
 

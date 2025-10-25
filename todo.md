@@ -1,6 +1,6 @@
 ## TODO
 
-- [ ] handle array/option type/value being dropped inside object/record/union...
+- [x] handle array/option type/value being dropped inside object/record/union...
   - remove the whole field
   - make the array zero sized (what about option?)
 - [ ] test value and type arena by:

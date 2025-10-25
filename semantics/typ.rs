@@ -317,6 +317,8 @@ type TrackedSlot<'s> = Tracked<Slot<'s>>;
 trait BuilderParent<'s> {
     fn arena(&mut self) -> &mut TypeArena<'s>;
 
+    fn is_field(&self) -> bool;
+
     fn data(&mut self) -> &mut Vec<TrackedSlot<'s>> {
         &mut self.arena().data
     }
@@ -464,6 +466,10 @@ impl<'s, 'a> BuilderParent<'s> for FieldBuilder<'s, 'a> {
     fn arena(&mut self) -> &mut TypeArena<'s> {
         self.arena
     }
+
+    fn is_field(&self) -> bool {
+        true
+    }
 }
 
 /// Helper type for adding Array and Option type to arena.
@@ -554,7 +560,13 @@ impl<'s, 'p> Drop for OptionArrayBuilder<'s, 'p> {
             return;
         }
 
-        let len = self.start.0 as usize;
+        let mut len = self.start.0 as usize;
+
+        // Also remove the field name of the parent.
+        if self.parent.is_field() {
+            len -= 1;
+        }
+
         self.parent.data().truncate(len);
     }
 }
@@ -683,6 +695,10 @@ impl<'s> TypeArena<'s> {
 impl<'s> BuilderParent<'s> for TypeArena<'s> {
     fn arena(&mut self) -> &mut TypeArena<'s> {
         self
+    }
+
+    fn is_field(&self) -> bool {
+        false
     }
 }
 
