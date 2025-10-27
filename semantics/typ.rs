@@ -258,7 +258,7 @@ pub enum PrimitiveType {
 /// Array and Object work by having the next type in the arena be the type wrapped in them.
 /// For instance `[i32]` in arena is represented as `[Slot::Array, Slot::Primitive(_)]`
 /// This allows us to nest stuff, like example above:
-/// ```
+/// ```text
 /// [Slot::Option, Slot::Array, Slot::Option, Slot::Array, Slot::Array, Slot::Option,
 /// Slot::Primitive(_)]
 /// ```

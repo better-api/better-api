@@ -516,70 +516,316 @@ mod test {
 
     use crate::{
         name::Name,
-        value::{PrimitiveValue, Value, ValueArena},
+        value::{PrimitiveValue, Value, ValueArena, ValueId},
     };
 
+    use super::Slot;
+
+    /// Helper for creating names used in tests.
+    fn name(val: &str) -> &Name {
+        Name::new(val).unwrap()
+    }
+
     #[test]
-    fn asdf() {
+    fn builds_nested_values() {
         let mut diags = vec![];
         let tokens = tokenize("", &mut diags);
         let res = parse(tokens);
-
         let node = res.root.syntax();
 
         let mut arena = ValueArena::new();
-        let mut o1 = arena.start_object(node);
-        let mut o2 = o1.start_object(node, Name::new("object").unwrap(), node);
 
-        o2.add_primitive(
-            node,
-            Name::new("primitive_inner").unwrap(),
-            node,
-            PrimitiveValue::Null,
-        );
-        o2.finish();
+        let null_id = arena.add_primitive(node, PrimitiveValue::Null);
+        let bool_id = arena.add_primitive(node, PrimitiveValue::Bool(true));
+        let string_id = arena.add_primitive(node, PrimitiveValue::String("hello"));
 
-        o1.add_primitive(
-            node,
-            Name::new("primitive").unwrap(),
-            node,
-            PrimitiveValue::Bool(false),
-        );
-        o1.finish();
+        // root object will look like this:
+        // {
+        //   "flag": 7,
+        //   "container": {
+        //     "numbers": [
+        //       1,
+        //       ["deep", 99],
+        //       {
+        //         "value": 2.5,
+        //         "label": "done"
+        //       }
+        //     ],
+        //     "nested": {
+        //       "status": "ok",
+        //       "count": 2
+        //     },
+        //     "active": false
+        //   }
+        // }
+        let mut root = arena.start_object(node);
+        root.add_primitive(node, name("flag"), node, PrimitiveValue::Integer(7));
 
-        arena.add_primitive(node, PrimitiveValue::Null);
+        let mut container = root.start_object(node, name("container"), node);
+        let mut numbers_builder = container.start_array(node, name("numbers"), node);
+        numbers_builder.add_primitive(node, PrimitiveValue::Integer(1));
 
-        let mut arr = arena.start_array(node);
-        arr.add_primitive(node, PrimitiveValue::Integer(1));
-        arr.add_primitive(node, PrimitiveValue::Integer(2));
+        let mut deep_array_builder = numbers_builder.start_array(node);
+        deep_array_builder.add_primitive(node, PrimitiveValue::String("deep"));
+        deep_array_builder.add_primitive(node, PrimitiveValue::Integer(99));
+        deep_array_builder.finish();
 
-        let mut arr2 = arr.start_array(node);
-        arr2.add_primitive(node, PrimitiveValue::Float(42.69));
-        arr2.finish();
+        let mut array_obj_builder = numbers_builder.start_object(node);
+        {
+            let mut dropped_array = array_obj_builder.start_array(node, name("unused"), node);
+            dropped_array.add_primitive(node, PrimitiveValue::Integer(123));
+            // Dropped without finish on purpose to ensure cleanup.
+        }
 
-        arr.add_primitive(node, PrimitiveValue::Null);
-        let arr_id = arr.finish();
+        array_obj_builder.add_primitive(node, name("value"), node, PrimitiveValue::Float(2.5));
+        array_obj_builder.add_primitive(node, name("label"), node, PrimitiveValue::String("done"));
+        let array_obj_id = array_obj_builder.finish();
 
-        // let primitives: Vec<_> = arena.data.into_iter().map(|v| v.data).collect();
-        // assert_eq!(primitives, vec![]);
+        let numbers_id = numbers_builder.finish();
 
-        // let mut obj = match arena.get(ValueId(0)).data {
-        //     Value::Object(object) => object,
-        //     _ => unreachable!(),
-        // };
-        // let mut inner = match obj.next().unwrap().data.value.data {
-        //     Value::Object(object) => object,
-        //     _ => unreachable!(),
-        // };
-        //
-        // let names: Vec<_> = inner.map(|f| f.data.value.data).collect();
-        // assert_eq!(names, vec![]);
+        {
+            let mut dropped_object = container.start_object(node, name("unused"), node);
+            dropped_object.add_primitive(node, name("unused"), node, PrimitiveValue::Null);
+            // Dropped without finish on purpose to ensure cleanup.
+        }
 
-        let mut arr = match arena.get(arr_id).data {
-            Value::Array(arr) => arr,
-            _ => unreachable!(),
+        let mut nested_builder = container.start_object(node, name("nested"), node);
+        nested_builder.add_primitive(node, name("status"), node, PrimitiveValue::String("ok"));
+        nested_builder.add_primitive(node, name("count"), node, PrimitiveValue::Integer(2));
+        let nested_obj_id = nested_builder.finish();
+
+        container.add_primitive(node, name("active"), node, PrimitiveValue::Bool(false));
+        let container_id = container.finish();
+
+        let root_id = root.finish();
+
+        // Check that the layout of the arena is as expected
+        let expected_slots = vec![
+            Slot::Primitive(PrimitiveValue::Null),
+            Slot::Primitive(PrimitiveValue::Bool(true)),
+            Slot::Primitive(PrimitiveValue::String("hello")),
+            Slot::Object { end: ValueId(27) },
+            Slot::ObjectField(name("flag")),
+            Slot::Primitive(PrimitiveValue::Integer(7)),
+            Slot::ObjectField(name("container")),
+            Slot::Object { end: ValueId(27) },
+            Slot::ObjectField(name("numbers")),
+            Slot::Array { end: ValueId(19) },
+            Slot::Primitive(PrimitiveValue::Integer(1)),
+            Slot::Array { end: ValueId(14) },
+            Slot::Primitive(PrimitiveValue::String("deep")),
+            Slot::Primitive(PrimitiveValue::Integer(99)),
+            Slot::Object { end: ValueId(19) },
+            Slot::ObjectField(name("value")),
+            Slot::Primitive(PrimitiveValue::Float(2.5)),
+            Slot::ObjectField(name("label")),
+            Slot::Primitive(PrimitiveValue::String("done")),
+            Slot::ObjectField(name("nested")),
+            Slot::Object { end: ValueId(25) },
+            Slot::ObjectField(name("status")),
+            Slot::Primitive(PrimitiveValue::String("ok")),
+            Slot::ObjectField(name("count")),
+            Slot::Primitive(PrimitiveValue::Integer(2)),
+            Slot::ObjectField(name("active")),
+            Slot::Primitive(PrimitiveValue::Bool(false)),
+        ];
+
+        assert_eq!(arena.data.len(), expected_slots.len());
+        for (idx, expected) in expected_slots.iter().enumerate() {
+            assert_eq!(
+                &arena.data[idx].data, expected,
+                "slot mismatch at index {idx}"
+            );
+        }
+
+        // Check primitive value getting works
+        assert_eq!(arena.get(null_id).data, Value::Null);
+        assert_eq!(arena.get(bool_id).data, Value::Bool(true));
+        assert_eq!(arena.get(string_id).data, Value::String("hello"));
+
+        // Check that getters for nested values work by checking that root
+        // object is exactly how it should be
+        let mut root_object = match arena.get(root_id).data {
+            Value::Object(object) => object,
+            other => panic!("expected object at root_id, got {other:?}"),
         };
-        let vals: Vec<_> = arr.by_ref().map(|v| v.data).collect();
-        assert_eq!(vals, vec![]);
+
+        let flag_field = root_object.next().expect("flag field");
+        assert_eq!(flag_field.data.name, name("flag"));
+        assert_eq!(flag_field.data.value.data, Value::Integer(7));
+
+        let container_field = root_object.next().expect("container field");
+        assert_eq!(container_field.data.name, name("container"));
+        let mut container_object = match container_field.data.value.data {
+            Value::Object(object) => object,
+            other => panic!("expected object for container field, got {other:?}"),
+        };
+        assert!(root_object.next().is_none());
+
+        let numbers_field = container_object.next().expect("numbers field");
+        assert_eq!(numbers_field.data.name, name("numbers"));
+        let mut numbers_array = match numbers_field.data.value.data {
+            Value::Array(array) => array,
+            other => panic!("expected array for numbers field, got {other:?}"),
+        };
+
+        // Check the numbers array
+        let first_numbers_item = numbers_array.next().expect("first array item");
+        assert_eq!(first_numbers_item.data, Value::Integer(1));
+
+        let second_numbers_item = numbers_array.next().expect("second array item");
+        let mut deep_array = match second_numbers_item.data {
+            Value::Array(array) => array,
+            other => panic!("expected nested array, got {other:?}"),
+        };
+        assert_eq!(
+            deep_array.next().expect("deep array first item").data,
+            Value::String("deep")
+        );
+        assert_eq!(
+            deep_array.next().expect("deep array second item").data,
+            Value::Integer(99)
+        );
+        assert!(deep_array.next().is_none());
+
+        let third_numbers_item = numbers_array.next().expect("third array item");
+        let mut array_object = match third_numbers_item.data {
+            Value::Object(object) => object,
+            other => panic!("expected nested object, got {other:?}"),
+        };
+
+        let value_field = array_object.next().expect("value field");
+        assert_eq!(value_field.data.name, name("value"));
+        assert_eq!(value_field.data.value.data, Value::Float(2.5));
+
+        let label_field = array_object.next().expect("label field");
+        assert_eq!(label_field.data.name, name("label"));
+        assert_eq!(label_field.data.value.data, Value::String("done"));
+        assert!(array_object.next().is_none());
+
+        assert!(numbers_array.next().is_none());
+
+        // End of number array, continue with next field in container
+
+        let nested_field = container_object.next().expect("nested field");
+        assert_eq!(nested_field.data.name, name("nested"));
+        let mut nested_object = match nested_field.data.value.data {
+            Value::Object(object) => object,
+            other => panic!("expected object for nested field, got {other:?}"),
+        };
+
+        // Check nested object
+
+        let status_field = nested_object.next().expect("status field");
+        assert_eq!(status_field.data.name, name("status"));
+        assert_eq!(status_field.data.value.data, Value::String("ok"));
+
+        let count_field = nested_object.next().expect("count field");
+        assert_eq!(count_field.data.name, name("count"));
+        assert_eq!(count_field.data.value.data, Value::Integer(2));
+        assert!(nested_object.next().is_none());
+
+        // End of nested object, continue with active field
+
+        let active_field = container_object.next().expect("active field");
+        assert_eq!(active_field.data.name, name("active"));
+        assert_eq!(active_field.data.value.data, Value::Bool(false));
+        assert!(container_object.next().is_none());
+
+        // Check getting container directly by id
+        let container_get = match arena.get(container_id).data {
+            Value::Object(object) => object,
+            other => panic!("expected object at inner_id, got {other:?}"),
+        };
+        let inner_field_names: Vec<_> = container_get.map(|f| f.data.name).collect();
+        assert_eq!(
+            inner_field_names,
+            vec![name("numbers"), name("nested"), name("active")]
+        );
+
+        // Check getting numbers array directly by id
+        let mut numbers_from_get = match arena.get(numbers_id).data {
+            Value::Array(array) => array,
+            other => panic!("expected array at numbers_id, got {other:?}"),
+        };
+        assert_eq!(
+            numbers_from_get.next().expect("numbers via get first").data,
+            Value::Integer(1)
+        );
+
+        let deep_from_get = numbers_from_get
+            .next()
+            .expect("numbers via get second")
+            .data;
+        let mut deep_from_get_iter = match deep_from_get {
+            Value::Array(array) => array,
+            other => panic!("expected nested array via get, got {other:?}"),
+        };
+        assert_eq!(
+            deep_from_get_iter.next().expect("deep via get first").data,
+            Value::String("deep")
+        );
+        assert_eq!(
+            deep_from_get_iter.next().expect("deep via get second").data,
+            Value::Integer(99)
+        );
+        assert!(deep_from_get_iter.next().is_none());
+
+        let array_from_get = numbers_from_get.next().expect("numbers via get third").data;
+        let mut object_from_get_iter = match array_from_get {
+            Value::Object(object) => object,
+            other => panic!("expected nested object via get, got {other:?}"),
+        };
+        let value_field_get = object_from_get_iter
+            .next()
+            .expect("nested object via get value field");
+        assert_eq!(value_field_get.data.name, name("value"));
+        assert_eq!(value_field_get.data.value.data, Value::Float(2.5));
+
+        let label_field_get = object_from_get_iter
+            .next()
+            .expect("nested object via get label field");
+        assert_eq!(label_field_get.data.name, name("label"));
+        assert_eq!(label_field_get.data.value.data, Value::String("done"));
+        assert!(object_from_get_iter.next().is_none());
+        assert!(numbers_from_get.next().is_none());
+
+        // Check getting deeply nested object directly by id
+        let mut array_obj_from_get = match arena.get(array_obj_id).data {
+            Value::Object(object) => object,
+            other => panic!("expected object at array_obj_id, got {other:?}"),
+        };
+        let value_field_direct = array_obj_from_get.next().expect("value field via get");
+        assert_eq!(value_field_direct.data.name, name("value"));
+        assert_eq!(value_field_direct.data.value.data, Value::Float(2.5));
+        let label_field_direct = array_obj_from_get.next().expect("label field via get");
+        assert_eq!(label_field_direct.data.name, name("label"));
+        assert_eq!(label_field_direct.data.value.data, Value::String("done"));
+        assert!(array_obj_from_get.next().is_none());
+
+        // Check getting nested object directly by id
+        let mut nested_from_get = match arena.get(nested_obj_id).data {
+            Value::Object(object) => object,
+            other => panic!("expected object at nested_obj_id, got {other:?}"),
+        };
+        assert_eq!(
+            nested_from_get
+                .next()
+                .expect("nested via get status")
+                .data
+                .value
+                .data,
+            Value::String("ok")
+        );
+        assert_eq!(
+            nested_from_get
+                .next()
+                .expect("nested via get count")
+                .data
+                .value
+                .data,
+            Value::Integer(2)
+        );
+        assert!(nested_from_get.next().is_none());
     }
 }
