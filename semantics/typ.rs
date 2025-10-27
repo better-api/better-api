@@ -102,14 +102,14 @@ impl<'s, 'a> Type<'s, 'a> {
 
             Slot::Record { end } => Type::Record(TypeFieldIterator {
                 arena,
-                current: id,
+                current: TypeId(id.0 + 1),
                 end: *end,
             }),
             Slot::Union { discriminator, end } => Type::Union(Union {
                 disriminator: discriminator.clone(),
                 fields: TypeFieldIterator {
                     arena,
-                    current: id,
+                    current: TypeId(id.0 + 1),
                     end: *end,
                 },
             }),
@@ -550,7 +550,7 @@ impl<'s, 'p> OptionArrayBuilder<'s, 'p> {
 
         self.parent.data().push(Tracked::new(node, typ.into()));
 
-        end_id
+        self.start
     }
 }
 
@@ -704,19 +704,241 @@ impl<'s> BuilderParent<'s> for TypeArena<'s> {
 
 #[cfg(test)]
 mod test {
-    // use better_api_syntax::{ast::AstNode, parse, tokenize};
-    //
-    // use crate::typ::TypeArena;
+    use better_api_syntax::{ast::AstNode, parse, tokenize};
 
-    // #[test]
-    // fn asdf() {
-    //     let mut diags = vec![];
-    //     let tokens = tokenize("", &mut diags);
-    //     let res = parse(tokens);
-    //
-    //     let node = res.root.syntax();
-    //
-    //     let mut arena = TypeArena::new();
-    //     let mut r1 = arena.start_record(node);
-    // }
+    use crate::{
+        name::Name,
+        typ::{PrimitiveType, Type, TypeArena, TypeId},
+    };
+
+    use super::Slot;
+
+    /// Helper for creating names used in tests.
+    fn name(val: &str) -> &Name {
+        Name::new(val).unwrap()
+    }
+
+    #[test]
+    fn builds_nested_types() {
+        let mut diags = vec![];
+        let tokens = tokenize("", &mut diags);
+        let res = parse(tokens);
+        let node = res.root.syntax();
+
+        let mut arena = TypeArena::new();
+
+        // Add some primitive types
+        let i32_id = arena.add_primitive(node, PrimitiveType::I32);
+        let string_id = arena.add_primitive(node, PrimitiveType::String);
+        let bool_id = arena.add_primitive(node, PrimitiveType::Bool);
+
+        // Build a complex nested type structure:
+        // record Root {
+        //   id: i64,
+        //   simple_array: [f32],
+        //   values: [[[string?]]],
+        //   metadata: [[bool]?]
+        // }
+        let mut root = arena.start_record(node);
+        root.add_simple(node, name("id"), node, PrimitiveType::I64, None);
+
+        let simple_array = root.start_array(node, name("simple_array"), node, None);
+        simple_array.finish(node, PrimitiveType::F32);
+
+        // Build nested array type: [[[string?]]]
+        let mut values_builder = root.start_array(node, name("values"), node, None);
+        values_builder.start_array(node);
+        values_builder.start_array(node);
+        values_builder.start_option(node);
+        let values_id = values_builder.finish(node, PrimitiveType::String);
+
+        // Build nested array with option: [[bool]?]
+        let mut metadata_builder = root.start_array(node, name("metadata"), node, None);
+        metadata_builder.start_array(node);
+        metadata_builder.start_option(node);
+        metadata_builder.finish(node, PrimitiveType::Bool);
+
+        let root_id = root.finish();
+
+        // Test dropped builder (should not appear in arena)
+        {
+            let mut dropped_union = arena.start_union(node, None);
+            dropped_union.add_simple(node, name("unused"), node, PrimitiveType::I32, None);
+            // Dropped without finish
+        }
+
+        // Build a union type separately
+        let mut union_builder = arena.start_union(node, None);
+        union_builder.add_simple(node, name("success"), node, PrimitiveType::Bool, None);
+        union_builder.add_simple(node, name("error"), node, PrimitiveType::String, None);
+        let union_id = union_builder.finish();
+
+        // Verify the arena structure
+        let expected_slots = vec![
+            Slot::Primitive(PrimitiveType::I32),
+            Slot::Primitive(PrimitiveType::String),
+            Slot::Primitive(PrimitiveType::Bool),
+            Slot::Record { end: TypeId(20) },
+            Slot::TypeField {
+                name: name("id"),
+                default: None,
+            },
+            Slot::Primitive(PrimitiveType::I64),
+            Slot::TypeField {
+                name: name("simple_array"),
+                default: None,
+            },
+            Slot::Array { end: TypeId(9) },
+            Slot::Primitive(PrimitiveType::F32),
+            Slot::TypeField {
+                name: name("values"),
+                default: None,
+            },
+            Slot::Array { end: TypeId(15) },
+            Slot::Array { end: TypeId(15) },
+            Slot::Array { end: TypeId(15) },
+            Slot::Option { end: TypeId(15) },
+            Slot::Primitive(PrimitiveType::String),
+            Slot::TypeField {
+                name: name("metadata"),
+                default: None,
+            },
+            Slot::Array { end: TypeId(20) },
+            Slot::Array { end: TypeId(20) },
+            Slot::Option { end: TypeId(20) },
+            Slot::Primitive(PrimitiveType::Bool),
+            Slot::Union {
+                discriminator: None,
+                end: TypeId(25),
+            },
+            Slot::TypeField {
+                name: name("success"),
+                default: None,
+            },
+            Slot::Primitive(PrimitiveType::Bool),
+            Slot::TypeField {
+                name: name("error"),
+                default: None,
+            },
+            Slot::Primitive(PrimitiveType::String),
+        ];
+
+        assert_eq!(arena.data.len(), expected_slots.len());
+        for (idx, expected) in expected_slots.iter().enumerate() {
+            assert_eq!(
+                &arena.data[idx].data, expected,
+                "slot mismatch at index {idx}"
+            );
+        }
+
+        // Test getting primitive types
+        assert_eq!(arena.get(i32_id).data, Type::I32);
+        assert_eq!(arena.get(string_id).data, Type::String);
+        assert_eq!(arena.get(bool_id).data, Type::Bool);
+
+        // Test getting the root record
+        let root_type = arena.get(root_id);
+        let mut root_fields = match root_type.data {
+            Type::Record(fields) => fields,
+            other => panic!("expected record at root_id, got {other:?}"),
+        };
+
+        // Check id field
+        let id_field = root_fields.next().expect("id field");
+        assert_eq!(id_field.data.name, name("id"));
+        assert_eq!(id_field.data.typ.data, Type::I64);
+        assert_eq!(id_field.data.default, None);
+
+        // Check simple_array field
+        let simple_array_field = root_fields.next().expect("simple_array field");
+        assert_eq!(simple_array_field.data.name, name("simple_array"));
+        match simple_array_field.data.typ.data {
+            Type::Array(ref inner) => {
+                assert_eq!(inner.typ().data, Type::F32);
+            }
+            other => panic!("expected array type, got {other:?}"),
+        }
+
+        // Check values field with nested arrays
+        let values_field = root_fields.next().expect("values field");
+        assert_eq!(values_field.data.name, name("values"));
+
+        // Navigate through [[[string?]]]
+        let level1 = match values_field.data.typ.data {
+            Type::Array(ref inner) => inner.typ(),
+            other => panic!("expected array at level 1, got {other:?}"),
+        };
+
+        let level2 = match level1.data {
+            Type::Array(ref inner) => inner.typ(),
+            other => panic!("expected array at level 2, got {other:?}"),
+        };
+
+        let level3 = match level2.data {
+            Type::Array(ref inner) => inner.typ(),
+            other => panic!("expected array at level 3, got {other:?}"),
+        };
+
+        let option_inner = match level3.data {
+            Type::Option(ref inner) => inner.typ(),
+            other => panic!("expected option, got {other:?}"),
+        };
+
+        assert_eq!(option_inner.data, Type::String);
+
+        // Check metadata field
+        let metadata_field = root_fields.next().expect("metadata field");
+        assert_eq!(metadata_field.data.name, name("metadata"));
+
+        assert!(root_fields.next().is_none());
+
+        // Test getting the union directly
+        let union_type = arena.get(union_id);
+        let mut union_fields = match union_type.data {
+            Type::Union(u) => {
+                assert_eq!(u.disriminator, None);
+                u.fields
+            }
+            other => panic!("expected union at union_id, got {other:?}"),
+        };
+
+        let success_field = union_fields.next().expect("success field");
+        assert_eq!(success_field.data.name, name("success"));
+        assert_eq!(success_field.data.typ.data, Type::Bool);
+
+        let error_field = union_fields.next().expect("error field");
+        assert_eq!(error_field.data.name, name("error"));
+        assert_eq!(error_field.data.typ.data, Type::String);
+
+        assert!(union_fields.next().is_none());
+
+        // Test getting values array type directly
+        let values_type = arena.get(values_id);
+        match values_type.data {
+            Type::Array(ref inner) => {
+                let level1 = inner.typ();
+                match level1.data {
+                    Type::Array(ref inner2) => {
+                        let level2 = inner2.typ();
+                        match level2.data {
+                            Type::Array(ref inner3) => {
+                                let level3 = inner3.typ();
+                                match level3.data {
+                                    Type::Option(ref inner4) => {
+                                        assert_eq!(inner4.typ().data, Type::String);
+                                    }
+                                    other => {
+                                        panic!("expected option at deepest level, got {other:?}")
+                                    }
+                                }
+                            }
+                            other => panic!("expected array at level 3, got {other:?}"),
+                        }
+                    }
+                    other => panic!("expected array at level 2, got {other:?}"),
+                }
+            }
+            other => panic!("expected array at values_id, got {other:?}"),
+        }
+    }
 }
