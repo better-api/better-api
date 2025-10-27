@@ -1,175 +1,183 @@
-//! Defines types for converting [string tokens](better_api_syntax::Kind::TOKEN_STRING)
-//! into [`String`] and `&str`.
-//
-// Working with string is split into two parts.
-// 1. Walk the AST and build a cache of string token -> String.
-// 2. Get string from token.
-//
-// During building of the cache errors for invalid strings are reported.
-// This errors are mostly around invalid escape sequences.
+//! Helper functions for parsing string tokens and validating names.
 
-use std::collections::HashMap;
-use std::ops::Range;
+use std::borrow::Cow;
 
 use better_api_diagnostic::{Label, Report, Span};
-use better_api_syntax::ast::AstNode;
-use better_api_syntax::{Kind, SyntaxToken, ast};
-use better_api_syntax::{NodeOrToken, TextRange};
+use better_api_syntax::{Kind, SyntaxToken, TextRange};
 
-/// Cache of all the strings in the AST.
-#[derive(Debug)]
-pub struct StringCache {
-    data: String,
-    ranges: HashMap<TextRange, Range<usize>>,
+/// Validates if given string is a valid name.
+pub fn validate_name(name: &str, range: TextRange) -> Result<(), Report> {
+    let is_valid = name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
+        && name.chars().next().is_some_and(|c| c.is_ascii_alphabetic());
+
+    if is_valid {
+        Ok(())
+    } else {
+        Err(Report::error("invalid name".to_string()).with_label(Label::new("invalid name".to_string(), Span::new(range.start().into(), range.end().into()))).with_note(
+                "help: name can only contain alphanumeric characters, `_`, `-` and `.`. It also has to start with alphabetic character.".to_string(),
+            ))
+    }
 }
 
-impl StringCache {
-    /// Creates a new StringCache from the root note.
-    pub fn new(root: &ast::Root, diagnostics: &mut Vec<Report>) -> Self {
-        let mut cache = Self {
-            data: Default::default(),
-            ranges: Default::default(),
+/// Parses a syntax token that represents a string.
+///
+/// This removes leading and trailing `"` and escapes the character. Returned
+/// `Cow<'_, str>` is the rust representation of the string itself.
+///
+/// <div class="warning">
+/// This function expect a string token. Any other token results in a unknown behavior.
+/// </div>
+pub fn parse_string<'a>(token: &'a SyntaxToken, diagnostics: &mut Vec<Report>) -> Cow<'a, str> {
+    debug_assert_eq!(token.kind(), Kind::TOKEN_STRING);
+
+    let mut text = token.text();
+
+    debug_assert!(&text[0..1] == "\"" && &text[text.len() - 1..text.len()] == "\"");
+    text = &text[1..text.len() - 1]; // Remove start and end `"`
+
+    if !text.contains('\\') {
+        return Cow::Borrowed(text);
+    }
+
+    // +1 accounts for the starting `"`.
+    let token_start: usize = Into::<usize>::into(token.text_range().start()) + 1;
+    let mut res = String::new();
+    let mut chars = text.char_indices();
+
+    while let Some((idx, ch)) = chars.next() {
+        if ch != '\\' {
+            res.push(ch);
+            continue;
+        }
+
+        let Some((end, esc)) = chars.next() else {
+            diagnostics.push(
+                Report::error("expected escaped character, got '\"'".to_string()).with_label(
+                    Label::new(
+                        "expected escaped character".to_string(),
+                        Span::new(token_start + idx, token_start + idx + 1),
+                    ),
+                ),
+            );
+            break;
         };
 
-        for node in root.syntax().descendants_with_tokens() {
-            match node {
-                NodeOrToken::Node(_) => (),
-                NodeOrToken::Token(t) => match t.kind() {
-                    Kind::TOKEN_STRING => cache.add_string(t, diagnostics),
-                    Kind::TOKEN_IDENTIFIER => cache.add_ident(t),
-                    _ => (),
-                },
-            }
-        }
-
-        cache
-    }
-
-    /// Get string for a specific token.
-    ///
-    /// Syntax token should be a TOKEN_STRING, otherwise None is returned.
-    pub fn get(&self, token: &SyntaxToken) -> Option<&str> {
-        if !matches!(token.kind(), Kind::TOKEN_STRING | Kind::TOKEN_IDENTIFIER) {
-            return None;
-        }
-
-        let range = self.ranges.get(&token.text_range())?;
-        Some(&self.data[range.clone()])
-    }
-
-    fn add_ident(&mut self, token: SyntaxToken) {
-        let start = self.data.len();
-        self.data.push_str(token.text());
-        self.ranges.insert(
-            token.text_range(),
-            Range {
-                start,
-                end: self.data.len(),
-            },
-        );
-    }
-
-    fn add_string(&mut self, token: SyntaxToken, diagnostics: &mut Vec<Report>) {
-        let mut text = token.text();
-        debug_assert!(&text[0..1] == "\"" && &text[text.len() - 1..text.len()] == "\"");
-        text = &text[1..text.len() - 1]; // Remove start and end `"`
-
-        let token_start: usize = token.text_range().start().into();
-        let start = self.data.len();
-
-        let mut chars = text.char_indices();
-
-        while let Some((idx, ch)) = chars.next() {
-            if ch != '\\' {
-                self.data.push(ch);
-                continue;
-            }
-
-            let Some((end, esc)) = chars.next() else {
+        match esc {
+            'n' => res.push('\n'),
+            't' => res.push('\t'),
+            '"' => res.push('"'),
+            '\\' => res.push('\\'),
+            _ => {
                 diagnostics.push(
-                    Report::error("expected escaped character, got '\"'".to_string()).with_label(
+                    Report::error(format!("got invalid escape character `{esc}`")).with_label(
                         Label::new(
-                            "expected escaped character".to_string(),
-                            Span::new(token_start + idx, token_start + idx + 1),
+                            "invalid escape character".to_string(),
+                            Span::new(token_start + idx, token_start + end + esc.len_utf8()),
                         ),
                     ),
                 );
-                break;
-            };
-
-            match esc {
-                'n' => self.data.push('\n'),
-                't' => self.data.push('\t'),
-                '"' => self.data.push('"'),
-                '\\' => self.data.push('\\'),
-                _ => {
-                    diagnostics.push(
-                        Report::error(format!("got invalid escape character `{esc}`")).with_label(
-                            Label::new(
-                                "invalid escape character".to_string(),
-                                Span::new(token_start + idx, token_start + end),
-                            ),
-                        ),
-                    );
-                    self.data.push(esc);
-                }
+                res.push(esc);
             }
         }
-
-        self.ranges.insert(
-            token.text_range(),
-            Range {
-                start,
-                end: self.data.len(),
-            },
-        );
     }
+
+    Cow::Owned(res)
 }
 
 #[cfg(test)]
 mod test {
-    use std::ops::Range;
+    use better_api_diagnostic::{Label, Report, Span};
+    use better_api_syntax::ast::AstNode;
+    use better_api_syntax::{Kind, Parse, SyntaxToken, TextRange, TextSize, parse, tokenize};
 
-    use indoc::indoc;
-
-    use better_api_syntax::TextRange;
-    use better_api_syntax::{parse, tokenize};
-
-    use crate::text::StringCache;
+    use crate::text::{parse_string, validate_name};
 
     #[test]
-    fn new_cache() {
-        let text = indoc! {r#"
-            name: "foo"
-            name: "invalid\"
-            name: "inval\id"
-            name: "valid \t \n \\ \" foo"
-        "#};
+    fn valid_name() {
+        assert_eq!(
+            validate_name(
+                "this-is-a.valid_name123",
+                TextRange::new(TextSize::new(0), TextSize::new(1))
+            ),
+            Ok(())
+        );
+    }
 
-        let mut diagnostics = vec![];
-        let tokens = tokenize(text, &mut diagnostics);
+    #[test]
+    fn invalid_name() {
+        let expected = Err(
+                Report::error("invalid name".to_string())
+                .with_label(Label::new("invalid name".to_string(), Span::new(0, 1)))
+                    .with_note("help: name can only contain alphanumeric characters, `_`, `-` and `.`. It also has to start with alphabetic character.".to_string()));
+
+        assert_eq!(
+            validate_name(
+                "invalid name",
+                TextRange::new(TextSize::new(0), TextSize::new(1))
+            ),
+            expected
+        );
+    }
+
+    // Auxiliary function that gets first string token in tree.
+    fn get_string_token(res: &Parse) -> SyntaxToken {
+        res.root
+            .syntax()
+            .descendants_with_tokens()
+            .find_map(|el| {
+                el.as_token().and_then(|t| {
+                    if t.kind() == Kind::TOKEN_STRING {
+                        Some(t.clone())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .unwrap()
+    }
+
+    #[test]
+    fn valid_string() {
+        let mut diags = vec![];
+        let tokens = tokenize("name: \"foo\"", &mut diags);
         let res = parse(tokens);
+        let token = get_string_token(&res);
 
-        let strings = StringCache::new(&res.root, &mut diagnostics);
-        assert_eq!(strings.ranges.len(), 7);
-        assert_eq!(
-            strings.ranges.get(&TextRange::new(6.into(), 11.into())),
-            Some(&Range { start: 4, end: 7 })
-        );
-        assert_eq!(
-            strings.ranges.get(&TextRange::new(35.into(), 45.into())),
-            Some(&Range { start: 15, end: 22 })
-        );
-        assert_eq!(
-            strings.ranges.get(&TextRange::new(52.into(), 75.into())),
-            Some(&Range { start: 26, end: 43 })
-        );
-        assert_eq!(
-            strings.data,
-            "namefoonamenameinvalidnamevalid \t \n \\ \" foo"
-        );
+        let res = parse_string(&token, &mut diags);
+        assert_eq!(diags, vec![]);
+        assert_eq!(res, "foo");
+    }
 
-        insta::assert_debug_snapshot!(diagnostics);
-        insta::assert_debug_snapshot!(res.reports);
+    #[test]
+    fn invalid_string() {
+        let mut diags = vec![];
+        let tokens = tokenize("name: \"inval\\id\"", &mut diags);
+        let res = parse(tokens);
+        let token = get_string_token(&res);
+
+        let res = parse_string(&token, &mut diags);
+        assert_eq!(
+            diags,
+            vec![
+                Report::error("got invalid escape character `i`".to_string()).with_label(
+                    Label::new("invalid escape character".to_string(), Span::new(12, 14))
+                )
+            ]
+        );
+        assert_eq!(res, "invalid");
+    }
+
+    #[test]
+    fn valid_string_with_escapes() {
+        let mut diags = vec![];
+        let tokens = tokenize(r#"name: "valid \t \n \\ \" foo""#, &mut diags);
+        let res = parse(tokens);
+        let token = get_string_token(&res);
+
+        let res = parse_string(&token, &mut diags);
+        assert_eq!(diags, vec![]);
+        assert_eq!(res, "valid \t \n \\ \" foo");
     }
 }

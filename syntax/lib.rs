@@ -222,5 +222,6 @@ impl rowan::Language for Language {
 pub type SyntaxNode = rowan::SyntaxNode<Language>;
 pub type SyntaxNodePtr = rowan::ast::SyntaxNodePtr<Language>;
 pub type SyntaxToken = rowan::SyntaxToken<Language>;
+pub type NodeOrToken = rowan::NodeOrToken<SyntaxNode, SyntaxToken>;
 
-pub use rowan::{NodeOrToken, TextRange, TextSize};
+pub use rowan::{TextRange, TextSize};
