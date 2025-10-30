@@ -18,25 +18,12 @@
 //! To retrieve a type, pass a [`TypeId`] to [`TypeArena::get`]. This returns a
 //! [`TrackedType`], giving access to both semantic data and the syntax pointer
 //! required for diagnostics.
-//!
-//! ## Strings and Names
-//!
-//! Some types hold a [`&Name`](Name) which is a wrapper around a &str.
-//! Ownership of names and strings should be handled by [`StringCache`](crate::text::StringCache)
-//!
-//! ## Lifetimes
-//!
-//! - `'s` captures the lifetime of string slices managed by the [`StringCache`](crate::text::StringCache).
-//! - `'a` ties a type view to the lifetime of the [`TypeArena`].
-use better_api_syntax::SyntaxNode;
 
-use crate::Tracked;
-use crate::name::Name;
-use crate::value;
+use crate::{StringId, value};
 
 /// Representation of a type.
 #[derive(Debug, PartialEq)]
-pub enum Type<'s, 'a> {
+pub enum Type<'a> {
     I32,
     I64,
     U32,
@@ -48,17 +35,17 @@ pub enum Type<'s, 'a> {
     Bool,
     String,
     File,
-    Reference(Reference<'s, 'a>),
-    Option(Reference<'s, 'a>),
-    Array(Reference<'s, 'a>),
-    Record(TypeFieldIterator<'s, 'a>),
-    Union(Union<'s, 'a>),
-    Enum(Enum<'s, 'a>),
-    Response(Response<'s, 'a>),
+    Reference(Reference<'a>),
+    Option(Reference<'a>),
+    Array(Reference<'a>),
+    Record(TypeFieldIterator<'a>),
+    Union(Union<'a>),
+    Enum(Enum<'a>),
+    Response(Response<'a>),
 }
 
-impl<'s, 'a> Type<'s, 'a> {
-    fn from_primitive(arena: &'a TypeArena<'s>, simple: PrimitiveType) -> Self {
+impl<'a> Type<'a> {
+    fn from_primitive(arena: &'a TypeArena, simple: PrimitiveType) -> Self {
         match simple {
             PrimitiveType::I32 => Type::I32,
             PrimitiveType::I64 => Type::I64,
@@ -75,7 +62,7 @@ impl<'s, 'a> Type<'s, 'a> {
         }
     }
 
-    fn from_slot(arena: &'a TypeArena<'s>, id: TypeId, slot: &'a Slot<'s>) -> Self {
+    fn from_slot(arena: &'a TypeArena, id: TypeId, slot: &'a Slot) -> Self {
         match slot {
             Slot::Primitive(simple) => Type::from_primitive(arena, *simple),
             Slot::Array { .. } => Type::Array(Reference {
@@ -106,7 +93,7 @@ impl<'s, 'a> Type<'s, 'a> {
                 end: *end,
             }),
             Slot::Union { discriminator, end } => Type::Union(Union {
-                disriminator: discriminator.clone(),
+                disriminator: *discriminator,
                 fields: TypeFieldIterator {
                     arena,
                     current: TypeId(id.0 + 1),
@@ -118,21 +105,19 @@ impl<'s, 'a> Type<'s, 'a> {
     }
 }
 
-pub type TrackedType<'s, 'a> = Tracked<Type<'s, 'a>>;
-
 /// Reference to a type stored in the [`TypeArena`].
 #[derive(derive_more::Debug, PartialEq)]
-pub struct Reference<'s, 'a> {
+pub struct Reference<'a> {
     /// Id of the type in the arena.
     pub id: TypeId,
 
     #[debug(skip)]
-    arena: &'a TypeArena<'s>,
+    arena: &'a TypeArena,
 }
 
-impl<'s, 'a> Reference<'s, 'a> {
+impl<'a> Reference<'a> {
     /// Resolve the referenced type.
-    pub fn typ(&self) -> TrackedType<'s, 'a> {
+    pub fn typ(&self) -> Type<'a> {
         self.arena.get(self.id)
     }
 }
@@ -140,27 +125,25 @@ impl<'s, 'a> Reference<'s, 'a> {
 /// Field exposed by a record or union.
 ///
 /// Default is stored in the [`value::ValueArena`].
-pub struct TypeField<'s, 'a> {
-    pub name: &'s Name,
+pub struct TypeField<'a> {
+    pub name: StringId,
     pub default: Option<value::ValueId>,
-    pub typ: TrackedType<'s, 'a>,
+    pub typ: Type<'a>,
 }
-
-pub type TrackedTypeField<'s, 'a> = Tracked<TypeField<'s, 'a>>;
 
 /// Iterator returned for composite types.
 ///
 /// Each item is a [`TrackedTypeField`].
 #[derive(derive_more::Debug, PartialEq)]
-pub struct TypeFieldIterator<'s, 'a> {
+pub struct TypeFieldIterator<'a> {
     #[debug(skip)]
-    arena: &'a TypeArena<'s>,
+    arena: &'a TypeArena,
     current: TypeId,
     end: TypeId,
 }
 
-impl<'s, 'a> Iterator for TypeFieldIterator<'s, 'a> {
-    type Item = TrackedTypeField<'s, 'a>;
+impl<'a> Iterator for TypeFieldIterator<'a> {
+    type Item = TypeField<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.current.0 >= self.end.0 {
@@ -170,31 +153,21 @@ impl<'s, 'a> Iterator for TypeFieldIterator<'s, 'a> {
         let field_slot = &self.arena.data[self.current.0 as usize];
         let typ_slot = &self.arena.data[self.current.0 as usize + 1];
 
-        let (name, default) = match &field_slot.data {
+        let (name, default) = match &field_slot {
             Slot::TypeField { name, default } => (*name, *default),
             val => unreachable!("invalid type field in arena: {val:?}"),
         };
 
-        let typ = Type::from_slot(self.arena, TypeId(self.current.0 + 1), &typ_slot.data);
+        let typ = Type::from_slot(self.arena, TypeId(self.current.0 + 1), typ_slot);
 
-        self.current = match &typ_slot.data {
+        self.current = match &typ_slot {
             Slot::Option { end } => *end,
             Slot::Array { end } => *end,
             Slot::Primitive(_) => TypeId(self.current.0 + 2),
             typ => unreachable!("invalid type's field type in arena: {typ:?}"),
         };
 
-        Some(TrackedTypeField {
-            syntax: field_slot.syntax,
-            data: TypeField {
-                name,
-                default,
-                typ: TrackedType {
-                    syntax: typ_slot.syntax,
-                    data: typ,
-                },
-            },
-        })
+        Some(TypeField { name, default, typ })
     }
 }
 
@@ -202,9 +175,9 @@ impl<'s, 'a> Iterator for TypeFieldIterator<'s, 'a> {
 ///
 /// Fields are exposed through a [`TypeFieldIterator`].
 #[derive(Debug, PartialEq)]
-pub struct Union<'s, 'a> {
-    pub disriminator: Option<Tracked<&'s Name>>,
-    pub fields: TypeFieldIterator<'s, 'a>,
+pub struct Union<'a> {
+    pub disriminator: Option<StringId>,
+    pub fields: TypeFieldIterator<'a>,
 }
 
 /// Semantic representation of an enum.
@@ -212,16 +185,16 @@ pub struct Union<'s, 'a> {
 /// Optional `typ` describes the type of enum values, while `values` points to
 /// an array in the [`value::ValueArena`].
 #[derive(Debug, PartialEq)]
-pub struct Enum<'s, 'a> {
-    pub typ: Option<Reference<'s, 'a>>,
+pub struct Enum<'a> {
+    pub typ: Option<Reference<'a>>,
     pub values: value::ValueId,
 }
 
 /// Semantic information about a response type.
 #[derive(Debug, PartialEq)]
-pub struct Response<'s, 'a> {
-    pub body: Option<Reference<'s, 'a>>,
-    pub headers: Option<Reference<'s, 'a>>,
+pub struct Response<'a> {
+    pub body: Option<Reference<'a>>,
+    pub headers: Option<Reference<'a>>,
     pub content_type: Option<value::ValueId>,
 }
 
@@ -265,7 +238,7 @@ pub enum PrimitiveType {
 /// The `end` property of Array and Option represent the TypeId of the type after the whole nesting
 /// and can be used to skip the whole nested type when doing field iteration.
 #[derive(Debug, PartialEq)]
-enum Slot<'s> {
+enum Slot {
     Primitive(PrimitiveType),
     Option {
         // Id after the last type in the nested Option<...> type.
@@ -292,7 +265,7 @@ enum Slot<'s> {
         end: TypeId,
     },
     Union {
-        discriminator: Option<Tracked<&'s Name>>,
+        discriminator: Option<StringId>,
         // Id after the last field in the union.
         // Used for skipping the whole record during iteration.
         end: TypeId,
@@ -301,25 +274,23 @@ enum Slot<'s> {
     // In TrackedSlot syntax pointer points to the whole field
     // and not just the name.
     TypeField {
-        name: &'s Name,
+        name: StringId,
         default: Option<value::ValueId>,
     },
 }
 
-impl<'s> From<PrimitiveType> for Slot<'s> {
+impl From<PrimitiveType> for Slot {
     fn from(value: PrimitiveType) -> Self {
         Self::Primitive(value)
     }
 }
 
-type TrackedSlot<'s> = Tracked<Slot<'s>>;
-
-trait BuilderParent<'s> {
-    fn arena(&mut self) -> &mut TypeArena<'s>;
+trait BuilderParent {
+    fn arena(&mut self) -> &mut TypeArena;
 
     fn is_field(&self) -> bool;
 
-    fn data(&mut self) -> &mut Vec<TrackedSlot<'s>> {
+    fn data(&mut self) -> &mut Vec<Slot> {
         &mut self.arena().data
     }
 }
@@ -330,8 +301,8 @@ trait BuilderParent<'s> {
 /// Call [`finish`](FieldBuilder::finish) once all fields are added.
 ///
 /// Dropping the builder without finishing rolls back any changes.
-pub struct FieldBuilder<'s, 'p> {
-    arena: &'p mut TypeArena<'s>,
+pub struct FieldBuilder<'p> {
+    arena: &'p mut TypeArena,
 
     /// Index in the arena that contains Slot::Record or Slot::Union.
     start: TypeId,
@@ -340,12 +311,10 @@ pub struct FieldBuilder<'s, 'p> {
     finished: bool,
 }
 
-impl<'s, 'p> FieldBuilder<'s, 'p> {
-    fn new_record(arena: &'p mut TypeArena<'s>, node: &SyntaxNode) -> Self {
+impl<'p> FieldBuilder<'p> {
+    fn new_record(arena: &'p mut TypeArena) -> Self {
         let idx = arena.data.len();
-        arena
-            .data
-            .push(Tracked::new(node, Slot::Record { end: TypeId(0) }));
+        arena.data.push(Slot::Record { end: TypeId(0) });
 
         Self {
             arena,
@@ -354,19 +323,12 @@ impl<'s, 'p> FieldBuilder<'s, 'p> {
         }
     }
 
-    fn new_union(
-        arena: &'p mut TypeArena<'s>,
-        node: &SyntaxNode,
-        discriminator: Option<Tracked<&'s Name>>,
-    ) -> Self {
+    fn new_union(arena: &'p mut TypeArena, discriminator: Option<StringId>) -> Self {
         let idx = arena.data.len();
-        arena.data.push(Tracked::new(
-            node,
-            Slot::Union {
-                discriminator,
-                end: TypeId(0),
-            },
-        ));
+        arena.data.push(Slot::Union {
+            discriminator,
+            end: TypeId(0),
+        });
 
         Self {
             arena,
@@ -375,26 +337,21 @@ impl<'s, 'p> FieldBuilder<'s, 'p> {
         }
     }
 
-    fn data(&mut self) -> &mut Vec<TrackedSlot<'s>> {
+    fn data(&mut self) -> &mut Vec<Slot> {
         &mut self.arena.data
     }
 
     /// Add a new field with a simple type.
     ///
-    /// `field_node` should be the node describing the entire field (name and type).
-    /// `typ_node` should point to the type of the field.
     /// `default` is a default value stored in the [`value::ValueArena`].
     pub fn add_simple(
         &mut self,
-        field_node: &SyntaxNode,
-        name: &'s Name,
-        typ_node: &SyntaxNode,
+        name: StringId,
         typ: PrimitiveType,
         default: Option<value::ValueId>,
     ) {
-        self.data()
-            .push(Tracked::new(field_node, Slot::TypeField { name, default }));
-        self.data().push(Tracked::new(typ_node, typ.into()));
+        self.data().push(Slot::TypeField { name, default });
+        self.data().push(typ.into());
     }
 
     /// Add a new field of array type.
@@ -403,15 +360,12 @@ impl<'s, 'p> FieldBuilder<'s, 'p> {
     /// `array_node` should be the node of only the array that will be built (field type).
     pub fn start_array<'a>(
         &'a mut self,
-        field_node: &SyntaxNode,
-        name: &'s Name,
-        array_node: &SyntaxNode,
+        name: StringId,
         default: Option<value::ValueId>,
-    ) -> OptionArrayBuilder<'s, 'a> {
-        self.data()
-            .push(Tracked::new(field_node, Slot::TypeField { name, default }));
+    ) -> OptionArrayBuilder<'a> {
+        self.data().push(Slot::TypeField { name, default });
 
-        OptionArrayBuilder::new_array(self, array_node)
+        OptionArrayBuilder::new_array(self)
     }
 
     /// Add a new field of option type.
@@ -420,15 +374,12 @@ impl<'s, 'p> FieldBuilder<'s, 'p> {
     /// `option_node` should be the node of only the option that will be built (field type).
     pub fn start_option<'a>(
         &'a mut self,
-        field_node: &SyntaxNode,
-        name: &'s Name,
-        option_node: &SyntaxNode,
+        name: StringId,
         default: Option<value::ValueId>,
-    ) -> OptionArrayBuilder<'s, 'a> {
-        self.data()
-            .push(Tracked::new(field_node, Slot::TypeField { name, default }));
+    ) -> OptionArrayBuilder<'a> {
+        self.data().push(Slot::TypeField { name, default });
 
-        OptionArrayBuilder::new_option(self, option_node)
+        OptionArrayBuilder::new_option(self)
     }
 
     /// Finalize the record or union currently being built.
@@ -441,7 +392,7 @@ impl<'s, 'p> FieldBuilder<'s, 'p> {
 
         let start = self.start.0 as usize;
         let head = &mut self.data()[start];
-        match &mut head.data {
+        match head {
             Slot::Record { end } => *end = idx,
             Slot::Union { end, .. } => *end = idx,
             _ => unreachable!("invalid FieldBuilder start"),
@@ -451,7 +402,7 @@ impl<'s, 'p> FieldBuilder<'s, 'p> {
     }
 }
 
-impl<'s, 'a> Drop for FieldBuilder<'s, 'a> {
+impl<'a> Drop for FieldBuilder<'a> {
     fn drop(&mut self) {
         if self.finished {
             return;
@@ -462,8 +413,8 @@ impl<'s, 'a> Drop for FieldBuilder<'s, 'a> {
     }
 }
 
-impl<'s, 'a> BuilderParent<'s> for FieldBuilder<'s, 'a> {
-    fn arena(&mut self) -> &mut TypeArena<'s> {
+impl<'a> BuilderParent for FieldBuilder<'a> {
+    fn arena(&mut self) -> &mut TypeArena {
         self.arena
     }
 
@@ -480,8 +431,8 @@ impl<'s, 'a> BuilderParent<'s> for FieldBuilder<'s, 'a> {
 /// which returns the id of the final type in the arena.
 ///
 /// If builder is dropped before calling finish, added types are removed from the arena.
-pub struct OptionArrayBuilder<'s, 'p> {
-    parent: &'p mut dyn BuilderParent<'s>,
+pub struct OptionArrayBuilder<'p> {
+    parent: &'p mut dyn BuilderParent,
 
     /// Index in the arena that contains the first Slot::Array or Slot::Option.
     start: TypeId,
@@ -490,12 +441,10 @@ pub struct OptionArrayBuilder<'s, 'p> {
     finished: bool,
 }
 
-impl<'s, 'p> OptionArrayBuilder<'s, 'p> {
-    fn new_array(parent: &'p mut dyn BuilderParent<'s>, node: &SyntaxNode) -> Self {
+impl<'p> OptionArrayBuilder<'p> {
+    fn new_array(parent: &'p mut dyn BuilderParent) -> Self {
         let idx = parent.data().len();
-        parent
-            .data()
-            .push(Tracked::new(node, Slot::Array { end: TypeId(0) }));
+        parent.data().push(Slot::Array { end: TypeId(0) });
 
         Self {
             parent,
@@ -504,11 +453,9 @@ impl<'s, 'p> OptionArrayBuilder<'s, 'p> {
         }
     }
 
-    fn new_option(parent: &'p mut dyn BuilderParent<'s>, node: &SyntaxNode) -> Self {
+    fn new_option(parent: &'p mut dyn BuilderParent) -> Self {
         let idx = parent.data().len();
-        parent
-            .data()
-            .push(Tracked::new(node, Slot::Option { end: TypeId(0) }));
+        parent.data().push(Slot::Option { end: TypeId(0) });
 
         Self {
             parent,
@@ -518,21 +465,17 @@ impl<'s, 'p> OptionArrayBuilder<'s, 'p> {
     }
 
     /// Start a new array inside the current array or option.
-    pub fn start_array(&mut self, node: &SyntaxNode) {
-        self.parent
-            .data()
-            .push(Tracked::new(node, Slot::Array { end: TypeId(0) }));
+    pub fn start_array(&mut self) {
+        self.parent.data().push(Slot::Array { end: TypeId(0) });
     }
 
     /// Start a new option inside the current array or option.
-    pub fn start_option(&mut self, node: &SyntaxNode) {
-        self.parent
-            .data()
-            .push(Tracked::new(node, Slot::Option { end: TypeId(0) }));
+    pub fn start_option(&mut self) {
+        self.parent.data().push(Slot::Option { end: TypeId(0) });
     }
 
     /// Finish building this type.
-    pub fn finish(mut self, node: &SyntaxNode, typ: PrimitiveType) -> TypeId {
+    pub fn finish(mut self, typ: PrimitiveType) -> TypeId {
         self.finished = true;
 
         let start = self.start.0 as usize;
@@ -541,20 +484,20 @@ impl<'s, 'p> OptionArrayBuilder<'s, 'p> {
 
         // Update the in between types
         for slot in &mut self.parent.data()[start..len] {
-            match &mut slot.data {
+            match slot {
                 Slot::Option { end } => *end = end_id,
                 Slot::Array { end } => *end = end_id,
                 _ => unreachable!(),
             }
         }
 
-        self.parent.data().push(Tracked::new(node, typ.into()));
+        self.parent.data().push(typ.into());
 
         self.start
     }
 }
 
-impl<'s, 'p> Drop for OptionArrayBuilder<'s, 'p> {
+impl<'p> Drop for OptionArrayBuilder<'p> {
     fn drop(&mut self) {
         if self.finished {
             return;
@@ -573,11 +516,11 @@ impl<'s, 'p> Drop for OptionArrayBuilder<'s, 'p> {
 
 /// Arena that holds semantic types.
 #[derive(Debug, Default, PartialEq)]
-pub struct TypeArena<'s> {
-    data: Vec<TrackedSlot<'s>>,
+pub struct TypeArena {
+    data: Vec<Slot>,
 }
 
-impl<'s> TypeArena<'s> {
+impl TypeArena {
     /// Create a new type arena.
     pub fn new() -> Self {
         Self::default()
@@ -592,22 +535,17 @@ impl<'s> TypeArena<'s> {
     }
 
     /// Get a type by id.
-    pub fn get<'a>(&'a self, id: TypeId) -> TrackedType<'s, 'a> {
+    pub fn get<'a>(&'a self, id: TypeId) -> Type<'a> {
         let typ = &self.data[id.0 as usize];
-        let data = Type::from_slot(self, id, &typ.data);
-
-        TrackedType {
-            syntax: typ.syntax,
-            data,
-        }
+        Type::from_slot(self, id, typ)
     }
 
     /// Add a primitive type to the arena.
     ///
     /// Returns the [`TypeId`] assigned to the new type.
-    pub fn add_primitive(&mut self, node: &SyntaxNode, typ: PrimitiveType) -> TypeId {
+    pub fn add_primitive(&mut self, typ: PrimitiveType) -> TypeId {
         let idx = self.data.len();
-        self.data.push(Tracked::new(node, typ.into()));
+        self.data.push(typ.into());
         TypeId(idx as u32)
     }
 
@@ -616,18 +554,11 @@ impl<'s> TypeArena<'s> {
     /// - `typ` is the type of the values in the enum.
     /// - `values` should be a [`ValueId`](value::ValueId) pointing to array of possible values for
     ///   this arena.
-    /// - `node` is the syntax node of the whole enum.
     ///
     /// Returns the [`TypeId`] assigned to the enum.
-    pub fn add_enum(
-        &mut self,
-        node: &SyntaxNode,
-        typ: Option<TypeId>,
-        values: value::ValueId,
-    ) -> TypeId {
+    pub fn add_enum(&mut self, typ: Option<TypeId>, values: value::ValueId) -> TypeId {
         let idx = self.data.len();
-        self.data
-            .push(Tracked::new(node, Slot::Enum { typ, values }));
+        self.data.push(Slot::Enum { typ, values });
         TypeId(idx as u32)
     }
 
@@ -637,63 +568,54 @@ impl<'s> TypeArena<'s> {
     /// - `headers` is the type of the headers.
     /// - `content_type` should be a [`ValueId`](value::ValueId) pointing to a string defining the
     ///   content type.
-    /// - `node` is the syntax node of the whole response.
     ///
     /// Returns the [`TypeId`] assigned to the response.
     pub fn add_response(
         &mut self,
-        node: &SyntaxNode,
         body: Option<TypeId>,
         headers: Option<TypeId>,
         content_type: Option<value::ValueId>,
     ) -> TypeId {
         let idx = self.data.len();
-        self.data.push(Tracked::new(
-            node,
-            Slot::Response {
-                body,
-                headers,
-                content_type,
-            },
-        ));
+        self.data.push(Slot::Response {
+            body,
+            headers,
+            content_type,
+        });
         TypeId(idx as u32)
     }
 
     /// Start building a record type.
     ///
     /// Returns a [`FieldBuilder`] rooted at the new record slot.
-    pub fn start_record<'a>(&'a mut self, node: &SyntaxNode) -> FieldBuilder<'s, 'a> {
-        FieldBuilder::new_record(self, node)
+    pub fn start_record<'a>(&'a mut self) -> FieldBuilder<'a> {
+        FieldBuilder::new_record(self)
     }
 
     /// Start building a union type.
     ///
     /// Returns a [`FieldBuilder`] configured with the provided discriminator.
-    pub fn start_union<'a>(
-        &'a mut self,
-        node: &SyntaxNode,
-        discriminator: Option<Tracked<&'s Name>>,
-    ) -> FieldBuilder<'s, 'a> {
-        FieldBuilder::new_union(self, node, discriminator)
+    pub fn start_union<'a>(&'a mut self, discriminator: Option<StringId>) -> FieldBuilder<'a> {
+        FieldBuilder::new_union(self, discriminator)
     }
 
     /// Add array to the arena.
     ///
     /// Returns a [`OptionArrayBuilder`] that allows building a nested array.
-    pub fn start_array<'a>(&'a mut self, node: &SyntaxNode) -> OptionArrayBuilder<'s, 'a> {
-        OptionArrayBuilder::new_array(self, node)
+    pub fn start_array<'a>(&'a mut self) -> OptionArrayBuilder<'a> {
+        OptionArrayBuilder::new_array(self)
     }
 
     /// Add option to the arena.
     ///
     /// Returns a [`OptionArrayBuilder`] that allows building a nested option.
-    pub fn start_option<'a>(&'a mut self, node: &SyntaxNode) -> OptionArrayBuilder<'s, 'a> {
-        OptionArrayBuilder::new_option(self, node)
+    pub fn start_option<'a>(&'a mut self) -> OptionArrayBuilder<'a> {
+        OptionArrayBuilder::new_option(self)
     }
 }
 
-impl<'s> BuilderParent<'s> for TypeArena<'s> {
-    fn arena(&mut self) -> &mut TypeArena<'s> {
+impl BuilderParent for TypeArena {
+    fn arena(&mut self) -> &mut TypeArena {
         self
     }
 
@@ -704,33 +626,30 @@ impl<'s> BuilderParent<'s> for TypeArena<'s> {
 
 #[cfg(test)]
 mod test {
-    use better_api_syntax::{ast::AstNode, parse, tokenize};
+    use string_interner::DefaultStringInterner;
 
-    use crate::{
-        name::Name,
-        typ::{PrimitiveType, Type, TypeArena, TypeId},
-    };
+    use crate::typ::{PrimitiveType, Type, TypeArena, TypeId};
 
     use super::Slot;
 
-    /// Helper for creating names used in tests.
-    fn name(val: &str) -> &Name {
-        Name::new(val).unwrap()
-    }
-
     #[test]
     fn builds_nested_types() {
-        let mut diags = vec![];
-        let tokens = tokenize("", &mut diags);
-        let res = parse(tokens);
-        let node = res.root.syntax();
-
         let mut arena = TypeArena::new();
 
+        // Insert some strings
+        let mut interner = DefaultStringInterner::default();
+        let id_str = interner.get_or_intern("id");
+        let simple_array_str = interner.get_or_intern("simple_array");
+        let values_str = interner.get_or_intern("values");
+        let metadata_str = interner.get_or_intern("metadata");
+        let unused_str = interner.get_or_intern("unused");
+        let success_str = interner.get_or_intern("success");
+        let error_str = interner.get_or_intern("error");
+
         // Add some primitive types
-        let i32_id = arena.add_primitive(node, PrimitiveType::I32);
-        let string_id = arena.add_primitive(node, PrimitiveType::String);
-        let bool_id = arena.add_primitive(node, PrimitiveType::Bool);
+        let i32_id = arena.add_primitive(PrimitiveType::I32);
+        let string_id = arena.add_primitive(PrimitiveType::String);
+        let bool_id = arena.add_primitive(PrimitiveType::Bool);
 
         // Build a complex nested type structure:
         // record Root {
@@ -739,38 +658,38 @@ mod test {
         //   values: [[[string?]]],
         //   metadata: [[bool]?]
         // }
-        let mut root = arena.start_record(node);
-        root.add_simple(node, name("id"), node, PrimitiveType::I64, None);
+        let mut root = arena.start_record();
+        root.add_simple(id_str, PrimitiveType::I64, None);
 
-        let simple_array = root.start_array(node, name("simple_array"), node, None);
-        simple_array.finish(node, PrimitiveType::F32);
+        let simple_array = root.start_array(simple_array_str, None);
+        simple_array.finish(PrimitiveType::F32);
 
         // Build nested array type: [[[string?]]]
-        let mut values_builder = root.start_array(node, name("values"), node, None);
-        values_builder.start_array(node);
-        values_builder.start_array(node);
-        values_builder.start_option(node);
-        let values_id = values_builder.finish(node, PrimitiveType::String);
+        let mut values_builder = root.start_array(values_str, None);
+        values_builder.start_array();
+        values_builder.start_array();
+        values_builder.start_option();
+        let values_id = values_builder.finish(PrimitiveType::String);
 
         // Build nested array with option: [[bool]?]
-        let mut metadata_builder = root.start_array(node, name("metadata"), node, None);
-        metadata_builder.start_array(node);
-        metadata_builder.start_option(node);
-        metadata_builder.finish(node, PrimitiveType::Bool);
+        let mut metadata_builder = root.start_array(metadata_str, None);
+        metadata_builder.start_array();
+        metadata_builder.start_option();
+        metadata_builder.finish(PrimitiveType::Bool);
 
         let root_id = root.finish();
 
         // Test dropped builder (should not appear in arena)
         {
-            let mut dropped_union = arena.start_union(node, None);
-            dropped_union.add_simple(node, name("unused"), node, PrimitiveType::I32, None);
+            let mut dropped_union = arena.start_union(None);
+            dropped_union.add_simple(unused_str, PrimitiveType::I32, None);
             // Dropped without finish
         }
 
         // Build a union type separately
-        let mut union_builder = arena.start_union(node, None);
-        union_builder.add_simple(node, name("success"), node, PrimitiveType::Bool, None);
-        union_builder.add_simple(node, name("error"), node, PrimitiveType::String, None);
+        let mut union_builder = arena.start_union(None);
+        union_builder.add_simple(success_str, PrimitiveType::Bool, None);
+        union_builder.add_simple(error_str, PrimitiveType::String, None);
         let union_id = union_builder.finish();
 
         // Verify the arena structure
@@ -780,18 +699,18 @@ mod test {
             Slot::Primitive(PrimitiveType::Bool),
             Slot::Record { end: TypeId(20) },
             Slot::TypeField {
-                name: name("id"),
+                name: id_str,
                 default: None,
             },
             Slot::Primitive(PrimitiveType::I64),
             Slot::TypeField {
-                name: name("simple_array"),
+                name: simple_array_str,
                 default: None,
             },
             Slot::Array { end: TypeId(9) },
             Slot::Primitive(PrimitiveType::F32),
             Slot::TypeField {
-                name: name("values"),
+                name: values_str,
                 default: None,
             },
             Slot::Array { end: TypeId(15) },
@@ -800,7 +719,7 @@ mod test {
             Slot::Option { end: TypeId(15) },
             Slot::Primitive(PrimitiveType::String),
             Slot::TypeField {
-                name: name("metadata"),
+                name: metadata_str,
                 default: None,
             },
             Slot::Array { end: TypeId(20) },
@@ -812,12 +731,12 @@ mod test {
                 end: TypeId(25),
             },
             Slot::TypeField {
-                name: name("success"),
+                name: success_str,
                 default: None,
             },
             Slot::Primitive(PrimitiveType::Bool),
             Slot::TypeField {
-                name: name("error"),
+                name: error_str,
                 default: None,
             },
             Slot::Primitive(PrimitiveType::String),
@@ -825,76 +744,73 @@ mod test {
 
         assert_eq!(arena.data.len(), expected_slots.len());
         for (idx, expected) in expected_slots.iter().enumerate() {
-            assert_eq!(
-                &arena.data[idx].data, expected,
-                "slot mismatch at index {idx}"
-            );
+            assert_eq!(&arena.data[idx], expected, "slot mismatch at index {idx}");
         }
 
         // Test getting primitive types
-        assert_eq!(arena.get(i32_id).data, Type::I32);
-        assert_eq!(arena.get(string_id).data, Type::String);
-        assert_eq!(arena.get(bool_id).data, Type::Bool);
+        assert_eq!(arena.get(i32_id), Type::I32);
+        assert_eq!(arena.get(string_id), Type::String);
+        assert_eq!(arena.get(bool_id), Type::Bool);
 
         // Test getting the root record
         let root_type = arena.get(root_id);
-        let mut root_fields = match root_type.data {
+        let mut root_fields = match root_type {
             Type::Record(fields) => fields,
             other => panic!("expected record at root_id, got {other:?}"),
         };
 
         // Check id field
         let id_field = root_fields.next().expect("id field");
-        assert_eq!(id_field.data.name, name("id"));
-        assert_eq!(id_field.data.typ.data, Type::I64);
-        assert_eq!(id_field.data.default, None);
+        assert_eq!(id_field.name, id_str);
+        assert_eq!(id_field.typ, Type::I64);
+        assert_eq!(id_field.default, None);
 
         // Check simple_array field
         let simple_array_field = root_fields.next().expect("simple_array field");
-        assert_eq!(simple_array_field.data.name, name("simple_array"));
-        match simple_array_field.data.typ.data {
+        assert_eq!(simple_array_field.name, simple_array_str);
+        match simple_array_field.typ {
             Type::Array(ref inner) => {
-                assert_eq!(inner.typ().data, Type::F32);
+                assert_eq!(inner.typ(), Type::F32);
             }
             other => panic!("expected array type, got {other:?}"),
         }
 
         // Check values field with nested arrays
         let values_field = root_fields.next().expect("values field");
-        assert_eq!(values_field.data.name, name("values"));
+        assert_eq!(values_field.name, values_str);
 
         // Navigate through [[[string?]]]
-        let level1 = match values_field.data.typ.data {
+        let level1 = match values_field.typ {
             Type::Array(ref inner) => inner.typ(),
             other => panic!("expected array at level 1, got {other:?}"),
         };
 
-        let level2 = match level1.data {
+        let level2 = match level1 {
             Type::Array(ref inner) => inner.typ(),
             other => panic!("expected array at level 2, got {other:?}"),
         };
 
-        let level3 = match level2.data {
+        let level3 = match level2 {
             Type::Array(ref inner) => inner.typ(),
             other => panic!("expected array at level 3, got {other:?}"),
         };
 
-        let option_inner = match level3.data {
+        let option_inner = match level3 {
             Type::Option(ref inner) => inner.typ(),
             other => panic!("expected option, got {other:?}"),
         };
 
-        assert_eq!(option_inner.data, Type::String);
+        assert_eq!(option_inner, Type::String);
 
         // Check metadata field
         let metadata_field = root_fields.next().expect("metadata field");
-        assert_eq!(metadata_field.data.name, name("metadata"));
+        assert_eq!(metadata_field.name, metadata_str);
 
         assert!(root_fields.next().is_none());
 
         // Test getting the union directly
         let union_type = arena.get(union_id);
-        let mut union_fields = match union_type.data {
+        let mut union_fields = match union_type {
             Type::Union(u) => {
                 assert_eq!(u.disriminator, None);
                 u.fields
@@ -903,29 +819,29 @@ mod test {
         };
 
         let success_field = union_fields.next().expect("success field");
-        assert_eq!(success_field.data.name, name("success"));
-        assert_eq!(success_field.data.typ.data, Type::Bool);
+        assert_eq!(success_field.name, success_str);
+        assert_eq!(success_field.typ, Type::Bool);
 
         let error_field = union_fields.next().expect("error field");
-        assert_eq!(error_field.data.name, name("error"));
-        assert_eq!(error_field.data.typ.data, Type::String);
+        assert_eq!(error_field.name, error_str);
+        assert_eq!(error_field.typ, Type::String);
 
         assert!(union_fields.next().is_none());
 
         // Test getting values array type directly
         let values_type = arena.get(values_id);
-        match values_type.data {
+        match values_type {
             Type::Array(ref inner) => {
                 let level1 = inner.typ();
-                match level1.data {
+                match level1 {
                     Type::Array(ref inner2) => {
                         let level2 = inner2.typ();
-                        match level2.data {
+                        match level2 {
                             Type::Array(ref inner3) => {
                                 let level3 = inner3.typ();
-                                match level3.data {
+                                match level3 {
                                     Type::Option(ref inner4) => {
-                                        assert_eq!(inner4.typ().data, Type::String);
+                                        assert_eq!(inner4.typ(), Type::String);
                                     }
                                     other => {
                                         panic!("expected option at deepest level, got {other:?}")

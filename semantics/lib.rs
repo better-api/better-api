@@ -1,6 +1,6 @@
 mod text;
 
-// pub mod typ;
+pub mod typ;
 pub mod value;
 
 /// Id for strings
@@ -11,6 +11,7 @@ type StringId = string_interner::DefaultSymbol;
 enum Element {
     String(StringId),
     Value(value::ValueId),
+    Type(typ::TypeId),
 }
 
 impl From<StringId> for Element {
@@ -22,5 +23,11 @@ impl From<StringId> for Element {
 impl From<value::ValueId> for Element {
     fn from(value: value::ValueId) -> Self {
         Self::Value(value)
+    }
+}
+
+impl From<typ::TypeId> for Element {
+    fn from(value: typ::TypeId) -> Self {
+        Self::Type(value)
     }
 }
