@@ -58,6 +58,8 @@ impl<'a> Value<'a> {
                 arena,
                 current: ValueId(id.0 + 1),
                 end: *end,
+                id,
+                field_idx: 0,
             }),
             Slot::Array { end } => Value::Array(Array {
                 arena,
@@ -73,6 +75,7 @@ impl<'a> Value<'a> {
 
 /// A field inside of the object.
 pub struct ObjectField<'a> {
+    pub id: ObjectFieldId,
     pub name: StringId,
     pub value: Value<'a>,
 }
@@ -86,6 +89,11 @@ pub struct Object<'a> {
     arena: &'a ValueArena,
     current: ValueId,
     end: ValueId,
+
+    // Id of the object
+    id: ValueId,
+    // Current field index
+    field_idx: u32,
 }
 
 impl<'a> Iterator for Object<'a> {
@@ -112,7 +120,17 @@ impl<'a> Iterator for Object<'a> {
             _ => ValueId(self.current.0 + 2),
         };
 
-        Some(ObjectField { name: *name, value })
+        let field_id = ObjectFieldId {
+            value: self.id,
+            idx: self.field_idx,
+        };
+        self.field_idx += 1;
+
+        Some(ObjectField {
+            id: field_id,
+            name: *name,
+            value,
+        })
     }
 }
 
@@ -163,6 +181,12 @@ trait BuilderParent {
 
     fn is_field(&self) -> bool;
 
+    /// This method is called if the child of the builder is dropped withoug
+    /// finished successfully.
+    ///
+    /// For some builders this is a noop.
+    fn drop_child(&mut self);
+
     fn data(&mut self) -> &mut Vec<Slot> {
         &mut self.arena().data
     }
@@ -193,6 +217,10 @@ impl<'p> BuilderParent for ArrayBuilder<'p> {
 
     fn is_field(&self) -> bool {
         false
+    }
+
+    fn drop_child(&mut self) {
+        // Nothing to do
     }
 }
 
@@ -275,6 +303,9 @@ pub struct ObjectBuilder<'p> {
     /// Index in the arena that contains Slot::Object of this object.
     start: ValueId,
 
+    /// Number of fields in the object
+    nr_fields: u32,
+
     /// Was finished called, used by drop implementation.
     finished: bool,
 }
@@ -286,6 +317,10 @@ impl<'p> BuilderParent for ObjectBuilder<'p> {
 
     fn is_field(&self) -> bool {
         true
+    }
+
+    fn drop_child(&mut self) {
+        self.nr_fields -= 1;
     }
 }
 
@@ -299,28 +334,58 @@ impl<'p> ObjectBuilder<'p> {
         Self {
             parent,
             start: ValueId(idx as u32),
+            nr_fields: 0,
             finished: false,
         }
     }
 
     /// Add a new field to the object with primitive value.
-    pub fn add_primitive(&mut self, name: StringId, value: PrimitiveValue) {
+    pub fn add_primitive(&mut self, name: StringId, value: PrimitiveValue) -> ObjectFieldId {
         self.data().push(Slot::ObjectField(name));
         self.data().push(value.into());
+
+        let field_id = ObjectFieldId {
+            value: self.start,
+            idx: self.nr_fields,
+        };
+
+        self.nr_fields += 1;
+
+        field_id
     }
 
     /// Add a new field to the object with object value.
-    pub fn start_object<'a>(&'a mut self, name: StringId) -> ObjectBuilder<'a> {
+    ///
+    /// Returns object builder and [`ObjectFieldId`] of the created field.
+    /// If returned builder, this builder or any parent builder is dropped before
+    /// calling `.finish()` on it, the returned [`ObjectFieldId`] will be invalid!
+    pub fn start_object<'a>(&'a mut self, name: StringId) -> (ObjectBuilder<'a>, ObjectFieldId) {
         self.data().push(Slot::ObjectField(name));
 
-        ObjectBuilder::new(self)
+        let field_id = ObjectFieldId {
+            value: self.start,
+            idx: self.nr_fields,
+        };
+        self.nr_fields += 1;
+
+        (ObjectBuilder::new(self), field_id)
     }
 
     /// Add a new field to the object with array value.
-    pub fn start_array<'a>(&'a mut self, name: StringId) -> ArrayBuilder<'a> {
+    ///
+    /// Returns array builder and [`ObjectFieldId`] of the created field.
+    /// If returned builder, this builder or any parent builder is dropped before
+    /// calling `.finish()` on it, the returned [`ObjectFieldId`] will be invalid!
+    pub fn start_array<'a>(&'a mut self, name: StringId) -> (ArrayBuilder<'a>, ObjectFieldId) {
         self.data().push(Slot::ObjectField(name));
 
-        ArrayBuilder::new(self)
+        let field_id = ObjectFieldId {
+            value: self.start,
+            idx: self.nr_fields,
+        };
+        self.nr_fields += 1;
+
+        (ArrayBuilder::new(self), field_id)
     }
 
     /// Constructs the final object.
@@ -348,6 +413,8 @@ impl<'p> Drop for ObjectBuilder<'p> {
             return;
         }
 
+        self.parent.drop_child();
+
         let mut len = self.start.0 as usize;
 
         // Also remove the field name of the parent.
@@ -360,9 +427,38 @@ impl<'p> Drop for ObjectBuilder<'p> {
 }
 
 /// Id of the value in the [`ValueArena`] .
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct ValueId(u32);
+
+/// Id of a object field.
+///
+/// Example of getting object field from arena:
+/// ```ignore
+/// let object = match arena.get(field_id.value_id()) {
+///     Value::Object(obj) => obj,
+///     _ => panic!("arena is invalid"),
+/// };
+///
+/// let field = object.nth(field_id.index());
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ObjectFieldId {
+    value: ValueId,
+    idx: u32,
+}
+
+impl ObjectFieldId {
+    /// Get [`ValueId`] of the object that contains this field.
+    pub fn value_id(&self) -> ValueId {
+        self.value
+    }
+
+    /// Get index of the field inside an object.
+    pub fn index(&self) -> u32 {
+        self.idx
+    }
+}
 
 /// Slot in the arena
 #[derive(Debug, PartialEq)]
@@ -442,13 +538,17 @@ impl BuilderParent for ValueArena {
     fn is_field(&self) -> bool {
         false
     }
+
+    fn drop_child(&mut self) {
+        // Nothing to do
+    }
 }
 
 #[cfg(test)]
 mod test {
     use string_interner::DefaultStringInterner;
 
-    use crate::value::{PrimitiveValue, Value, ValueArena, ValueId};
+    use crate::value::{ObjectFieldId, PrimitiveValue, Value, ValueArena, ValueId};
 
     use super::Slot;
 
@@ -499,8 +599,8 @@ mod test {
         let mut root = arena.start_object();
         root.add_primitive(flag_str, PrimitiveValue::Integer(7));
 
-        let mut container = root.start_object(container_str);
-        let mut numbers_builder = container.start_array(numbers_str);
+        let (mut container, container_field_id) = root.start_object(container_str);
+        let (mut numbers_builder, numbers_field_id) = container.start_array(numbers_str);
         numbers_builder.add_primitive(PrimitiveValue::Integer(1));
 
         let mut deep_array_builder = numbers_builder.start_array();
@@ -510,7 +610,7 @@ mod test {
 
         let mut array_obj_builder = numbers_builder.start_object();
         {
-            let mut dropped_array = array_obj_builder.start_array(unused_str);
+            let (mut dropped_array, _) = array_obj_builder.start_array(unused_str);
             dropped_array.add_primitive(PrimitiveValue::Integer(123));
             // Dropped without finish on purpose to ensure cleanup.
         }
@@ -522,12 +622,12 @@ mod test {
         let numbers_id = numbers_builder.finish();
 
         {
-            let mut dropped_object = container.start_object(unused_str);
+            let (mut dropped_object, _) = container.start_object(unused_str);
             dropped_object.add_primitive(unused_str, PrimitiveValue::Null);
             // Dropped without finish on purpose to ensure cleanup.
         }
 
-        let mut nested_builder = container.start_object(nested_str);
+        let (mut nested_builder, nested_field_id) = container.start_object(nested_str);
         nested_builder.add_primitive(status_str, PrimitiveValue::String(ok_str));
         nested_builder.add_primitive(count_str, PrimitiveValue::Integer(2));
         let nested_obj_id = nested_builder.finish();
@@ -746,5 +846,30 @@ mod test {
             Value::Integer(2)
         );
         assert!(nested_from_get.next().is_none());
+
+        // Check field ids.
+        assert_eq!(
+            container_field_id,
+            ObjectFieldId {
+                value: root_id,
+                idx: 1,
+            }
+        );
+
+        assert_eq!(
+            numbers_field_id,
+            ObjectFieldId {
+                value: container_id,
+                idx: 0,
+            }
+        );
+
+        assert_eq!(
+            nested_field_id,
+            ObjectFieldId {
+                value: container_id,
+                idx: 1,
+            }
+        );
     }
 }

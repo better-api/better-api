@@ -11,6 +11,7 @@ type StringId = string_interner::DefaultSymbol;
 enum Element {
     String(StringId),
     Value(value::ValueId),
+    ObjectField(value::ObjectFieldId),
     Type(typ::TypeId),
 }
 
@@ -23,6 +24,12 @@ impl From<StringId> for Element {
 impl From<value::ValueId> for Element {
     fn from(value: value::ValueId) -> Self {
         Self::Value(value)
+    }
+}
+
+impl From<value::ObjectFieldId> for Element {
+    fn from(value: value::ObjectFieldId) -> Self {
+        Self::ObjectField(value)
     }
 }
 
