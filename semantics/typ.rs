@@ -335,9 +335,7 @@ impl From<PrimitiveType> for Slot {
 trait BuilderParent {
     fn arena(&mut self) -> &mut TypeArena;
 
-    fn is_field(&self) -> bool;
-
-    /// This method is called if the child of the builder is dropped without
+    /// This method is called by a child builder if it's dropped without
     /// being finished successfully.
     ///
     /// For some builders this is a noop.
@@ -365,6 +363,16 @@ pub struct FieldBuilder<'p> {
 
     /// Was finished called, used by drop implementation.
     finished: bool,
+
+    /// Index of the last inserted field.
+    ///
+    /// That is arena[last_field_idx] points to the name of the field that was last inserted.
+    /// Used for cleaning up when child builder is dropped without calling `.finish()`.
+    ///
+    /// It is enough to handle last field, because child builder has to borrow this builder as
+    /// &mut, therefore you have to either drop a child builder or call `.finish()` before creating
+    /// a new one.
+    last_field_idx: Option<u32>,
 }
 
 impl<'p> FieldBuilder<'p> {
@@ -377,6 +385,7 @@ impl<'p> FieldBuilder<'p> {
             start: TypeId(idx as u32),
             nr_fields: 0,
             finished: false,
+            last_field_idx: None,
         }
     }
 
@@ -392,6 +401,7 @@ impl<'p> FieldBuilder<'p> {
             start: TypeId(idx as u32),
             nr_fields: 0,
             finished: false,
+            last_field_idx: None,
         }
     }
 
@@ -408,6 +418,8 @@ impl<'p> FieldBuilder<'p> {
         typ: PrimitiveType,
         default: Option<value::ValueId>,
     ) -> TypeFieldId {
+        self.last_field_idx = Some(self.data().len() as u32);
+
         self.data().push(Slot::TypeField { name, default });
         self.data().push(typ.into());
 
@@ -431,6 +443,8 @@ impl<'p> FieldBuilder<'p> {
         name: StringId,
         default: Option<value::ValueId>,
     ) -> (OptionArrayBuilder<'a>, TypeFieldId) {
+        self.last_field_idx = Some(self.data().len() as u32);
+
         self.data().push(Slot::TypeField { name, default });
 
         let field_id = TypeFieldId {
@@ -452,6 +466,8 @@ impl<'p> FieldBuilder<'p> {
         name: StringId,
         default: Option<value::ValueId>,
     ) -> (OptionArrayBuilder<'a>, TypeFieldId) {
+        self.last_field_idx = Some(self.data().len() as u32);
+
         self.data().push(Slot::TypeField { name, default });
 
         let field_id = TypeFieldId {
@@ -499,12 +515,13 @@ impl<'a> BuilderParent for FieldBuilder<'a> {
         self.arena
     }
 
-    fn is_field(&self) -> bool {
-        true
-    }
-
     fn drop_child(&mut self) {
         self.nr_fields -= 1;
+
+        // Truncate arena length so that it ends at last inserted field.
+        if let Some(len) = self.last_field_idx {
+            self.arena().data.truncate(len as usize);
+        }
     }
 }
 
@@ -588,16 +605,10 @@ impl<'p> Drop for OptionArrayBuilder<'p> {
             return;
         }
 
-        self.parent.drop_child();
-
-        let mut len = self.start.0 as usize;
-
-        // Also remove the field name of the parent.
-        if self.parent.is_field() {
-            len -= 1;
-        }
-
+        let len = self.start.0 as usize;
         self.parent.data().truncate(len);
+
+        self.parent.drop_child();
     }
 }
 
@@ -706,10 +717,6 @@ impl BuilderParent for TypeArena {
         self
     }
 
-    fn is_field(&self) -> bool {
-        false
-    }
-
     fn drop_child(&mut self) {
         // Nothing to do
     }
@@ -764,7 +771,7 @@ mod test {
 
         // Test dropped builder (should not appear in root)
         {
-            let mut dropped_union = root.start_array(unused_str, None);
+            let _ = root.start_array(unused_str, None);
             // Dropped without finish
         }
 

@@ -177,10 +177,8 @@ pub enum PrimitiveValue {
 trait BuilderParent {
     fn arena(&mut self) -> &mut ValueArena;
 
-    fn is_field(&self) -> bool;
-
-    /// This method is called if the child of the builder is dropped withoug
-    /// finished successfully.
+    /// This method is called by a child builder if the child of the builder is dropped without
+    /// being finished successfully.
     ///
     /// For some builders this is a noop.
     fn drop_child(&mut self);
@@ -211,10 +209,6 @@ pub struct ArrayBuilder<'p> {
 impl<'p> BuilderParent for ArrayBuilder<'p> {
     fn arena(&mut self) -> &mut ValueArena {
         self.parent.arena()
-    }
-
-    fn is_field(&self) -> bool {
-        false
     }
 
     fn drop_child(&mut self) {
@@ -276,14 +270,10 @@ impl<'p> Drop for ArrayBuilder<'p> {
             return;
         }
 
-        let mut len = self.start.0 as usize;
-
-        // Also remove the field name of the parent.
-        if self.parent.is_field() {
-            len -= 1;
-        }
-
+        let len = self.start.0 as usize;
         self.data().truncate(len);
+
+        self.parent.drop_child();
     }
 }
 
@@ -306,6 +296,16 @@ pub struct ObjectBuilder<'p> {
 
     /// Was finished called, used by drop implementation.
     finished: bool,
+
+    /// Index of the last inserted field.
+    ///
+    /// That is arena[last_field_idx] points to the name of the field that was last inserted.
+    /// Used for cleaning up when child builder is dropped without calling `.finish()`.
+    ///
+    /// It is enough to handle last field, because child builder has to borrow this builder as
+    /// &mut, therefore you have to either drop a child builder or call `.finish()` before creating
+    /// a new one.
+    last_field_idx: Option<u32>,
 }
 
 impl<'p> BuilderParent for ObjectBuilder<'p> {
@@ -313,12 +313,13 @@ impl<'p> BuilderParent for ObjectBuilder<'p> {
         self.parent.arena()
     }
 
-    fn is_field(&self) -> bool {
-        true
-    }
-
     fn drop_child(&mut self) {
         self.nr_fields -= 1;
+
+        // Truncate arena length so that it ends at last inserted field.
+        if let Some(len) = self.last_field_idx {
+            self.arena().data.truncate(len as usize);
+        }
     }
 }
 
@@ -334,11 +335,14 @@ impl<'p> ObjectBuilder<'p> {
             start: ValueId(idx as u32),
             nr_fields: 0,
             finished: false,
+            last_field_idx: None,
         }
     }
 
     /// Add a new field to the object with primitive value.
     pub fn add_primitive(&mut self, name: StringId, value: PrimitiveValue) -> ObjectFieldId {
+        self.last_field_idx = Some(self.data().len() as u32);
+
         self.data().push(Slot::ObjectField(name));
         self.data().push(value.into());
 
@@ -346,7 +350,6 @@ impl<'p> ObjectBuilder<'p> {
             value: self.start,
             idx: self.nr_fields,
         };
-
         self.nr_fields += 1;
 
         field_id
@@ -358,6 +361,8 @@ impl<'p> ObjectBuilder<'p> {
     /// If returned builder, this builder or any parent builder is dropped before
     /// calling `.finish()` on it, the returned [`ObjectFieldId`] will be invalid!
     pub fn start_object<'a>(&'a mut self, name: StringId) -> (ObjectBuilder<'a>, ObjectFieldId) {
+        self.last_field_idx = Some(self.data().len() as u32);
+
         self.data().push(Slot::ObjectField(name));
 
         let field_id = ObjectFieldId {
@@ -375,6 +380,8 @@ impl<'p> ObjectBuilder<'p> {
     /// If returned builder, this builder or any parent builder is dropped before
     /// calling `.finish()` on it, the returned [`ObjectFieldId`] will be invalid!
     pub fn start_array<'a>(&'a mut self, name: StringId) -> (ArrayBuilder<'a>, ObjectFieldId) {
+        self.last_field_idx = Some(self.data().len() as u32);
+
         self.data().push(Slot::ObjectField(name));
 
         let field_id = ObjectFieldId {
@@ -411,16 +418,10 @@ impl<'p> Drop for ObjectBuilder<'p> {
             return;
         }
 
-        self.parent.drop_child();
-
-        let mut len = self.start.0 as usize;
-
-        // Also remove the field name of the parent.
-        if self.parent.is_field() {
-            len -= 1;
-        }
-
+        let len = self.start.0 as usize;
         self.data().truncate(len);
+
+        self.parent.drop_child();
     }
 }
 
@@ -531,10 +532,6 @@ impl ValueArena {
 impl BuilderParent for ValueArena {
     fn arena(&mut self) -> &mut ValueArena {
         self
-    }
-
-    fn is_field(&self) -> bool {
-        false
     }
 
     fn drop_child(&mut self) {
