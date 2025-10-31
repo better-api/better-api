@@ -13,6 +13,7 @@ enum Element {
     Value(value::ValueId),
     ObjectField(value::ObjectFieldId),
     Type(typ::TypeId),
+    TypeField(typ::TypeFieldId),
 }
 
 impl From<StringId> for Element {
@@ -36,5 +37,11 @@ impl From<value::ObjectFieldId> for Element {
 impl From<typ::TypeId> for Element {
     fn from(value: typ::TypeId) -> Self {
         Self::Type(value)
+    }
+}
+
+impl From<typ::TypeFieldId> for Element {
+    fn from(value: typ::TypeFieldId) -> Self {
+        Self::TypeField(value)
     }
 }
