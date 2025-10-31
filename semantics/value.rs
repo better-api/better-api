@@ -2,8 +2,6 @@
 //!
 //! The main data structure is a [`ValueArena`] that holds
 //! the values. Values in the arena are referenced with [`ValueId`].
-//! All values in the arena are [tracked](crate::Tracked), which allows
-//! us to drop down to SyntaxNode.
 //!
 //! ## Building An Arena
 //!
@@ -82,7 +80,7 @@ pub struct ObjectField<'a> {
 
 /// Object value returned by the [`ValueArena`].
 ///
-/// It's an iterator where each item is an [`TrackedObjectField`].
+/// It's an iterator where each item is an [`ObjectField`].
 #[derive(derive_more::Debug, PartialEq)]
 pub struct Object<'a> {
     #[debug(skip)]
@@ -136,7 +134,7 @@ impl<'a> Iterator for Object<'a> {
 
 /// Array value returned by the [`ValueArena`].
 ///
-/// It's an iterator where each item is an [`TrackedValue`].
+/// It's an iterator where each item is an [`Value`].
 #[derive(derive_more::Debug, PartialEq)]
 pub struct Array<'a> {
     #[debug(skip)]

@@ -1,23 +1,19 @@
 //! Defines semantic representation of types.
 //!
 //! The main data structure is a [`TypeArena`] that holds semantic types
-//! resolved from syntax. Types in the arena are referenced with [`TypeId`],
-//! and every stored value is [tracked](crate::Tracked) so we can map it back
-//! to the originating SyntaxNode.
+//! resolved from syntax. Types in the arena are referenced with [`TypeId`].
 //!
 //! ## Building An Arena
 //!
-//! [Simple types](SimpleType) can be added directly with
-//! [`TypeArena::add_simple`]. Composite types (records and unions) are built
+//! [Primitive types](PrimitiveType) can be added directly with
+//! [`TypeArena::add_primitive`]. Composite types (records and unions) are built
 //! through the builder API returned by [`TypeArena::start_record`] and
 //! [`TypeArena::start_union`]. Builders allow us to build the composite types
 //! without additional heap allocations.
 //!
 //! ## Getting Types
 //!
-//! To retrieve a type, pass a [`TypeId`] to [`TypeArena::get`]. This returns a
-//! [`TrackedType`], giving access to both semantic data and the syntax pointer
-//! required for diagnostics.
+//! To retrieve a type, pass a [`TypeId`] to [`TypeArena::get`]. This returns a [`Type`].
 
 use crate::{StringId, value};
 
@@ -133,7 +129,7 @@ pub struct TypeField<'a> {
 
 /// Iterator returned for composite types.
 ///
-/// Each item is a [`TrackedTypeField`].
+/// Each item is a [`TypeField`].
 #[derive(derive_more::Debug, PartialEq)]
 pub struct TypeFieldIterator<'a> {
     #[debug(skip)]
