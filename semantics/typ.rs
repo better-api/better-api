@@ -31,7 +31,8 @@ pub enum Type<'a> {
     Bool,
     String,
     File,
-    Reference(Reference<'a>),
+    /// Reference to a named type.
+    Reference(StringId),
     Option(Reference<'a>),
     Array(Reference<'a>),
     Record(TypeFieldIterator<'a>),
@@ -40,9 +41,9 @@ pub enum Type<'a> {
     Response(Response<'a>),
 }
 
-impl<'a> Type<'a> {
-    fn from_primitive(arena: &'a TypeArena, simple: PrimitiveType) -> Self {
-        match simple {
+impl From<PrimitiveType> for Type<'_> {
+    fn from(value: PrimitiveType) -> Self {
+        match value {
             PrimitiveType::I32 => Type::I32,
             PrimitiveType::I64 => Type::I64,
             PrimitiveType::U32 => Type::U32,
@@ -54,13 +55,15 @@ impl<'a> Type<'a> {
             PrimitiveType::Bool => Type::Bool,
             PrimitiveType::String => Type::String,
             PrimitiveType::File => Type::File,
-            PrimitiveType::Reference(id) => Type::Reference(Reference { arena, id }),
+            PrimitiveType::Reference(name) => Type::Reference(name),
         }
     }
+}
 
+impl<'a> Type<'a> {
     fn from_slot(arena: &'a TypeArena, id: TypeId, slot: &'a Slot) -> Self {
         match slot {
-            Slot::Primitive(simple) => Type::from_primitive(arena, *simple),
+            Slot::Primitive(simple) => (*simple).into(),
             Slot::Array { .. } => Type::Array(Reference {
                 arena,
                 id: TypeId(id.0 + 1),
@@ -265,7 +268,7 @@ pub enum PrimitiveType {
     Bool,
     String,
     File,
-    Reference(TypeId),
+    Reference(StringId),
 }
 
 /// Slot in the type arena.
