@@ -287,7 +287,7 @@ pub enum PrimitiveType {
 /// ```
 /// The `end` property of Array and Option represent the TypeId of the type after the whole nesting
 /// and can be used to skip the whole nested type when doing field iteration.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum Slot {
     Primitive(PrimitiveType),
     Option {
@@ -616,7 +616,7 @@ impl<'p> Drop for OptionArrayBuilder<'p> {
 }
 
 /// Arena that holds semantic types.
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct TypeArena {
     data: Vec<Slot>,
 }

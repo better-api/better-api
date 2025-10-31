@@ -177,7 +177,7 @@ pub enum PrimitiveValue {
 trait BuilderParent {
     fn arena(&mut self) -> &mut ValueArena;
 
-    /// This method is called by a child builder if the child of the builder is dropped without
+    /// This method is called by a child builder if it's dropped without
     /// being finished successfully.
     ///
     /// For some builders this is a noop.
@@ -460,7 +460,7 @@ impl ObjectFieldId {
 }
 
 /// Slot in the arena
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum Slot {
     Primitive(PrimitiveValue),
     Array {
@@ -486,7 +486,7 @@ impl From<PrimitiveValue> for Slot {
 }
 
 /// Arena that holds the values.
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ValueArena {
     data: Vec<Slot>,
 }

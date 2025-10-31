@@ -1,14 +1,18 @@
 mod text;
 
+pub mod oracle;
 pub mod typ;
 pub mod value;
 
-/// Id for strings
-type StringId = string_interner::DefaultSymbol;
+/// Re-export for simpler use case.
+pub use oracle::Oracle;
+
+/// Id of an interned string.
+pub type StringId = string_interner::DefaultSymbol;
 
 /// Semantic element.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Element {
+pub enum Element {
     String(StringId),
     Value(value::ValueId),
     ObjectField(value::ObjectFieldId),
