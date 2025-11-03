@@ -1,0 +1,96 @@
+---
+source: semantics/oracle/metadata.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "repeated `version` directive",
+        label: Some(
+            Label {
+                message: "repeated `version` directive",
+                span: Span {
+                    start: 27,
+                    end: 39,
+                },
+            },
+        ),
+        note: Some(
+            "help: provide only one `version`",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "`version` must be a string, got integer",
+        label: Some(
+            Label {
+                message: "expected a string",
+                span: Span {
+                    start: 36,
+                    end: 38,
+                },
+            },
+        ),
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "repeated `name` directive",
+        label: Some(
+            Label {
+                message: "repeated `name` directive",
+                span: Span {
+                    start: 61,
+                    end: 73,
+                },
+            },
+        ),
+        note: Some(
+            "help: provide only one `name`",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "`name` must be a string, got bool",
+        label: Some(
+            Label {
+                message: "expected a string",
+                span: Span {
+                    start: 67,
+                    end: 72,
+                },
+            },
+        ),
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "repeated `betterApi` directive",
+        label: Some(
+            Label {
+                message: "repeated `betterApi` directive",
+                span: Span {
+                    start: 113,
+                    end: 129,
+                },
+            },
+        ),
+        note: Some(
+            "help: provide only one `betterApi`",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "`betterApi` must be a string, got float",
+        label: Some(
+            Label {
+                message: "expected a string",
+                span: Span {
+                    start: 124,
+                    end: 128,
+                },
+            },
+        ),
+        note: None,
+    },
+]

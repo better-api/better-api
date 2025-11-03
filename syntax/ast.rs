@@ -90,8 +90,19 @@ ast_node! {
 }
 
 impl Root {
+    /// Get iterator through all defined [`ApiVersion`s](ApiVersion).
     pub fn api_versions(&self) -> impl Iterator<Item = ApiVersion> {
         self.0.children().filter_map(ApiVersion::cast)
+    }
+
+    /// Get iterator through all defined [`ApiName`s](ApiName).
+    pub fn api_names(&self) -> impl Iterator<Item = ApiName> {
+        self.0.children().filter_map(ApiName::cast)
+    }
+
+    /// Get iterator through all defined [`BetterApiVersion`s](BetterApiVersion).
+    pub fn better_api_versions(&self) -> impl Iterator<Item = BetterApiVersion> {
+        self.0.children().filter_map(BetterApiVersion::cast)
     }
 }
 

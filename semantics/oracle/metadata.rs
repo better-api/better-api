@@ -1,6 +1,6 @@
 use better_api_diagnostic::{Label, Report, Span};
-use better_api_syntax::ast;
 use better_api_syntax::ast::AstNode;
+use better_api_syntax::{TextRange, ast};
 
 use crate::value::Value;
 
@@ -10,29 +10,46 @@ impl Oracle {
     pub fn analyze_metadata(&mut self, root: &ast::Root) {
         for (idx, version) in root.api_versions().enumerate() {
             if idx > 0 {
-                let range = version.syntax().text_range();
-                self.reports.push(
-                    Report::error("repeated `version` directive".to_string())
-                        .with_label(Label::new(
-                            "repeated `version` directive".to_string(),
-                            Span::new(range.start().into(), range.end().into()),
-                        ))
-                        .with_note("help: provide only one `version`".to_string()),
-                );
+                self.emit_repeated_report("version", version.syntax().text_range());
             }
-            self.analyze_api_version(&version);
+
+            if let Some(ast_value) = version.value() {
+                self.analyze_string_directive(&ast_value, "version");
+            }
         }
+
+        for (idx, name) in root.api_names().enumerate() {
+            if idx > 0 {
+                self.emit_repeated_report("name", name.syntax().text_range());
+            }
+            if let Some(ast_value) = name.value() {
+                self.analyze_string_directive(&ast_value, "name");
+            }
+        }
+
+        for (idx, version) in root.better_api_versions().enumerate() {
+            if idx > 0 {
+                self.emit_repeated_report("betterApi", version.syntax().text_range());
+            }
+
+            if let Some(ast_value) = version.value() {
+                self.analyze_string_directive(&ast_value, "betterApi");
+            }
+        }
+
+        // TODO: Analyze servers
     }
 
-    fn analyze_api_version(&mut self, version: &ast::ApiVersion) -> Option<()> {
-        let ast_value = version.value()?;
-        let value_id = self.parse_value(&ast_value)?;
+    /// Analyze directive that expects value to be a string.
+    /// This is `version`, `name` and `betterApi`
+    fn analyze_string_directive(&mut self, value_node: &ast::Value, directive: &str) -> Option<()> {
+        let value_id = self.parse_value(value_node)?;
         let value = self.values.get(value_id);
 
         if !matches!(value, Value::String(_)) {
-            let range = ast_value.syntax().text_range();
+            let range = value_node.syntax().text_range();
             self.reports.push(
-                Report::error(format!("`version` must be a string, got {value}")).with_label(
+                Report::error(format!("`{directive}` must be a string, got {value}")).with_label(
                     Label::new(
                         "expected a string".to_string(),
                         Span::new(range.start().into(), range.end().into()),
@@ -42,6 +59,18 @@ impl Oracle {
         };
 
         Some(())
+    }
+
+    /// Emits report for repeated directive (`version`, `name` or `betterApi`)
+    fn emit_repeated_report(&mut self, directive: &str, range: TextRange) {
+        self.reports.push(
+            Report::error(format!("repeated `{directive}` directive"))
+                .with_label(Label::new(
+                    format!("repeated `{directive}` directive"),
+                    Span::new(range.start().into(), range.end().into()),
+                ))
+                .with_note(format!("help: provide only one `{directive}`")),
+        );
     }
 }
 
@@ -53,10 +82,19 @@ mod test {
     use crate::Oracle;
 
     #[test]
-    fn analyze_api_version() {
+    fn analyze_basic_metadata() {
         let text = indoc! {r#"
+            // Versions
             version: "1.2"
             version: 42
+
+            // Name
+            name: "test"
+            name: false
+
+            // Better API Version
+            betterApi: "0.1"
+            betterApi: 1.23
         "#};
 
         let mut diagnostics = vec![];
