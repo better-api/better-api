@@ -89,6 +89,12 @@ ast_node! {
     struct Root;
 }
 
+impl Root {
+    pub fn api_versions(&self) -> impl Iterator<Item = ApiVersion> {
+        self.0.children().filter_map(ApiVersion::cast)
+    }
+}
+
 /////////////////
 // Basic nodes //
 /////////////////
@@ -133,12 +139,48 @@ ast_node! {
 //////////////////////////////////
 
 ast_node! {
+    #[from(NODE_BETTER_API)]
+    /// Version of Better API used.
+    struct BetterApiVersion;
+}
+
+impl BetterApiVersion {
+    pub fn value(&self) -> Option<Value> {
+        self.0.children().find_map(Value::cast)
+    }
+}
+
+ast_node! {
     #[from(NODE_API_NAME)]
     /// Name of the API in the spec.
     struct ApiName;
 }
 
 impl ApiName {
+    pub fn value(&self) -> Option<Value> {
+        self.0.children().find_map(Value::cast)
+    }
+}
+
+ast_node! {
+    #[from(NODE_VERSION)]
+    /// Version of the API
+    struct ApiVersion;
+}
+
+impl ApiVersion {
+    pub fn value(&self) -> Option<Value> {
+        self.0.children().find_map(Value::cast)
+    }
+}
+
+ast_node! {
+    #[from(NODE_SERVER)]
+    /// Server info
+    struct Server;
+}
+
+impl Server {
     pub fn value(&self) -> Option<Value> {
         self.0.children().find_map(Value::cast)
     }
@@ -154,10 +196,40 @@ ast_node! {
     struct String;
 }
 
+impl String {
+    /// Returns TOKEN_STRING syntax token.
+    pub fn string(&self) -> Option<SyntaxToken> {
+        self.0.first_token().and_then(|t| {
+            if t.kind() == TOKEN_STRING {
+                Some(t)
+            } else {
+                None
+            }
+        })
+    }
+}
+
 ast_node! {
     #[from(NODE_VALUE_INTEGER)]
     /// Integer value.
     struct Integer;
+}
+
+impl Integer {
+    /// Returns integer representation.
+    pub fn integer(&self) -> Option<i128> {
+        self.0.first_token().and_then(|t| {
+            if t.kind() == TOKEN_INTEGER {
+                Some(
+                    t.text()
+                        .parse()
+                        .expect("tokenizer should emit valid integers"),
+                )
+            } else {
+                None
+            }
+        })
+    }
 }
 
 ast_node! {
@@ -166,10 +238,38 @@ ast_node! {
     struct Float;
 }
 
+impl Float {
+    /// Returns float representation.
+    pub fn float(&self) -> Option<f64> {
+        self.0.first_token().and_then(|t| {
+            if t.kind() == TOKEN_FLOAT {
+                Some(
+                    t.text()
+                        .parse()
+                        .expect("tokenizer should emit valid floats"),
+                )
+            } else {
+                None
+            }
+        })
+    }
+}
+
 ast_node! {
     #[from(NODE_VALUE_BOOL)]
     /// Boolean value.
     struct Bool;
+}
+
+impl Bool {
+    /// Returns bool representation.
+    pub fn bool(&self) -> Option<bool> {
+        self.0.first_token().and_then(|t| match t.kind() {
+            TOKEN_KW_TRUE => Some(true),
+            TOKEN_KW_FALSE => Some(false),
+            _ => None,
+        })
+    }
 }
 
 ast_node! {

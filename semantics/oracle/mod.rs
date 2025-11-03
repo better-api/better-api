@@ -1,15 +1,25 @@
 //! Defines core type responsible for semantic analysis.
 
+use better_api_diagnostic::Report;
 use better_api_syntax::ast;
 
-use crate::{typ, value};
+use crate::SourceMap;
+use crate::typ::TypeArena;
+use crate::value::ValueArena;
+
+mod metadata;
+mod value;
 
 /// Core type responsible for semantic analysis.
 #[derive(Clone, Default)]
 pub struct Oracle {
     strings: string_interner::DefaultStringInterner,
-    values: value::ValueArena,
-    types: typ::TypeArena,
+    values: ValueArena,
+    types: TypeArena,
+
+    source_map: SourceMap,
+
+    reports: Vec<Report>,
 }
 
 impl Oracle {
@@ -23,22 +33,13 @@ impl Oracle {
         oracle
     }
 
-    /// Runs semantic analysis on the given AST and re-creates the oracle.
-    ///
-    /// This method replaces the information stored in the oracle by
-    /// reusing the allocated memory. A good place to use this method is in
-    /// an LSP where semantic analysis runs on every file change. Instead of
-    /// dropping an oracle and creating a new one, this method should be used
-    /// to avoid unnecessary heap re-allocations.
-    pub fn reanalyze(&mut self, root: &ast::Root) {
-        self.strings = Default::default();
-        self.values.clear();
-        self.types.clear();
-
-        self.analyze(root);
+    /// Get semantic problems.
+    pub fn reports(&self) -> &[Report] {
+        &self.reports
     }
 
-    fn analyze(&mut self, _root: &ast::Root) {
+    fn analyze(&mut self, root: &ast::Root) {
+        self.analyze_metadata(root);
         // TODO: Implement the actual analysis
     }
 }

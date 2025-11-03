@@ -234,7 +234,7 @@ pub struct TypeId(u32);
 ///
 /// let field = fields.nth(field_id.index());
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TypeFieldId {
     typ: TypeId,
     idx: u32,
@@ -625,14 +625,6 @@ impl TypeArena {
     /// Create a new type arena.
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Clears the type arena, removing all types.
-    ///
-    /// Note that this method has no effect on the allocated
-    /// capacity of the arena.
-    pub fn clear(&mut self) {
-        self.data.clear();
     }
 
     /// Get a type by id.

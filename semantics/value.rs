@@ -25,14 +25,21 @@
 use crate::StringId;
 
 /// Representation of a value.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, derive_more::Display)]
 pub enum Value<'a> {
+    #[display("`null`")]
     Null,
+    #[display("string")]
     String(StringId),
+    #[display("bool")]
     Bool(bool),
+    #[display("integer")]
     Integer(i128), // i128 is large enough for i64 and u64
+    #[display("float")]
     Float(f64),
+    #[display("object")]
     Object(Object<'a>),
+    #[display("array")]
     Array(Array<'a>),
 }
 
@@ -426,7 +433,7 @@ impl<'p> Drop for ObjectBuilder<'p> {
 }
 
 /// Id of the value in the [`ValueArena`] .
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct ValueId(u32);
 
@@ -441,7 +448,7 @@ pub struct ValueId(u32);
 ///
 /// let field = object.nth(field_id.index());
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ObjectFieldId {
     value: ValueId,
     idx: u32,
@@ -495,14 +502,6 @@ impl ValueArena {
     /// Create a new value arena.
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Clears the value arena, removing all values.
-    ///
-    /// Note that this method has no effect on the allocated
-    /// capacity of the arena.
-    pub fn clear(&mut self) {
-        self.data.clear();
     }
 
     /// Get value by id.
