@@ -64,7 +64,6 @@ impl<'a> Value<'a> {
                 current: ValueId(id.0 + 1),
                 end: *end,
                 id,
-                field_idx: 0,
             }),
             Slot::Array { end } => Value::Array(Array {
                 arena,
@@ -97,8 +96,6 @@ pub struct Object<'a> {
 
     // Id of the object
     id: ValueId,
-    // Current field index
-    field_idx: u32,
 }
 
 impl<'a> Iterator for Object<'a> {
@@ -109,33 +106,19 @@ impl<'a> Iterator for Object<'a> {
             return None;
         }
 
-        let name_slot = &self.arena.data[self.current.0 as usize];
-        let value_slot = &self.arena.data[self.current.0 as usize + 1];
-
-        let name = match &name_slot {
-            Slot::ObjectField(name) => name,
-            val => unreachable!("invalid object field in arena: {val:?}"),
+        let field_id = ObjectFieldId {
+            value_id: self.id,
+            slot: self.current.0,
         };
+        let field = self.arena.get_field(field_id);
 
-        let value = Value::from_slot(self.arena, ValueId(self.current.0 + 1), value_slot);
-
-        self.current = match value {
+        self.current = match field.value {
             Value::Object(Object { end, .. }) => end,
             Value::Array(Array { end, .. }) => end,
             _ => ValueId(self.current.0 + 2),
         };
 
-        let field_id = ObjectFieldId {
-            value: self.id,
-            idx: self.field_idx,
-        };
-        self.field_idx += 1;
-
-        Some(ObjectField {
-            id: field_id,
-            name: *name,
-            value,
-        })
+        Some(field)
     }
 }
 
@@ -298,9 +281,6 @@ pub struct ObjectBuilder<'p> {
     /// Index in the arena that contains Slot::Object of this object.
     start: ValueId,
 
-    /// Number of fields in the object
-    nr_fields: u32,
-
     /// Was finished called, used by drop implementation.
     finished: bool,
 
@@ -321,8 +301,6 @@ impl<'p> BuilderParent for ObjectBuilder<'p> {
     }
 
     fn drop_child(&mut self) {
-        self.nr_fields -= 1;
-
         // Truncate arena length so that it ends at last inserted field.
         if let Some(len) = self.last_field_idx {
             self.arena().data.truncate(len as usize);
@@ -340,64 +318,35 @@ impl<'p> ObjectBuilder<'p> {
         Self {
             parent,
             start: ValueId(idx as u32),
-            nr_fields: 0,
             finished: false,
             last_field_idx: None,
         }
     }
 
     /// Add a new field to the object with primitive value.
-    pub fn add_primitive(&mut self, name: StringId, value: PrimitiveValue) -> ObjectFieldId {
+    pub fn add_primitive(&mut self, name: StringId, value: PrimitiveValue) {
         self.last_field_idx = Some(self.data().len() as u32);
 
         self.data().push(Slot::ObjectField(name));
         self.data().push(value.into());
-
-        let field_id = ObjectFieldId {
-            value: self.start,
-            idx: self.nr_fields,
-        };
-        self.nr_fields += 1;
-
-        field_id
     }
 
     /// Add a new field to the object with object value.
-    ///
-    /// Returns object builder and [`ObjectFieldId`] of the created field.
-    /// If returned builder, this builder or any parent builder is dropped before
-    /// calling `.finish()` on it, the returned [`ObjectFieldId`] will be invalid!
-    pub fn start_object<'a>(&'a mut self, name: StringId) -> (ObjectBuilder<'a>, ObjectFieldId) {
+    pub fn start_object<'a>(&'a mut self, name: StringId) -> ObjectBuilder<'a> {
         self.last_field_idx = Some(self.data().len() as u32);
 
         self.data().push(Slot::ObjectField(name));
 
-        let field_id = ObjectFieldId {
-            value: self.start,
-            idx: self.nr_fields,
-        };
-        self.nr_fields += 1;
-
-        (ObjectBuilder::new(self), field_id)
+        ObjectBuilder::new(self)
     }
 
     /// Add a new field to the object with array value.
-    ///
-    /// Returns array builder and [`ObjectFieldId`] of the created field.
-    /// If returned builder, this builder or any parent builder is dropped before
-    /// calling `.finish()` on it, the returned [`ObjectFieldId`] will be invalid!
-    pub fn start_array<'a>(&'a mut self, name: StringId) -> (ArrayBuilder<'a>, ObjectFieldId) {
+    pub fn start_array<'a>(&'a mut self, name: StringId) -> ArrayBuilder<'a> {
         self.last_field_idx = Some(self.data().len() as u32);
 
         self.data().push(Slot::ObjectField(name));
 
-        let field_id = ObjectFieldId {
-            value: self.start,
-            idx: self.nr_fields,
-        };
-        self.nr_fields += 1;
-
-        (ArrayBuilder::new(self), field_id)
+        ArrayBuilder::new(self)
     }
 
     /// Constructs the final object.
@@ -439,30 +388,18 @@ pub struct ValueId(u32);
 
 /// Id of a object field.
 ///
-/// Example of getting object field from arena:
-/// ```ignore
-/// let object = match arena.get(field_id.value_id()) {
-///     Value::Object(obj) => obj,
-///     _ => panic!("arena is invalid"),
-/// };
-///
-/// let field = object.nth(field_id.index());
-/// ```
+/// Used for getting specific [`ObjectField`] with [`ValueArena::get_field`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ObjectFieldId {
-    value: ValueId,
-    idx: u32,
+    value_id: ValueId,
+    /// Index of the slot in the arena
+    slot: u32,
 }
 
 impl ObjectFieldId {
     /// Get [`ValueId`] of the object that contains this field.
     pub fn value_id(&self) -> ValueId {
-        self.value
-    }
-
-    /// Get index of the field inside an object.
-    pub fn index(&self) -> u32 {
-        self.idx
+        self.value_id
     }
 }
 
@@ -504,10 +441,29 @@ impl ValueArena {
         Self::default()
     }
 
-    /// Get value by id.
+    /// Get [`Value`] by id.
     pub fn get<'a>(&'a self, id: ValueId) -> Value<'a> {
         let val = &self.data[id.0 as usize];
         Value::from_slot(self, id, val)
+    }
+
+    /// Get [`ObjectField`] by id.
+    pub fn get_field<'a>(&'a self, id: ObjectFieldId) -> ObjectField<'a> {
+        let name_slot = &self.data[id.slot as usize];
+        let value_slot = &self.data[id.slot as usize + 1];
+
+        let name = match &name_slot {
+            Slot::ObjectField(name) => name,
+            val => unreachable!("invalid object field in arena for id {id:?}: {val:?}"),
+        };
+
+        let value = Value::from_slot(self, ValueId(id.slot + 1), value_slot);
+
+        ObjectField {
+            id,
+            name: *name,
+            value,
+        }
     }
 
     /// Add primitive value to arena.
@@ -542,7 +498,7 @@ impl BuilderParent for ValueArena {
 mod test {
     use string_interner::DefaultStringInterner;
 
-    use crate::value::{ObjectFieldId, PrimitiveValue, Value, ValueArena, ValueId};
+    use crate::value::{PrimitiveValue, Value, ValueArena, ValueId};
 
     use super::Slot;
 
@@ -593,8 +549,8 @@ mod test {
         let mut root = arena.start_object();
         root.add_primitive(flag_str, PrimitiveValue::Integer(7));
 
-        let (mut container, container_field_id) = root.start_object(container_str);
-        let (mut numbers_builder, numbers_field_id) = container.start_array(numbers_str);
+        let mut container = root.start_object(container_str);
+        let mut numbers_builder = container.start_array(numbers_str);
         numbers_builder.add_primitive(PrimitiveValue::Integer(1));
 
         let mut deep_array_builder = numbers_builder.start_array();
@@ -604,7 +560,7 @@ mod test {
 
         let mut array_obj_builder = numbers_builder.start_object();
         {
-            let (mut dropped_array, _) = array_obj_builder.start_array(unused_str);
+            let mut dropped_array = array_obj_builder.start_array(unused_str);
             dropped_array.add_primitive(PrimitiveValue::Integer(123));
             // Dropped without finish on purpose to ensure cleanup.
         }
@@ -616,12 +572,12 @@ mod test {
         let numbers_id = numbers_builder.finish();
 
         {
-            let (mut dropped_object, _) = container.start_object(unused_str);
+            let mut dropped_object = container.start_object(unused_str);
             dropped_object.add_primitive(unused_str, PrimitiveValue::Null);
             // Dropped without finish on purpose to ensure cleanup.
         }
 
-        let (mut nested_builder, nested_field_id) = container.start_object(nested_str);
+        let mut nested_builder = container.start_object(nested_str);
         nested_builder.add_primitive(status_str, PrimitiveValue::String(ok_str));
         nested_builder.add_primitive(count_str, PrimitiveValue::Integer(2));
         let nested_obj_id = nested_builder.finish();
@@ -840,30 +796,5 @@ mod test {
             Value::Integer(2)
         );
         assert!(nested_from_get.next().is_none());
-
-        // Check field ids.
-        assert_eq!(
-            container_field_id,
-            ObjectFieldId {
-                value: root_id,
-                idx: 1,
-            }
-        );
-
-        assert_eq!(
-            numbers_field_id,
-            ObjectFieldId {
-                value: container_id,
-                idx: 0,
-            }
-        );
-
-        assert_eq!(
-            nested_field_id,
-            ObjectFieldId {
-                value: container_id,
-                idx: 1,
-            }
-        );
     }
 }

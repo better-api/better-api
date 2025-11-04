@@ -91,7 +91,6 @@ impl<'a> Type<'a> {
                 current: TypeId(id.0 + 1),
                 end: *end,
                 id,
-                field_idx: 0,
             }),
             Slot::Union { discriminator, end } => Type::Union(Union {
                 disriminator: *discriminator,
@@ -100,7 +99,6 @@ impl<'a> Type<'a> {
                     current: TypeId(id.0 + 1),
                     end: *end,
                     id,
-                    field_idx: 0,
                 },
             }),
             Slot::TypeField { .. } => unreachable!("invalid conversion of Slot::TypeField to Type"),
@@ -147,8 +145,6 @@ pub struct TypeFieldIterator<'a> {
 
     // Id of the record or union
     id: TypeId,
-    // Current field index
-    field_idx: u32,
 }
 
 impl<'a> Iterator for TypeFieldIterator<'a> {
@@ -159,35 +155,22 @@ impl<'a> Iterator for TypeFieldIterator<'a> {
             return None;
         }
 
-        let field_slot = &self.arena.data[self.current.0 as usize];
-        let typ_slot = &self.arena.data[self.current.0 as usize + 1];
-
-        let (name, default) = match &field_slot {
-            Slot::TypeField { name, default } => (*name, *default),
-            val => unreachable!("invalid type field in arena: {val:?}"),
+        let field_id = TypeFieldId {
+            type_id: self.id,
+            slot: self.current.0,
         };
+        let field = self.arena.get_field(field_id);
 
-        let typ = Type::from_slot(self.arena, TypeId(self.current.0 + 1), typ_slot);
+        let field_type_slot = &self.arena.data[field_id.slot as usize + 1];
 
-        self.current = match &typ_slot {
+        self.current = match &field_type_slot {
             Slot::Option { end } => *end,
             Slot::Array { end } => *end,
             Slot::Primitive(_) => TypeId(self.current.0 + 2),
             typ => unreachable!("invalid type's field type in arena: {typ:?}"),
         };
 
-        let field_id = TypeFieldId {
-            typ: self.id,
-            idx: self.field_idx,
-        };
-        self.field_idx += 1;
-
-        Some(TypeField {
-            id: field_id,
-            name,
-            default,
-            typ,
-        })
+        Some(field)
     }
 }
 
@@ -224,31 +207,19 @@ pub struct TypeId(u32);
 
 /// Id of a field in a record or union.
 ///
-/// Example of getting a type field from arena:
-/// ```ignore
-/// let fields = match arena.get(field_id.type_id()) {
-///     Type::Record(fields) => fields,
-///     Type::Union(u) => u.fields,
-///     _ => panic!("arena is invalid"),
-/// };
-///
-/// let field = fields.nth(field_id.index());
-/// ```
+/// Used for getting specific [`TypeField`] with [`TypeArena::get_field`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TypeFieldId {
-    typ: TypeId,
-    idx: u32,
+    type_id: TypeId,
+
+    /// Index of the slot in the arena
+    slot: u32,
 }
 
 impl TypeFieldId {
     /// Get [`TypeId`] of the record or union that contains this field.
     pub fn type_id(&self) -> TypeId {
-        self.typ
-    }
-
-    /// Get index of the field inside a record or union.
-    pub fn index(&self) -> u32 {
-        self.idx
+        self.type_id
     }
 }
 
@@ -361,9 +332,6 @@ pub struct FieldBuilder<'p> {
     /// Index in the arena that contains Slot::Record or Slot::Union.
     start: TypeId,
 
-    /// Number of fields in the record or union
-    nr_fields: u32,
-
     /// Was finished called, used by drop implementation.
     finished: bool,
 
@@ -386,7 +354,6 @@ impl<'p> FieldBuilder<'p> {
         Self {
             arena,
             start: TypeId(idx as u32),
-            nr_fields: 0,
             finished: false,
             last_field_idx: None,
         }
@@ -402,7 +369,6 @@ impl<'p> FieldBuilder<'p> {
         Self {
             arena,
             start: TypeId(idx as u32),
-            nr_fields: 0,
             finished: false,
             last_field_idx: None,
         }
@@ -420,20 +386,11 @@ impl<'p> FieldBuilder<'p> {
         name: StringId,
         typ: PrimitiveType,
         default: Option<value::ValueId>,
-    ) -> TypeFieldId {
+    ) {
         self.last_field_idx = Some(self.data().len() as u32);
 
         self.data().push(Slot::TypeField { name, default });
         self.data().push(typ.into());
-
-        let field_id = TypeFieldId {
-            typ: self.start,
-            idx: self.nr_fields,
-        };
-
-        self.nr_fields += 1;
-
-        field_id
     }
 
     /// Add a new field of array type.
@@ -445,18 +402,12 @@ impl<'p> FieldBuilder<'p> {
         &'a mut self,
         name: StringId,
         default: Option<value::ValueId>,
-    ) -> (OptionArrayBuilder<'a>, TypeFieldId) {
+    ) -> OptionArrayBuilder<'a> {
         self.last_field_idx = Some(self.data().len() as u32);
 
         self.data().push(Slot::TypeField { name, default });
 
-        let field_id = TypeFieldId {
-            typ: self.start,
-            idx: self.nr_fields,
-        };
-        self.nr_fields += 1;
-
-        (OptionArrayBuilder::new_array(self), field_id)
+        OptionArrayBuilder::new_array(self)
     }
 
     /// Add a new field of option type.
@@ -468,18 +419,12 @@ impl<'p> FieldBuilder<'p> {
         &'a mut self,
         name: StringId,
         default: Option<value::ValueId>,
-    ) -> (OptionArrayBuilder<'a>, TypeFieldId) {
+    ) -> OptionArrayBuilder<'a> {
         self.last_field_idx = Some(self.data().len() as u32);
 
         self.data().push(Slot::TypeField { name, default });
 
-        let field_id = TypeFieldId {
-            typ: self.start,
-            idx: self.nr_fields,
-        };
-        self.nr_fields += 1;
-
-        (OptionArrayBuilder::new_option(self), field_id)
+        OptionArrayBuilder::new_option(self)
     }
 
     /// Finalize the record or union currently being built.
@@ -519,8 +464,6 @@ impl<'a> BuilderParent for FieldBuilder<'a> {
     }
 
     fn drop_child(&mut self) {
-        self.nr_fields -= 1;
-
         // Truncate arena length so that it ends at last inserted field.
         if let Some(len) = self.last_field_idx {
             self.arena().data.truncate(len as usize);
@@ -627,10 +570,30 @@ impl TypeArena {
         Self::default()
     }
 
-    /// Get a type by id.
+    /// Get a [`Type`] by id.
     pub fn get<'a>(&'a self, id: TypeId) -> Type<'a> {
         let typ = &self.data[id.0 as usize];
         Type::from_slot(self, id, typ)
+    }
+
+    /// Get [`TypeField`] by id.
+    pub fn get_field<'a>(&'a self, id: TypeFieldId) -> TypeField<'a> {
+        let field_slot = &self.data[id.slot as usize];
+        let typ_slot = &self.data[id.slot as usize + 1];
+
+        let (name, default) = match &field_slot {
+            Slot::TypeField { name, default } => (*name, *default),
+            val => unreachable!("invalid type field in arena for id {id:?}: {val:?}"),
+        };
+
+        let typ = Type::from_slot(self, TypeId(id.slot + 1), typ_slot);
+
+        TypeField {
+            id,
+            name,
+            default,
+            typ,
+        }
     }
 
     /// Add a primitive type to the arena.
@@ -721,7 +684,7 @@ impl BuilderParent for TypeArena {
 mod test {
     use string_interner::DefaultStringInterner;
 
-    use crate::typ::{PrimitiveType, Type, TypeArena, TypeFieldId, TypeId};
+    use crate::typ::{PrimitiveType, Type, TypeArena, TypeId};
 
     use super::Slot;
 
@@ -754,11 +717,11 @@ mod test {
         let mut root = arena.start_record();
         root.add_simple(id_str, PrimitiveType::I64, None);
 
-        let (simple_array, simple_array_field_id) = root.start_array(simple_array_str, None);
+        let simple_array = root.start_array(simple_array_str, None);
         simple_array.finish(PrimitiveType::F32);
 
         // Build nested array type: [[[string?]]]
-        let (mut values_builder, values_field_id) = root.start_array(values_str, None);
+        let mut values_builder = root.start_array(values_str, None);
         values_builder.start_array();
         values_builder.start_array();
         values_builder.start_option();
@@ -771,7 +734,7 @@ mod test {
         }
 
         // Build nested array with option: [[bool]?]
-        let (mut metadata_builder, metadata_field_id) = root.start_array(metadata_str, None);
+        let mut metadata_builder = root.start_array(metadata_str, None);
         metadata_builder.start_array();
         metadata_builder.start_option();
         metadata_builder.finish(PrimitiveType::Bool);
@@ -955,30 +918,5 @@ mod test {
             }
             other => panic!("expected array at values_id, got {other:?}"),
         }
-
-        // Check field ids.
-        assert_eq!(
-            simple_array_field_id,
-            TypeFieldId {
-                typ: root_id,
-                idx: 1,
-            }
-        );
-
-        assert_eq!(
-            values_field_id,
-            TypeFieldId {
-                typ: root_id,
-                idx: 2,
-            }
-        );
-
-        assert_eq!(
-            metadata_field_id,
-            TypeFieldId {
-                typ: root_id,
-                idx: 3,
-            }
-        );
     }
 }
