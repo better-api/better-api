@@ -1,6 +1,7 @@
 use crate::Kind::*;
 use crate::{Kind, Language, SyntaxNode, SyntaxToken};
 
+use rowan::TextRange;
 pub use rowan::ast::AstNode;
 
 // Helper macros to generator AST nodes as structs.
@@ -127,6 +128,14 @@ ast_node! {
 pub enum NameToken {
     Identifier(SyntaxToken),
     String(SyntaxToken),
+}
+
+impl NameToken {
+    pub fn text_range(&self) -> TextRange {
+        match self {
+            NameToken::Identifier(token) | NameToken::String(token) => token.text_range(),
+        }
+    }
 }
 
 impl Name {
@@ -289,10 +298,28 @@ ast_node! {
     struct Object;
 }
 
+impl Object {
+    /// Returns iterator over fields in the object
+    pub fn fields(&self) -> impl Iterator<Item = ObjectField> {
+        self.0.children().filter_map(ObjectField::cast)
+    }
+}
+
 ast_node! {
     #[from(NODE_OBJECT_FIELD)]
     /// Field of an object.
     struct ObjectField;
+}
+
+impl ObjectField {
+    /// Returns name of the field.
+    pub fn name(&self) -> Option<Name> {
+        self.0.children().find_map(Name::cast)
+    }
+
+    pub fn value(&self) -> Option<Value> {
+        self.0.children().find_map(Value::cast)
+    }
 }
 
 ast_node! {

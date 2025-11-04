@@ -3,23 +3,36 @@
 use better_api_diagnostic::Report;
 use better_api_syntax::ast;
 
-use crate::SourceMap;
 use crate::typ::TypeArena;
 use crate::value::ValueArena;
+use crate::{SourceMap, StringId};
 
 mod metadata;
 mod value;
 
+/// Represents object or type field with interned name.
+#[derive(Clone)]
+struct InternedField<T> {
+    name: StringId,
+    field: T,
+}
+
 /// Core type responsible for semantic analysis.
 #[derive(Clone, Default)]
 pub struct Oracle {
+    // Containers for primary oracle data
     strings: string_interner::DefaultStringInterner,
     values: ValueArena,
     types: TypeArena,
 
     source_map: SourceMap,
 
+    // Reports generated during semantic analysis
     reports: Vec<Report>,
+
+    // Reusable buffers used during analyzing values and objects.
+    // This way we avoid unnecessary allocation.
+    object_fields_buf: Vec<InternedField<ast::ObjectField>>,
 }
 
 impl Oracle {
