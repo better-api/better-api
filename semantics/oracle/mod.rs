@@ -3,9 +3,9 @@
 use better_api_diagnostic::Report;
 use better_api_syntax::ast;
 
-use crate::SourceMap;
 use crate::typ::TypeArena;
 use crate::value::ValueArena;
+use crate::{SourceMap, StringId};
 
 mod metadata;
 mod value;
@@ -13,12 +13,14 @@ mod value;
 /// Core type responsible for semantic analysis.
 #[derive(Clone, Default)]
 pub struct Oracle {
+    // Containers for primary oracle data
     strings: string_interner::DefaultStringInterner,
     values: ValueArena,
     types: TypeArena,
 
     source_map: SourceMap,
 
+    // Reports generated during semantic analysis
     reports: Vec<Report>,
 }
 

@@ -1,34 +1,176 @@
-use better_api_syntax::ast;
+use std::borrow::Cow;
 
-use crate::Element;
-use crate::text::parse_string;
-use crate::value::{PrimitiveValue, ValueId};
+use better_api_diagnostic::{Label, Report, Span};
+use better_api_syntax::ast;
+use better_api_syntax::ast::AstNode;
+use string_interner::DefaultStringInterner;
+
+use crate::text::{parse_string, validate_name};
+use crate::value::{ObjectBuilder, PrimitiveValue, ValueId};
+use crate::{Element, StringId};
 
 use super::Oracle;
 
-impl Oracle {
-    pub fn parse_value(&mut self, value: &ast::Value) -> Option<ValueId> {
-        let id = match value {
-            ast::Value::String(string) => {
-                let token = string.string()?;
-                let parsed_str = parse_string(&token, &mut self.reports);
-                let str_id = self.strings.get_or_intern(&parsed_str);
+/// Represents object or type field with interned name.
+#[derive(Clone)]
+struct InternedField {
+    name: StringId,
+    field: ast::ObjectField,
+}
 
-                self.values.add_primitive(PrimitiveValue::String(str_id))
+impl Oracle {
+    /// Parse syntactical value [`ast::Value`] and store it in arena and source map mappings.
+    pub(crate) fn parse_value(&mut self, value: &ast::Value) -> Option<ValueId> {
+        let id = match ParsedValue::new(value, &mut self.reports, &mut self.strings) {
+            ParsedValue::Primitive(primitive) => self.values.add_primitive(primitive),
+            ParsedValue::Object(obj) => {
+                let fields = parse_object_fields(obj, &mut self.reports, &mut self.strings);
+                let builder = self.values.start_object();
+                insert_object_fields(fields, builder, &mut self.reports, &mut self.strings)
             }
-            ast::Value::Integer(integer) => self
-                .values
-                .add_primitive(PrimitiveValue::Integer(integer.integer()?)),
-            ast::Value::Float(float) => self
-                .values
-                .add_primitive(PrimitiveValue::Float(float.float()?)),
-            ast::Value::Bool(bool) => self
-                .values
-                .add_primitive(PrimitiveValue::Bool(bool.bool()?)),
-            ast::Value::Object(object) => todo!(),
+            ParsedValue::Array(arr) => todo!(),
         };
 
         self.source_map.insert(value, Element::Value(id));
         Some(id)
+    }
+}
+
+/// Helper type for handling primitive values, objects and arrays separately.
+enum ParsedValue<'a> {
+    Primitive(PrimitiveValue),
+    Object(&'a ast::Object),
+    Array(&'a ast::Array),
+}
+
+impl<'a> ParsedValue<'a> {
+    /// Create a new [`ParsedValue`] from [`ast::Value`].
+    ///
+    /// Handling most values is done in a trivial way. Strings are a special case.
+    /// They are parsed with [`parse_string`] and interned.
+    fn new(
+        value: &'a ast::Value,
+        reports: &mut Vec<Report>,
+        strings: &mut DefaultStringInterner,
+    ) -> Self {
+        match value {
+            ast::Value::String(string) => {
+                let token = string.string();
+                let parsed_str = parse_string(&token, reports);
+                let str_id = strings.get_or_intern(&parsed_str);
+
+                Self::Primitive(PrimitiveValue::String(str_id))
+            }
+            ast::Value::Integer(integer) => {
+                Self::Primitive(PrimitiveValue::Integer(integer.integer()))
+            }
+            ast::Value::Float(float) => Self::Primitive(PrimitiveValue::Float(float.float())),
+            ast::Value::Bool(bool) => Self::Primitive(PrimitiveValue::Bool(bool.bool())),
+            ast::Value::Object(obj) => Self::Object(obj),
+            ast::Value::Array(arr) => Self::Array(arr),
+        }
+    }
+}
+
+/// Collects object fields into a vector.
+///
+/// Only valid fields are collected. Field is valid if it has a valid name and a value.
+/// Names are interned.
+///
+/// Returned vector is sorted by name, which stabilizes the fields. This is useful for
+/// type checking.
+///
+/// Function also validates that all fields in the object have unique name and reports errors
+/// if they aren't.
+fn parse_object_fields(
+    object: &ast::Object,
+    reports: &mut Vec<Report>,
+    strings: &mut DefaultStringInterner,
+) -> Vec<InternedField> {
+    let fields: Vec<_> = object
+        .fields()
+        .filter_map(|f| {
+            f.value()?;
+
+            let name = f.name().and_then(|n| n.token())?;
+            let name_str: Cow<_> = match &name {
+                ast::NameToken::Identifier(ident) => ident.text().into(),
+                ast::NameToken::String(string) => parse_string(string, reports),
+            };
+
+            if let Err(report) = validate_name(&name_str, name.text_range()) {
+                reports.push(report);
+                return None;
+            }
+
+            let name_id = strings.get_or_intern(name_str);
+            Some(InternedField {
+                name: name_id,
+                field: f,
+            })
+        })
+        .collect();
+
+    check_object_fields_unique(&fields, reports, strings);
+
+    fields
+}
+
+/// Inserts objects fields generated by [`parse_object_fields`] into a provided [`ObjectBuilder`].
+fn insert_object_fields(
+    fields: Vec<InternedField>,
+    mut builder: ObjectBuilder,
+    reports: &mut Vec<Report>,
+    strings: &mut DefaultStringInterner,
+) -> ValueId {
+    for field in fields {
+        let value = field
+            .field
+            .value()
+            .expect("inserted field should have a value");
+
+        match ParsedValue::new(&value, reports, strings) {
+            ParsedValue::Primitive(primitive) => builder.add_primitive(field.name, primitive),
+            ParsedValue::Object(obj) => {
+                let fields = parse_object_fields(obj, reports, strings);
+                let child_builder = builder.start_object(field.name);
+                insert_object_fields(fields, child_builder, reports, strings);
+            }
+            ParsedValue::Array(arr) => todo!(),
+        }
+    }
+
+    builder.finish()
+}
+
+/// Check that names of object fields are unique.
+/// Fields are expected to be sorted by name.
+fn check_object_fields_unique(
+    fields: &[InternedField],
+    reports: &mut Vec<Report>,
+    strings: &DefaultStringInterner,
+) {
+    for idx in 0..(fields.len() - 1) {
+        if fields[idx].name != fields[idx + 1].name {
+            continue;
+        }
+
+        let name = strings
+            .resolve(fields[idx].name)
+            .expect("interned string should be present in interner");
+
+        let range = fields[idx + 1]
+            .field
+            .name()
+            .expect("collected object field should have a name")
+            .syntax()
+            .text_range();
+
+        reports.push(
+            Report::error(format!("repeated object key `{name}`")).with_label(Label::new(
+                "repeated object key".to_string(),
+                Span::new(range.start().into(), range.end().into()),
+            )),
+        );
     }
 }
