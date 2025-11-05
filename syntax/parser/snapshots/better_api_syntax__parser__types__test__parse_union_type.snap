@@ -2,7 +2,7 @@
 source: syntax/parser/types.rs
 expression: res.node
 ---
-NODE_ROOT@0..144
+NODE_ROOT@0..205
   NODE_TYPE_DEF@0..60
     TOKEN_KW_TYPE@0..4 "type"
     TOKEN_SPACE@4..5 " "
@@ -67,3 +67,40 @@ NODE_ROOT@0..144
     TOKEN_EOL@116..117 "\n"
   TOKEN_COMMENT@117..143 "// Should parse corre ..."
   TOKEN_EOL@143..144 "\n"
+  TOKEN_EOL@144..145 "\n"
+  NODE_TYPE_DEF@145..174
+    TOKEN_KW_TYPE@145..149 "type"
+    TOKEN_SPACE@149..150 " "
+    NODE_NAME@150..155
+      TOKEN_IDENTIFIER@150..155 "Empty"
+    TOKEN_COLON@155..156 ":"
+    TOKEN_SPACE@156..157 " "
+    NODE_TYPE_UNION@157..173
+      TOKEN_KW_UNION@157..162 "union"
+      TOKEN_PAREN_LEFT@162..163 "("
+      NODE_VALUE_STRING@163..169
+        TOKEN_STRING@163..169 "\"type\""
+      TOKEN_PAREN_RIGHT@169..170 ")"
+      TOKEN_SPACE@170..171 " "
+      TOKEN_CURLY_LEFT@171..172 "{"
+      TOKEN_CURLY_RIGHT@172..173 "}"
+    TOKEN_EOL@173..174 "\n"
+  NODE_TYPE_DEF@174..205
+    TOKEN_KW_TYPE@174..178 "type"
+    TOKEN_SPACE@178..179 " "
+    NODE_NAME@179..184
+      TOKEN_IDENTIFIER@179..184 "Empty"
+    TOKEN_COLON@184..185 ":"
+    TOKEN_SPACE@185..186 " "
+    NODE_TYPE_UNION@186..204
+      TOKEN_KW_UNION@186..191 "union"
+      TOKEN_PAREN_LEFT@191..192 "("
+      NODE_VALUE_STRING@192..198
+        TOKEN_STRING@192..198 "\"type\""
+      TOKEN_PAREN_RIGHT@198..199 ")"
+      TOKEN_SPACE@199..200 " "
+      TOKEN_CURLY_LEFT@200..201 "{"
+      TOKEN_EOL@201..202 "\n"
+      TOKEN_EOL@202..203 "\n"
+      TOKEN_CURLY_RIGHT@203..204 "}"
+    TOKEN_EOL@204..205 "\n"

@@ -2,7 +2,7 @@
 source: syntax/parser/types.rs
 expression: res.node
 ---
-NODE_ROOT@0..59
+NODE_ROOT@0..96
   NODE_TYPE_DEF@0..16
     TOKEN_KW_TYPE@0..4 "type"
     TOKEN_SPACE@4..5 " "
@@ -50,3 +50,30 @@ NODE_ROOT@0..59
         TOKEN_BRACKET_RIGHT@56..57 "]"
       TOKEN_OPTION@57..58 "?"
     TOKEN_EOL@58..59 "\n"
+  NODE_TYPE_DEF@59..74
+    TOKEN_KW_TYPE@59..63 "type"
+    TOKEN_SPACE@63..64 " "
+    NODE_NAME@64..69
+      TOKEN_IDENTIFIER@64..69 "Empty"
+    TOKEN_COLON@69..70 ":"
+    TOKEN_SPACE@70..71 " "
+    NODE_TYPE_ARRAY@71..73
+      TOKEN_BRACKET_LEFT@71..72 "["
+      NODE_ERROR@72..72
+      TOKEN_BRACKET_RIGHT@72..73 "]"
+    TOKEN_EOL@73..74 "\n"
+  NODE_TYPE_DEF@74..93
+    TOKEN_KW_TYPE@74..78 "type"
+    TOKEN_SPACE@78..79 " "
+    NODE_NAME@79..89
+      TOKEN_IDENTIFIER@79..89 "ErrorEmpty"
+    TOKEN_COLON@89..90 ":"
+    TOKEN_SPACE@90..91 " "
+    NODE_TYPE_ARRAY@91..92
+      TOKEN_BRACKET_LEFT@91..92 "["
+      NODE_ERROR@92..92
+    TOKEN_EOL@92..93 "\n"
+  TOKEN_EOL@93..94 "\n"
+  NODE_ERROR@94..95
+    TOKEN_BRACKET_RIGHT@94..95 "]"
+  TOKEN_EOL@95..96 "\n"

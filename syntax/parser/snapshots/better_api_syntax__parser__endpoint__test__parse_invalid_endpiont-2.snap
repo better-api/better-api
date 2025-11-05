@@ -1,6 +1,6 @@
 ---
 source: syntax/parser/endpoint.rs
-expression: diagnostics
+expression: res.reports
 ---
 [
     Report {
@@ -50,7 +50,7 @@ expression: diagnostics
         title: "expected type, found a string",
         label: Some(
             Label {
-                message: "expected value",
+                message: "expected type",
                 span: Span {
                     start: 205,
                     end: 230,

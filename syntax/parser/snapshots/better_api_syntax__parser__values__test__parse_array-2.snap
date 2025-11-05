@@ -1,17 +1,49 @@
 ---
-source: syntax/parser/types.rs
+source: syntax/parser/values.rs
 expression: res.reports
 ---
 [
     Report {
         severity: Error,
-        title: "unexpected `@default`",
+        title: "expected `,` or `]`, found an integer",
         label: Some(
             Label {
-                message: "unexpected `@default`",
+                message: "unexpected token",
                 span: Span {
-                    start: 78,
-                    end: 107,
+                    start: 164,
+                    end: 166,
+                },
+            },
+        ),
+        note: Some(
+            "help: array values must be separated with `,`",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "expected `,` or `]`, found a string",
+        label: Some(
+            Label {
+                message: "unexpected token",
+                span: Span {
+                    start: 171,
+                    end: 182,
+                },
+            },
+        ),
+        note: Some(
+            "help: array values must be separated with `,`",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "expected `,` or `]`, found end of file",
+        label: Some(
+            Label {
+                message: "unexpected token",
+                span: Span {
+                    start: 205,
+                    end: 206,
                 },
             },
         ),
@@ -19,55 +51,13 @@ expression: res.reports
     },
     Report {
         severity: Error,
-        title: "expected `(`, found `string`",
+        title: "expected new line, found end of file",
         label: Some(
             Label {
                 message: "unexpected token",
                 span: Span {
-                    start: 156,
-                    end: 162,
-                },
-            },
-        ),
-        note: None,
-    },
-    Report {
-        severity: Error,
-        title: "expected `)`, found `{`",
-        label: Some(
-            Label {
-                message: "unexpected token",
-                span: Span {
-                    start: 163,
-                    end: 164,
-                },
-            },
-        ),
-        note: None,
-    },
-    Report {
-        severity: Error,
-        title: "expected new line, found a string",
-        label: Some(
-            Label {
-                message: "unexpected token",
-                span: Span {
-                    start: 170,
-                    end: 175,
-                },
-            },
-        ),
-        note: None,
-    },
-    Report {
-        severity: Error,
-        title: "expected new line, found `}`",
-        label: Some(
-            Label {
-                message: "unexpected token",
-                span: Span {
-                    start: 175,
-                    end: 176,
+                    start: 205,
+                    end: 206,
                 },
             },
         ),

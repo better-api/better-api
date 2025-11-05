@@ -1,0 +1,116 @@
+---
+source: syntax/parser/values.rs
+expression: res.node
+---
+NODE_ROOT@0..205
+  NODE_API_NAME@0..13
+    TOKEN_IDENTIFIER@0..4 "name"
+    TOKEN_COLON@4..5 ":"
+    TOKEN_SPACE@5..6 " "
+    NODE_VALUE_ARRAY@6..12
+      TOKEN_BRACKET_LEFT@6..7 "["
+      NODE_VALUE_BOOL@7..11
+        TOKEN_KW_TRUE@7..11 "true"
+      TOKEN_BRACKET_RIGHT@11..12 "]"
+    TOKEN_EOL@12..13 "\n"
+  NODE_API_NAME@13..33
+    TOKEN_IDENTIFIER@13..17 "name"
+    TOKEN_COLON@17..18 ":"
+    TOKEN_SPACE@18..19 " "
+    NODE_VALUE_ARRAY@19..32
+      TOKEN_BRACKET_LEFT@19..20 "["
+      NODE_VALUE_BOOL@20..24
+        TOKEN_KW_TRUE@20..24 "true"
+      TOKEN_COMMA@24..25 ","
+      TOKEN_SPACE@25..26 " "
+      NODE_VALUE_BOOL@26..31
+        TOKEN_KW_FALSE@26..31 "false"
+      TOKEN_BRACKET_RIGHT@31..32 "]"
+    TOKEN_EOL@32..33 "\n"
+  NODE_API_NAME@33..58
+    TOKEN_IDENTIFIER@33..37 "name"
+    TOKEN_COLON@37..38 ":"
+    TOKEN_SPACE@38..39 " "
+    NODE_VALUE_ARRAY@39..57
+      TOKEN_BRACKET_LEFT@39..40 "["
+      NODE_VALUE_BOOL@40..44
+        TOKEN_KW_TRUE@40..44 "true"
+      TOKEN_COMMA@44..45 ","
+      TOKEN_SPACE@45..46 " "
+      NODE_VALUE_BOOL@46..51
+        TOKEN_KW_FALSE@46..51 "false"
+      TOKEN_COMMA@51..52 ","
+      TOKEN_SPACE@52..53 " "
+      NODE_VALUE_INTEGER@53..55
+        TOKEN_INTEGER@53..55 "10"
+      TOKEN_COMMA@55..56 ","
+      TOKEN_BRACKET_RIGHT@56..57 "]"
+    TOKEN_EOL@57..58 "\n"
+  NODE_API_NAME@58..67
+    TOKEN_IDENTIFIER@58..62 "name"
+    TOKEN_COLON@62..63 ":"
+    TOKEN_SPACE@63..64 " "
+    NODE_VALUE_ARRAY@64..66
+      TOKEN_BRACKET_LEFT@64..65 "["
+      TOKEN_BRACKET_RIGHT@65..66 "]"
+    TOKEN_EOL@66..67 "\n"
+  NODE_API_NAME@67..96
+    TOKEN_IDENTIFIER@67..71 "name"
+    TOKEN_COLON@71..72 ":"
+    TOKEN_SPACE@72..73 " "
+    NODE_VALUE_ARRAY@73..95
+      TOKEN_BRACKET_LEFT@73..74 "["
+      NODE_VALUE_STRING@74..82
+        TOKEN_STRING@74..82 "\"deeply\""
+      TOKEN_COMMA@82..83 ","
+      TOKEN_SPACE@83..84 " "
+      NODE_VALUE_ARRAY@84..94
+        TOKEN_BRACKET_LEFT@84..85 "["
+        NODE_VALUE_STRING@85..93
+          TOKEN_STRING@85..93 "\"nested\""
+        TOKEN_BRACKET_RIGHT@93..94 "]"
+      TOKEN_BRACKET_RIGHT@94..95 "]"
+    TOKEN_EOL@95..96 "\n"
+  NODE_API_NAME@96..185
+    TOKEN_IDENTIFIER@96..100 "name"
+    TOKEN_COLON@100..101 ":"
+    TOKEN_SPACE@101..102 " "
+    NODE_VALUE_ARRAY@102..184
+      TOKEN_BRACKET_LEFT@102..103 "["
+      TOKEN_EOL@103..104 "\n"
+      TOKEN_SPACE@104..108 "    "
+      TOKEN_COMMENT@108..118 "// Comment"
+      TOKEN_EOL@118..119 "\n"
+      TOKEN_SPACE@119..123 "    "
+      NODE_VALUE_BOOL@123..127
+        TOKEN_KW_TRUE@123..127 "true"
+      TOKEN_COMMA@127..128 ","
+      TOKEN_SPACE@128..130 "  "
+      TOKEN_COMMENT@130..144 "// another one"
+      TOKEN_EOL@144..145 "\n"
+      TOKEN_SPACE@145..148 "   "
+      TOKEN_EOL@148..149 "\n"
+      TOKEN_SPACE@149..153 "    "
+      TOKEN_EOL@153..154 "\n"
+      TOKEN_SPACE@154..158 "    "
+      NODE_VALUE_BOOL@158..163
+        TOKEN_KW_FALSE@158..163 "false"
+      TOKEN_SPACE@163..164 " "
+      NODE_VALUE_INTEGER@164..166
+        TOKEN_INTEGER@164..166 "10"
+      TOKEN_EOL@166..167 "\n"
+      TOKEN_SPACE@167..171 "    "
+      NODE_VALUE_STRING@171..182
+        TOKEN_STRING@171..182 "\"something\""
+      TOKEN_EOL@182..183 "\n"
+      TOKEN_BRACKET_RIGHT@183..184 "]"
+    TOKEN_EOL@184..185 "\n"
+  NODE_API_NAME@185..205
+    TOKEN_IDENTIFIER@185..189 "name"
+    TOKEN_COLON@189..190 ":"
+    TOKEN_SPACE@190..191 " "
+    NODE_VALUE_ARRAY@191..205
+      TOKEN_BRACKET_LEFT@191..192 "["
+      NODE_VALUE_STRING@192..204
+        TOKEN_STRING@192..204 "\"unfinished\""
+      TOKEN_EOL@204..205 "\n"

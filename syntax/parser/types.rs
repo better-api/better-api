@@ -97,7 +97,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 let span = self.parse_error(&is_recovery);
                 self.reports.push(
                     Report::error(format!("expected type, found {kind}"))
-                        .with_label(Label::new("expected value".to_string(), span)),
+                        .with_label(Label::new("expected type".to_string(), span)),
                 );
             }
             None => {
@@ -427,6 +427,10 @@ mod test {
             type Foo: [i32]
             type Foo: [ string ?]
             type Foo: [string?]?
+            type Empty: []
+            type ErrorEmpty: [
+
+            ]
         "#};
 
         let mut diagnostics = vec![];
@@ -434,7 +438,7 @@ mod test {
 
         let res = parse(tokens);
         insta::assert_debug_snapshot!(res.node);
-        assert_eq!(res.reports, vec![]);
+        insta::assert_debug_snapshot!(res.reports);
     }
 
     #[test]
@@ -456,6 +460,11 @@ mod test {
                     @default(true)
                     nested: bool
                 }
+            }
+
+            type Empty: rec{}
+            type Empty: rec {
+
             }
 
             // Invalid record
@@ -484,6 +493,11 @@ mod test {
             // Very invalid enum
             type Bar: enum string {"foo" "bar"}
             // Should parse correctly!
+            
+            type Empty: enum(string){}
+            type Empty: enum(string) {
+
+            }
         "#};
 
         let mut diagnostics = vec![];
@@ -521,6 +535,11 @@ mod test {
             // Very invalid union
             type Bar: union "type" {bar: Bar}
             // Should parse correctly!
+            
+            type Empty: union("type") {}
+            type Empty: union("type") {
+
+            }
         "#};
 
         let mut diagnostics = vec![];
@@ -549,6 +568,11 @@ mod test {
                 }
 
                 invalidField: "hello!"
+            }
+
+            type Empty: resp {}
+            type Empty: resp {
+
             }
         "#};
 

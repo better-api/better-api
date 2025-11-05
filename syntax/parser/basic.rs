@@ -243,6 +243,9 @@ mod test {
                 123: "bar"
                 url: "baz"
             }
+
+            server: {
+                field: "unfinished"
         "#};
 
         let mut diagnostics = vec![];

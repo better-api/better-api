@@ -2,7 +2,7 @@
 source: syntax/parser/basic.rs
 expression: res.node
 ---
-NODE_ROOT@0..75
+NODE_ROOT@0..110
   NODE_SERVER@0..75
     NODE_PROLOGUE@0..16
       TOKEN_DOC_COMMENT@0..15 "/// doc comment"
@@ -40,3 +40,20 @@ NODE_ROOT@0..75
         TOKEN_EOL@72..73 "\n"
       TOKEN_CURLY_RIGHT@73..74 "}"
     TOKEN_EOL@74..75 "\n"
+  TOKEN_EOL@75..76 "\n"
+  NODE_SERVER@76..110
+    TOKEN_IDENTIFIER@76..82 "server"
+    TOKEN_COLON@82..83 ":"
+    TOKEN_SPACE@83..84 " "
+    NODE_OBJECT@84..110
+      TOKEN_CURLY_LEFT@84..85 "{"
+      TOKEN_EOL@85..86 "\n"
+      TOKEN_SPACE@86..90 "    "
+      NODE_OBJECT_FIELD@90..110
+        NODE_NAME@90..95
+          TOKEN_IDENTIFIER@90..95 "field"
+        TOKEN_COLON@95..96 ":"
+        TOKEN_SPACE@96..97 " "
+        NODE_VALUE_STRING@97..109
+          TOKEN_STRING@97..109 "\"unfinished\""
+        TOKEN_EOL@109..110 "\n"

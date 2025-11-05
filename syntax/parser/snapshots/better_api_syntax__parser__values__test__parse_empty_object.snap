@@ -1,0 +1,23 @@
+---
+source: syntax/parser/values.rs
+expression: res.node
+---
+NODE_ROOT@0..24
+  NODE_SERVER@0..11
+    TOKEN_IDENTIFIER@0..6 "server"
+    TOKEN_COLON@6..7 ":"
+    TOKEN_SPACE@7..8 " "
+    NODE_OBJECT@8..10
+      TOKEN_CURLY_LEFT@8..9 "{"
+      TOKEN_CURLY_RIGHT@9..10 "}"
+    TOKEN_EOL@10..11 "\n"
+  NODE_SERVER@11..24
+    TOKEN_IDENTIFIER@11..17 "server"
+    TOKEN_COLON@17..18 ":"
+    TOKEN_SPACE@18..19 " "
+    NODE_OBJECT@19..23
+      TOKEN_CURLY_LEFT@19..20 "{"
+      TOKEN_EOL@20..21 "\n"
+      TOKEN_EOL@21..22 "\n"
+      TOKEN_CURLY_RIGHT@22..23 "}"
+    TOKEN_EOL@23..24 "\n"

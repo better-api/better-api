@@ -2,7 +2,7 @@
 source: syntax/parser/types.rs
 expression: res.node
 ---
-NODE_ROOT@0..285
+NODE_ROOT@0..328
   NODE_TYPE_DEF@0..102
     NODE_PROLOGUE@0..29
       TOKEN_DOC_COMMENT@0..28 "/// This is a valid r ..."
@@ -93,3 +93,32 @@ NODE_ROOT@0..285
       TOKEN_EOL@282..283 "\n"
       TOKEN_CURLY_RIGHT@283..284 "}"
     TOKEN_EOL@284..285 "\n"
+  TOKEN_EOL@285..286 "\n"
+  NODE_TYPE_DEF@286..306
+    TOKEN_KW_TYPE@286..290 "type"
+    TOKEN_SPACE@290..291 " "
+    NODE_NAME@291..296
+      TOKEN_IDENTIFIER@291..296 "Empty"
+    TOKEN_COLON@296..297 ":"
+    TOKEN_SPACE@297..298 " "
+    NODE_TYPE_RESPONSE@298..305
+      TOKEN_KW_RESP@298..302 "resp"
+      TOKEN_SPACE@302..303 " "
+      TOKEN_CURLY_LEFT@303..304 "{"
+      TOKEN_CURLY_RIGHT@304..305 "}"
+    TOKEN_EOL@305..306 "\n"
+  NODE_TYPE_DEF@306..328
+    TOKEN_KW_TYPE@306..310 "type"
+    TOKEN_SPACE@310..311 " "
+    NODE_NAME@311..316
+      TOKEN_IDENTIFIER@311..316 "Empty"
+    TOKEN_COLON@316..317 ":"
+    TOKEN_SPACE@317..318 " "
+    NODE_TYPE_RESPONSE@318..327
+      TOKEN_KW_RESP@318..322 "resp"
+      TOKEN_SPACE@322..323 " "
+      TOKEN_CURLY_LEFT@323..324 "{"
+      TOKEN_EOL@324..325 "\n"
+      TOKEN_EOL@325..326 "\n"
+      TOKEN_CURLY_RIGHT@326..327 "}"
+    TOKEN_EOL@327..328 "\n"

@@ -1,6 +1,6 @@
 ---
 source: syntax/parser/types.rs
-expression: diagnostics
+expression: res.reports
 ---
 [
     Report {
@@ -10,8 +10,8 @@ expression: diagnostics
             Label {
                 message: "expected field name",
                 span: Span {
-                    start: 268,
-                    end: 269,
+                    start: 308,
+                    end: 309,
                 },
             },
         ),
@@ -24,8 +24,8 @@ expression: diagnostics
             Label {
                 message: "unexpected token",
                 span: Span {
-                    start: 268,
-                    end: 269,
+                    start: 308,
+                    end: 309,
                 },
             },
         ),

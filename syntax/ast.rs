@@ -1,6 +1,7 @@
 use crate::Kind::*;
 use crate::{Kind, Language, SyntaxNode, SyntaxToken};
 
+use rowan::TextRange;
 pub use rowan::ast::AstNode;
 
 // Helper macros to generator AST nodes as structs.
@@ -129,6 +130,14 @@ pub enum NameToken {
     String(SyntaxToken),
 }
 
+impl NameToken {
+    pub fn text_range(&self) -> TextRange {
+        match self {
+            NameToken::Identifier(token) | NameToken::String(token) => token.text_range(),
+        }
+    }
+}
+
 impl Name {
     pub fn token(&self) -> Option<NameToken> {
         self.syntax().first_token().and_then(|t| match t.kind() {
@@ -209,14 +218,19 @@ ast_node! {
 
 impl String {
     /// Returns TOKEN_STRING syntax token.
-    pub fn string(&self) -> Option<SyntaxToken> {
-        self.0.first_token().and_then(|t| {
-            if t.kind() == TOKEN_STRING {
-                Some(t)
-            } else {
-                None
-            }
-        })
+    pub fn string(&self) -> SyntaxToken {
+        let token = self
+            .0
+            .first_token()
+            .expect("parser should parse strings correctly");
+
+        debug_assert_eq!(
+            token.kind(),
+            TOKEN_STRING,
+            "parser should parse strings correctly"
+        );
+
+        token
     }
 }
 
@@ -228,18 +242,22 @@ ast_node! {
 
 impl Integer {
     /// Returns integer representation.
-    pub fn integer(&self) -> Option<i128> {
-        self.0.first_token().and_then(|t| {
-            if t.kind() == TOKEN_INTEGER {
-                Some(
-                    t.text()
-                        .parse()
-                        .expect("tokenizer should emit valid integers"),
-                )
-            } else {
-                None
-            }
-        })
+    pub fn integer(&self) -> i128 {
+        let token = self
+            .0
+            .first_token()
+            .expect("parser should parse integers correctly");
+
+        debug_assert_eq!(
+            token.kind(),
+            TOKEN_INTEGER,
+            "parser should parse integers correctly"
+        );
+
+        token
+            .text()
+            .parse()
+            .expect("tokenizer should emit valid integers")
     }
 }
 
@@ -251,18 +269,22 @@ ast_node! {
 
 impl Float {
     /// Returns float representation.
-    pub fn float(&self) -> Option<f64> {
-        self.0.first_token().and_then(|t| {
-            if t.kind() == TOKEN_FLOAT {
-                Some(
-                    t.text()
-                        .parse()
-                        .expect("tokenizer should emit valid floats"),
-                )
-            } else {
-                None
-            }
-        })
+    pub fn float(&self) -> f64 {
+        let token = self
+            .0
+            .first_token()
+            .expect("parser should parse floats correctly");
+
+        debug_assert_eq!(
+            token.kind(),
+            TOKEN_FLOAT,
+            "parser should parse floats correctly"
+        );
+
+        token
+            .text()
+            .parse()
+            .expect("tokenizer should emit valid floats")
     }
 }
 
@@ -274,13 +296,24 @@ ast_node! {
 
 impl Bool {
     /// Returns bool representation.
-    pub fn bool(&self) -> Option<bool> {
-        self.0.first_token().and_then(|t| match t.kind() {
-            TOKEN_KW_TRUE => Some(true),
-            TOKEN_KW_FALSE => Some(false),
-            _ => None,
-        })
+    pub fn bool(&self) -> bool {
+        let token = self
+            .0
+            .first_token()
+            .expect("parser should parse bools correctly");
+
+        match token.kind() {
+            TOKEN_KW_TRUE => true,
+            TOKEN_KW_FALSE => false,
+            _ => unreachable!("parser should parse bools correctly"),
+        }
     }
+}
+
+ast_node! {
+    #[from(NODE_VALUE_ARRAY)]
+    /// Array value.
+    struct Array;
 }
 
 ast_node! {
@@ -289,10 +322,28 @@ ast_node! {
     struct Object;
 }
 
+impl Object {
+    /// Returns iterator over fields in the object
+    pub fn fields(&self) -> impl Iterator<Item = ObjectField> {
+        self.0.children().filter_map(ObjectField::cast)
+    }
+}
+
 ast_node! {
     #[from(NODE_OBJECT_FIELD)]
     /// Field of an object.
     struct ObjectField;
+}
+
+impl ObjectField {
+    /// Returns name of the field.
+    pub fn name(&self) -> Option<Name> {
+        self.0.children().find_map(Name::cast)
+    }
+
+    pub fn value(&self) -> Option<Value> {
+        self.0.children().find_map(Value::cast)
+    }
 }
 
 ast_node! {
@@ -301,6 +352,7 @@ ast_node! {
         Integer,
         Float,
         Bool,
+        Array,
         Object,
     )]
     /// A value of any type.
