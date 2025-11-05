@@ -105,6 +105,11 @@ impl Root {
     pub fn better_api_versions(&self) -> impl Iterator<Item = BetterApiVersion> {
         self.0.children().filter_map(BetterApiVersion::cast)
     }
+
+    /// Get iterator through all defined [`Server`s](Server).
+    pub fn servers(&self) -> impl Iterator<Item = Server> {
+        self.0.children().filter_map(Server::cast)
+    }
 }
 
 /////////////////

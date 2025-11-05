@@ -37,7 +37,18 @@ impl Oracle {
             }
         }
 
-        // TODO: Analyze servers
+        for server in root.servers() {
+            let Some(server_value) = server.value() else {
+                continue;
+            };
+
+            let server_id = self.parse_value(&server_value);
+            // TODO: Check server is valid:
+            //  - Implement `parse_type`
+            //  - Parse "hardcoded" server type
+            //  - Implement comparison of value and type
+            //  - Check server value matches server type
+        }
     }
 
     /// Analyze directive that expects value to be a string.
