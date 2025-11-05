@@ -3,9 +3,9 @@
 use better_api_diagnostic::Report;
 use better_api_syntax::ast;
 
+use crate::SourceMap;
 use crate::typ::TypeArena;
 use crate::value::ValueArena;
-use crate::{SourceMap, StringId};
 
 mod metadata;
 mod value;

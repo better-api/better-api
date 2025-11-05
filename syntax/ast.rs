@@ -316,6 +316,13 @@ ast_node! {
     struct Array;
 }
 
+impl Array {
+    /// Returns iterator over values in array.
+    pub fn values(&self) -> impl Iterator<Item = Value> {
+        self.0.children().filter_map(Value::cast)
+    }
+}
+
 ast_node! {
     #[from(NODE_OBJECT)]
     /// An object.
