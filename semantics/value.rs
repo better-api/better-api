@@ -124,7 +124,7 @@ impl<'a> Iterator for Object<'a> {
 
 /// Array value returned by the [`ValueArena`].
 ///
-/// It's an iterator where each item is an [`Value`].
+/// It's an iterator where each item is an [`ArrayItem`].
 #[derive(derive_more::Debug, PartialEq)]
 pub struct Array<'a> {
     #[debug(skip)]
@@ -133,16 +133,27 @@ pub struct Array<'a> {
     end: ValueId,
 }
 
+/// Item returned by an [`Array`] iterator.
+#[derive(Debug, PartialEq)]
+pub struct ArrayItem<'a> {
+    /// Id of the item, used for [`ValueArena::get`]
+    pub id: ValueId,
+
+    /// Value of the item
+    pub value: Value<'a>,
+}
+
 impl<'a> Iterator for Array<'a> {
-    type Item = Value<'a>;
+    type Item = ArrayItem<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.current.0 >= self.end.0 {
             return None;
         }
 
-        let item = &self.arena.data[self.current.0 as usize];
-        let value = Value::from_slot(self.arena, self.current, item);
+        let id = self.current;
+        let item = &self.arena.data[id.0 as usize];
+        let value = Value::from_slot(self.arena, id, item);
 
         self.current = match value {
             Value::Object(Object { end, .. }) => end,
@@ -150,7 +161,7 @@ impl<'a> Iterator for Array<'a> {
             _ => ValueId(self.current.0 + 1),
         };
 
-        Some(value)
+        Some(ArrayItem { id, value })
     }
 }
 
@@ -221,8 +232,12 @@ impl<'p> ArrayBuilder<'p> {
     }
 
     /// Add a new primitive value to the array.
-    pub fn add_primitive(&mut self, value: PrimitiveValue) {
+    pub fn add_primitive(&mut self, value: PrimitiveValue) -> ValueId {
+        let idx = self.data().len();
+
         self.data().push(value.into());
+
+        ValueId(idx as u32)
     }
 
     /// Insert an array as the next element of this array.
@@ -324,29 +339,49 @@ impl<'p> ObjectBuilder<'p> {
     }
 
     /// Add a new field to the object with primitive value.
-    pub fn add_primitive(&mut self, name: StringId, value: PrimitiveValue) {
-        self.last_field_idx = Some(self.data().len() as u32);
+    pub fn add_primitive(&mut self, name: StringId, value: PrimitiveValue) -> ObjectFieldId {
+        let slot = self.data().len() as u32;
+        self.last_field_idx = Some(slot);
 
         self.data().push(Slot::ObjectField(name));
         self.data().push(value.into());
+
+        ObjectFieldId {
+            value_id: self.start,
+            slot,
+        }
     }
 
     /// Add a new field to the object with object value.
-    pub fn start_object<'a>(&'a mut self, name: StringId) -> ObjectBuilder<'a> {
-        self.last_field_idx = Some(self.data().len() as u32);
+    pub fn start_object<'a>(&'a mut self, name: StringId) -> (ObjectBuilder<'a>, ObjectFieldId) {
+        let slot = self.data().len() as u32;
+        self.last_field_idx = Some(slot);
 
         self.data().push(Slot::ObjectField(name));
 
-        ObjectBuilder::new(self)
+        let field_id = ObjectFieldId {
+            value_id: self.start,
+            slot,
+        };
+        let builder = ObjectBuilder::new(self);
+
+        (builder, field_id)
     }
 
     /// Add a new field to the object with array value.
-    pub fn start_array<'a>(&'a mut self, name: StringId) -> ArrayBuilder<'a> {
-        self.last_field_idx = Some(self.data().len() as u32);
+    pub fn start_array<'a>(&'a mut self, name: StringId) -> (ArrayBuilder<'a>, ObjectFieldId) {
+        let slot = self.data().len() as u32;
+        self.last_field_idx = Some(slot);
 
         self.data().push(Slot::ObjectField(name));
 
-        ArrayBuilder::new(self)
+        let field_id = ObjectFieldId {
+            value_id: self.start,
+            slot,
+        };
+        let builder = ArrayBuilder::new(self);
+
+        (builder, field_id)
     }
 
     /// Constructs the final object.
@@ -498,7 +533,7 @@ impl BuilderParent for ValueArena {
 mod test {
     use string_interner::DefaultStringInterner;
 
-    use crate::value::{PrimitiveValue, Value, ValueArena, ValueId};
+    use crate::value::{ArrayItem, ObjectFieldId, PrimitiveValue, Value, ValueArena, ValueId};
 
     use super::Slot;
 
@@ -549,8 +584,8 @@ mod test {
         let mut root = arena.start_object();
         root.add_primitive(flag_str, PrimitiveValue::Integer(7));
 
-        let mut container = root.start_object(container_str);
-        let mut numbers_builder = container.start_array(numbers_str);
+        let (mut container, container_field_id) = root.start_object(container_str);
+        let (mut numbers_builder, numbers_field_id) = container.start_array(numbers_str);
         numbers_builder.add_primitive(PrimitiveValue::Integer(1));
 
         let mut deep_array_builder = numbers_builder.start_array();
@@ -560,7 +595,7 @@ mod test {
 
         let mut array_obj_builder = numbers_builder.start_object();
         {
-            let mut dropped_array = array_obj_builder.start_array(unused_str);
+            let (mut dropped_array, _) = array_obj_builder.start_array(unused_str);
             dropped_array.add_primitive(PrimitiveValue::Integer(123));
             // Dropped without finish on purpose to ensure cleanup.
         }
@@ -572,14 +607,15 @@ mod test {
         let numbers_id = numbers_builder.finish();
 
         {
-            let mut dropped_object = container.start_object(unused_str);
+            let (mut dropped_object, _) = container.start_object(unused_str);
             dropped_object.add_primitive(unused_str, PrimitiveValue::Null);
             // Dropped without finish on purpose to ensure cleanup.
         }
 
-        let mut nested_builder = container.start_object(nested_str);
-        nested_builder.add_primitive(status_str, PrimitiveValue::String(ok_str));
-        nested_builder.add_primitive(count_str, PrimitiveValue::Integer(2));
+        let (mut nested_builder, nested_field_id) = container.start_object(nested_str);
+        let status_field_id =
+            nested_builder.add_primitive(status_str, PrimitiveValue::String(ok_str));
+        let count_field_id = nested_builder.add_primitive(count_str, PrimitiveValue::Integer(2));
         let nested_obj_id = nested_builder.finish();
 
         container.add_primitive(active_str, PrimitiveValue::Bool(false));
@@ -656,25 +692,39 @@ mod test {
 
         // Check the numbers array
         let first_numbers_item = numbers_array.next().expect("first array item");
-        assert_eq!(first_numbers_item, Value::Integer(1));
+        assert_eq!(
+            first_numbers_item,
+            ArrayItem {
+                id: ValueId(10),
+                value: Value::Integer(1)
+            }
+        );
 
         let second_numbers_item = numbers_array.next().expect("second array item");
-        let mut deep_array = match second_numbers_item {
+        assert_eq!(second_numbers_item.id, ValueId(11));
+        let mut deep_array = match second_numbers_item.value {
             Value::Array(array) => array,
             other => panic!("expected nested array, got {other:?}"),
         };
         assert_eq!(
             deep_array.next().expect("deep array first item"),
-            Value::String(deep_str)
+            ArrayItem {
+                id: ValueId(12),
+                value: Value::String(deep_str)
+            }
         );
         assert_eq!(
             deep_array.next().expect("deep array second item"),
-            Value::Integer(99)
+            ArrayItem {
+                id: ValueId(13),
+                value: Value::Integer(99)
+            }
         );
         assert!(deep_array.next().is_none());
 
         let third_numbers_item = numbers_array.next().expect("third array item");
-        let mut array_object = match third_numbers_item {
+        assert_eq!(third_numbers_item.id, ValueId(14));
+        let mut array_object = match third_numbers_item.value {
             Value::Object(object) => object,
             other => panic!("expected nested object, got {other:?}"),
         };
@@ -732,26 +782,37 @@ mod test {
         };
         assert_eq!(
             numbers_from_get.next().expect("numbers via get first"),
-            Value::Integer(1)
+            ArrayItem {
+                id: ValueId(10),
+                value: Value::Integer(1)
+            }
         );
 
         let deep_from_get = numbers_from_get.next().expect("numbers via get second");
-        let mut deep_from_get_iter = match deep_from_get {
+        assert_eq!(deep_from_get.id, ValueId(11));
+        let mut deep_from_get_iter = match deep_from_get.value {
             Value::Array(array) => array,
             other => panic!("expected nested array via get, got {other:?}"),
         };
         assert_eq!(
             deep_from_get_iter.next().expect("deep via get first"),
-            Value::String(deep_str)
+            ArrayItem {
+                id: ValueId(12),
+                value: Value::String(deep_str)
+            }
         );
         assert_eq!(
             deep_from_get_iter.next().expect("deep via get second"),
-            Value::Integer(99)
+            ArrayItem {
+                id: ValueId(13),
+                value: Value::Integer(99)
+            }
         );
         assert!(deep_from_get_iter.next().is_none());
 
         let array_from_get = numbers_from_get.next().expect("numbers via get third");
-        let mut object_from_get_iter = match array_from_get {
+        assert_eq!(array_from_get.id, ValueId(14));
+        let mut object_from_get_iter = match array_from_get.value {
             Value::Object(object) => object,
             other => panic!("expected nested object via get, got {other:?}"),
         };
@@ -796,5 +857,46 @@ mod test {
             Value::Integer(2)
         );
         assert!(nested_from_get.next().is_none());
+
+        // Check field ids
+        assert_eq!(
+            container_field_id,
+            ObjectFieldId {
+                value_id: root_id,
+                slot: 6,
+            }
+        );
+
+        assert_eq!(
+            numbers_field_id,
+            ObjectFieldId {
+                value_id: container_id,
+                slot: 8,
+            }
+        );
+
+        assert_eq!(
+            nested_field_id,
+            ObjectFieldId {
+                value_id: container_id,
+                slot: 19,
+            }
+        );
+
+        assert_eq!(
+            status_field_id,
+            ObjectFieldId {
+                value_id: nested_obj_id,
+                slot: 21,
+            }
+        );
+
+        assert_eq!(
+            count_field_id,
+            ObjectFieldId {
+                value_id: nested_obj_id,
+                slot: 23,
+            }
+        );
     }
 }

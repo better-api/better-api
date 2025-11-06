@@ -7,7 +7,7 @@ use string_interner::DefaultStringInterner;
 
 use crate::text::{parse_string, validate_name};
 use crate::value::{ArrayBuilder, ObjectBuilder, PrimitiveValue, ValueId};
-use crate::{Element, StringId};
+use crate::{Element, SourceMap, StringId};
 
 use super::Oracle;
 
@@ -20,22 +20,34 @@ struct InternedField {
 
 impl Oracle {
     /// Parse syntactical value [`ast::Value`] and store it in arena and source map mappings.
-    pub(crate) fn parse_value(&mut self, value: &ast::Value) -> Option<ValueId> {
+    pub(crate) fn parse_value(&mut self, value: &ast::Value) -> ValueId {
         let id = match ParsedValue::new(value, &mut self.reports, &mut self.strings) {
             ParsedValue::Primitive(primitive) => self.values.add_primitive(primitive),
             ParsedValue::Object(obj) => {
                 let fields = parse_object_fields(obj, &mut self.reports, &mut self.strings);
                 let builder = self.values.start_object();
-                insert_object_fields(fields, builder, &mut self.reports, &mut self.strings)
+                insert_object_fields(
+                    fields,
+                    builder,
+                    &mut self.source_map,
+                    &mut self.reports,
+                    &mut self.strings,
+                )
             }
             ParsedValue::Array(arr) => {
                 let builder = self.values.start_array();
-                insert_array_values(arr.values(), builder, &mut self.reports, &mut self.strings)
+                insert_array_values(
+                    arr.values(),
+                    builder,
+                    &mut self.source_map,
+                    &mut self.reports,
+                    &mut self.strings,
+                )
             }
         };
 
         self.source_map.insert(value, Element::Value(id));
-        Some(id)
+        id
     }
 }
 
@@ -95,7 +107,7 @@ fn parse_object_fields(
         .filter_map(|f| {
             f.value()?;
 
-            let name = f.name().and_then(|n| n.token())?;
+            let name = f.name().map(|n| n.token())?;
             let name_str: Cow<_> = match &name {
                 ast::NameToken::Identifier(ident) => ident.text().into(),
                 ast::NameToken::String(string) => parse_string(string, reports),
@@ -123,6 +135,7 @@ fn parse_object_fields(
 fn insert_object_fields(
     fields: Vec<InternedField>,
     mut builder: ObjectBuilder,
+    source_map: &mut SourceMap,
     reports: &mut Vec<Report>,
     strings: &mut DefaultStringInterner,
 ) -> ValueId {
@@ -132,43 +145,59 @@ fn insert_object_fields(
             .value()
             .expect("inserted field should have a value");
 
-        match ParsedValue::new(&value, reports, strings) {
+        let field_id = match ParsedValue::new(&value, reports, strings) {
             ParsedValue::Primitive(primitive) => builder.add_primitive(field.name, primitive),
             ParsedValue::Object(obj) => {
                 let fields = parse_object_fields(obj, reports, strings);
-                let child_builder = builder.start_object(field.name);
-                insert_object_fields(fields, child_builder, reports, strings);
+                let (child_builder, field_id) = builder.start_object(field.name);
+
+                let val_id =
+                    insert_object_fields(fields, child_builder, source_map, reports, strings);
+                source_map.insert(&value, Element::Value(val_id));
+
+                field_id
             }
             ParsedValue::Array(arr) => {
-                let child_builder = builder.start_array(field.name);
-                insert_array_values(arr.values(), child_builder, reports, strings);
+                let (child_builder, field_id) = builder.start_array(field.name);
+
+                let val_id =
+                    insert_array_values(arr.values(), child_builder, source_map, reports, strings);
+                source_map.insert(&value, Element::Value(val_id));
+
+                field_id
             }
-        }
+        };
+
+        source_map.insert(&field.field, Element::ObjectField(field_id));
     }
 
     builder.finish()
 }
 
 /// Inserts array values into a provided [`ArrayBuilder`].
-fn insert_array_values(
+pub(crate) fn insert_array_values(
     values: impl Iterator<Item = ast::Value>,
     mut builder: ArrayBuilder,
+    source_map: &mut SourceMap,
     reports: &mut Vec<Report>,
     strings: &mut DefaultStringInterner,
 ) -> ValueId {
     for value in values {
-        match ParsedValue::new(&value, reports, strings) {
+        let value_id = match ParsedValue::new(&value, reports, strings) {
             ParsedValue::Primitive(primitive) => builder.add_primitive(primitive),
             ParsedValue::Object(obj) => {
                 let fields = parse_object_fields(obj, reports, strings);
                 let child_builder = builder.start_object();
-                insert_object_fields(fields, child_builder, reports, strings);
+
+                insert_object_fields(fields, child_builder, source_map, reports, strings)
             }
             ParsedValue::Array(arr) => {
                 let child_builder = builder.start_array();
-                insert_array_values(arr.values(), child_builder, reports, strings);
+                insert_array_values(arr.values(), child_builder, source_map, reports, strings)
             }
-        }
+        };
+
+        source_map.insert(&value, Element::Value(value_id));
     }
 
     builder.finish()

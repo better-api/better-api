@@ -130,12 +130,15 @@ ast_node! {
     struct Name;
 }
 
+/// [`Name`] can be an identifier or a string. This type provides that information
+/// so that user knows if `text::parse_string` should be called or not.
 pub enum NameToken {
     Identifier(SyntaxToken),
     String(SyntaxToken),
 }
 
 impl NameToken {
+    /// Returns the text range of the underlying token.
     pub fn text_range(&self) -> TextRange {
         match self {
             NameToken::Identifier(token) | NameToken::String(token) => token.text_range(),
@@ -144,12 +147,18 @@ impl NameToken {
 }
 
 impl Name {
-    pub fn token(&self) -> Option<NameToken> {
-        self.syntax().first_token().and_then(|t| match t.kind() {
-            TOKEN_IDENTIFIER => Some(NameToken::Identifier(t)),
-            TOKEN_STRING => Some(NameToken::String(t)),
-            _ => None,
-        })
+    /// Returns the token representing the name.
+    pub fn token(&self) -> NameToken {
+        let token = self
+            .syntax()
+            .first_token()
+            .expect("parser should parse name correctly");
+
+        match token.kind() {
+            TOKEN_IDENTIFIER => NameToken::Identifier(token),
+            TOKEN_STRING => NameToken::String(token),
+            _ => unreachable!("parser should parse name correctly"),
+        }
     }
 }
 
@@ -353,6 +362,7 @@ impl ObjectField {
         self.0.children().find_map(Name::cast)
     }
 
+    /// Returns value of the field.
     pub fn value(&self) -> Option<Value> {
         self.0.children().find_map(Value::cast)
     }
@@ -385,6 +395,24 @@ ast_node! {
     #[from(NODE_TYPE_REF)]
     /// Reference to a type. Holds an identifier.
     struct TypeRef;
+}
+
+impl TypeRef {
+    /// Returns TOKEN_IDENTIFIER syntax token.
+    pub fn name(&self) -> SyntaxToken {
+        let token = self
+            .0
+            .first_token()
+            .expect("parser should parse type reference correctly");
+
+        debug_assert_eq!(
+            token.kind(),
+            TOKEN_IDENTIFIER,
+            "parser should parse type reference correctly"
+        );
+
+        token
+    }
 }
 
 ast_node! {
@@ -477,6 +505,18 @@ ast_node! {
     struct Enum;
 }
 
+impl Enum {
+    /// Returns type of the enum.
+    pub fn typ(&self) -> Option<Type> {
+        self.0.children().find_map(Type::cast)
+    }
+
+    /// Returns iterator over it's members.
+    pub fn members(&self) -> impl Iterator<Item = EnumMember> {
+        self.0.children().filter_map(EnumMember::cast)
+    }
+}
+
 ast_node! {
     #[from(NODE_TYPE_UNION)]
     /// Union type
@@ -493,6 +533,16 @@ ast_node! {
     #[from(NODE_TYPE_ENUM_MEMBER)]
     /// Member of an enum type.
     struct EnumMember;
+}
+
+impl EnumMember {
+    /// Returns value of the member.
+    ///
+    /// Member can contain an error instead of a value, in which case
+    /// this method returns `None`.
+    pub fn value(&self) -> Option<Value> {
+        self.0.children().find_map(Value::cast)
+    }
 }
 
 ast_node! {
