@@ -1,0 +1,52 @@
+---
+source: syntax/tokenizer.rs
+expression: diagnostics
+---
+[
+    Report {
+        severity: Error,
+        title: "invalid float `1.2.3`",
+        label: Some(
+            Label {
+                message: "invalid float",
+                span: Span {
+                    start: 9,
+                    end: 14,
+                },
+            },
+        ),
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "invalid float `1.`",
+        label: Some(
+            Label {
+                message: "invalid float",
+                span: Span {
+                    start: 15,
+                    end: 17,
+                },
+            },
+        ),
+        note: Some(
+            "help: float can't end with '.'. You should end it with '.0' instead.",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "invalid number",
+        label: Some(
+            Label {
+                message: "invalid number",
+                span: Span {
+                    start: 26,
+                    end: 27,
+                },
+            },
+        ),
+        note: Some(
+            "help: add digits after `-` for a valid number",
+        ),
+    },
+]

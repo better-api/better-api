@@ -133,6 +133,8 @@ impl<'s, 'd> Tokenizer<'s, 'd> {
     }
 
     /// Tokenizes a number (int or float)
+    ///
+    /// First character (ch.peek()) should be a digit
     fn number(&mut self) -> Token<'s> {
         let mut nr_dots = 0;
 
@@ -296,6 +298,25 @@ impl<'s, 'd> Iterator for Tokenizer<'s, 'd> {
             }
 
             ch if ch.is_ascii_digit() => self.number(),
+            '-' => {
+                if let Some(next) = self.chars.peek()
+                    && next.is_ascii_digit()
+                {
+                    self.pos += next.len_utf8();
+                    self.chars.next();
+                    self.number()
+                } else {
+                    self.reports.push(
+                        Report::error("invalid number".to_string())
+                            .with_label(Label::new(
+                                "invalid number".to_string(),
+                                Span::new(self.start, self.pos),
+                            ))
+                            .with_note("help: add digits after `-` for a valid number".to_string()),
+                    );
+                    self.emit(TOKEN_ERROR)
+                }
+            }
 
             ch if ch.is_alphabetic() => self.keyword(),
 
@@ -479,33 +500,10 @@ mod test {
     #[test]
     fn number() {
         let mut diagnostics = vec![];
-        let tokens: Vec<_> = tokenize("10 42.69 1.2.3 1.", &mut diagnostics).collect();
+        let tokens: Vec<_> = tokenize("10 42.69 1.2.3 1. -1 -5.3 - 42", &mut diagnostics).collect();
 
-        assert_eq!(
-            tokens,
-            vec![
-                (TOKEN_INTEGER, "10"),
-                (TOKEN_SPACE, " "),
-                (TOKEN_FLOAT, "42.69"),
-                (TOKEN_SPACE, " "),
-                (TOKEN_ERROR, "1.2.3"),
-                (TOKEN_SPACE, " "),
-                (TOKEN_ERROR, "1.")
-            ]
-        );
-        assert_eq!(
-            diagnostics,
-            vec![
-                Report::error("invalid float `1.2.3`".to_string())
-                    .with_label(Label::new("invalid float".to_string(), Span::new(9, 14))),
-                Report::error("invalid float `1.`".to_string())
-                    .with_label(Label::new("invalid float".to_string(), Span::new(15, 17)))
-                    .with_note(
-                        "help: float can't end with '.'. You should end it with '.0' instead."
-                            .to_string()
-                    )
-            ]
-        );
+        insta::assert_debug_snapshot!(tokens);
+        insta::assert_debug_snapshot!(diagnostics);
     }
 
     #[test]

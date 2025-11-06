@@ -1,0 +1,66 @@
+---
+source: syntax/tokenizer.rs
+expression: tokens
+---
+[
+    (
+        TOKEN_INTEGER,
+        "10",
+    ),
+    (
+        TOKEN_SPACE,
+        " ",
+    ),
+    (
+        TOKEN_FLOAT,
+        "42.69",
+    ),
+    (
+        TOKEN_SPACE,
+        " ",
+    ),
+    (
+        TOKEN_ERROR,
+        "1.2.3",
+    ),
+    (
+        TOKEN_SPACE,
+        " ",
+    ),
+    (
+        TOKEN_ERROR,
+        "1.",
+    ),
+    (
+        TOKEN_SPACE,
+        " ",
+    ),
+    (
+        TOKEN_INTEGER,
+        "-1",
+    ),
+    (
+        TOKEN_SPACE,
+        " ",
+    ),
+    (
+        TOKEN_FLOAT,
+        "-5.3",
+    ),
+    (
+        TOKEN_SPACE,
+        " ",
+    ),
+    (
+        TOKEN_ERROR,
+        "-",
+    ),
+    (
+        TOKEN_SPACE,
+        " ",
+    ),
+    (
+        TOKEN_INTEGER,
+        "42",
+    ),
+]
