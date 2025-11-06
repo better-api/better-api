@@ -53,8 +53,8 @@ impl Oracle {
 
     /// Analyze directive that expects value to be a string.
     /// This is `version`, `name` and `betterApi`
-    fn analyze_string_directive(&mut self, value_node: &ast::Value, directive: &str) -> Option<()> {
-        let value_id = self.parse_value(value_node)?;
+    fn analyze_string_directive(&mut self, value_node: &ast::Value, directive: &str) {
+        let value_id = self.parse_value(value_node);
         let value = self.values.get(value_id);
 
         if !matches!(value, Value::String(_)) {
@@ -67,9 +67,7 @@ impl Oracle {
                     ),
                 ),
             );
-        };
-
-        Some(())
+        }
     }
 
     /// Emits report for repeated directive (`version`, `name` or `betterApi`)

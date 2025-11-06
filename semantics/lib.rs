@@ -20,30 +20,7 @@ pub enum Element {
     ObjectField(value::ObjectFieldId),
     Type(typ::TypeId),
     TypeField(typ::TypeFieldId),
-}
-
-impl From<value::ValueId> for Element {
-    fn from(value: value::ValueId) -> Self {
-        Self::Value(value)
-    }
-}
-
-impl From<value::ObjectFieldId> for Element {
-    fn from(value: value::ObjectFieldId) -> Self {
-        Self::ObjectField(value)
-    }
-}
-
-impl From<typ::TypeId> for Element {
-    fn from(value: typ::TypeId) -> Self {
-        Self::Type(value)
-    }
-}
-
-impl From<typ::TypeFieldId> for Element {
-    fn from(value: typ::TypeFieldId) -> Self {
-        Self::TypeField(value)
-    }
+    EnumMember(value::ValueId),
 }
 
 /// Maps syntax nodes to semantic elements.
@@ -54,6 +31,7 @@ struct SourceMap {
 }
 
 impl SourceMap {
+    /// Insert source map info
     fn insert(&mut self, node: &impl AstNode<Language = Language>, element: Element) {
         let ptr = SyntaxNodePtr::new(node.syntax());
 

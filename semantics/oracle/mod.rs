@@ -8,6 +8,7 @@ use crate::typ::TypeArena;
 use crate::value::ValueArena;
 
 mod metadata;
+mod typ;
 mod value;
 
 /// Core type responsible for semantic analysis.
