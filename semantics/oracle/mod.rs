@@ -12,8 +12,11 @@ mod typ;
 mod value;
 
 /// Core type responsible for semantic analysis.
-#[derive(Clone, Default)]
-pub struct Oracle {
+#[derive(Clone)]
+pub struct Oracle<'a> {
+    /// Root node of the parsed tree.
+    root: &'a ast::Root,
+
     // Containers for primary oracle data
     strings: string_interner::DefaultStringInterner,
     values: ValueArena,
@@ -25,13 +28,21 @@ pub struct Oracle {
     reports: Vec<Report>,
 }
 
-impl Oracle {
+impl<'a> Oracle<'a> {
     /// Create a new oracle.
     ///
     /// Runs semantic analysis on the given AST and creates an oracle
     /// that can be queried for semantics info.
-    pub fn new(root: &ast::Root) -> Self {
-        let mut oracle = Self::default();
+    pub fn new(root: &'a ast::Root) -> Self {
+        let mut oracle = Self {
+            root,
+            strings: Default::default(),
+            values: Default::default(),
+            types: Default::default(),
+            source_map: Default::default(),
+            reports: Default::default(),
+        };
+
         oracle.analyze(root);
         oracle
     }

@@ -1,14 +1,16 @@
+use better_api_diagnostic::{Label, Report, Span};
 use better_api_syntax::ast;
+use better_api_syntax::ast::AstNode;
 use string_interner::DefaultStringInterner;
 
 use crate::Element;
 use crate::oracle::value::insert_array_values;
-use crate::typ::{PrimitiveType, TypeId};
+use crate::typ::{PrimitiveType, Type, TypeId};
 use crate::value::Value;
 
 use super::Oracle;
 
-impl Oracle {
+impl<'a> Oracle<'a> {
     pub(crate) fn parse_type(&mut self, typ: &ast::Type) -> TypeId {
         let id = match ParsedType::new(typ, &mut self.strings) {
             ParsedType::Primitive(primitive) => self.types.add_primitive(primitive),
@@ -26,10 +28,13 @@ impl Oracle {
 
     /// Parses enum type and inserts it into arena
     fn parse_enum(&mut self, typ: &ast::Enum) -> TypeId {
-        // TODO: Validate enum type and members types
+        // TODO: Validate members types. For this value - type comparison function is needed.
 
-        // Parse type of the enum
+        // Parse type of the enum and validate it
         let enum_type_id = typ.typ().map(|t| self.parse_type(&t));
+        if let Some(id) = enum_type_id {
+            self.validate_enum_type(id);
+        }
 
         // Parse enum members
         let builder = self.values.start_array();
@@ -52,6 +57,33 @@ impl Oracle {
         }
 
         self.types.add_enum(enum_type_id, members_id)
+    }
+
+    /// Validates type of the enum (not enum itself).
+    ///
+    /// When declaring an enum, you do `enum (T) {...}`. This function validates
+    /// that `T` is one of the allowed types. If it isn't a report is generated.
+    fn validate_enum_type(&mut self, enum_type_id: TypeId) {
+        match self.types.get(enum_type_id) {
+            Type::I32 | Type::I64 | Type::U32 | Type::U64 | Type::String => (),
+            typ => {
+                let node_ptr = self.source_map.get_bck(&Element::Type(enum_type_id));
+                let node = node_ptr.to_node(&self.root.syntax());
+                let range = node.text_range();
+
+                self.reports.push(
+                    Report::error(format!("invalid enum type {typ}"))
+                        .with_label(Label::new(
+                            format!("invalid enum type {typ}"),
+                            Span::new(range.start().into(), range.end().into()),
+                        ))
+                        .with_note(
+                            "help: enum must have a type `i32`, `i64`, `u32`, `u64`, or `string`"
+                                .to_string(),
+                        ),
+                );
+            }
+        }
     }
 }
 

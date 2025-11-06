@@ -18,27 +18,46 @@
 use crate::{StringId, value};
 
 /// Representation of a type.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, derive_more::Display)]
 pub enum Type<'a> {
+    #[display("`i32`")]
     I32,
+    #[display("`i64`")]
     I64,
+    #[display("`u32`")]
     U32,
+    #[display("`u64`")]
     U64,
+    #[display("`f32`")]
     F32,
+    #[display("`f64`")]
     F64,
+    #[display("`date`")]
     Date,
+    #[display("`timestamp`")]
     Timestamp,
+    #[display("`bool`")]
     Bool,
+    #[display("`string`")]
     String,
+    #[display("`file`")]
     File,
-    /// Reference to a named type.
-    Reference(StringId),
+    #[display("`option`")]
     Option(Reference<'a>),
+    #[display("`array`")]
     Array(Reference<'a>),
+    #[display("`record`")]
     Record(TypeFieldIterator<'a>),
+    #[display("`union`")]
     Union(Union<'a>),
+    #[display("`enum`")]
     Enum(Enum<'a>),
+    #[display("`response`")]
     Response(Response<'a>),
+
+    /// Reference to a named type.
+    #[display("`reference`")]
+    Reference(StringId),
 }
 
 impl From<PrimitiveType> for Type<'_> {

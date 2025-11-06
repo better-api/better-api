@@ -6,7 +6,7 @@ use crate::value::Value;
 
 use super::Oracle;
 
-impl Oracle {
+impl<'a> Oracle<'a> {
     pub(crate) fn analyze_metadata(&mut self, root: &ast::Root) {
         for (idx, version) in root.api_versions().enumerate() {
             if idx > 0 {

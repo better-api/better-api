@@ -38,4 +38,24 @@ impl SourceMap {
         self.fwd.insert(ptr, element);
         self.bck.insert(element, ptr);
     }
+
+    /// Get [`Element`] for provided syntax node
+    fn get_fwd(&self, node: &impl AstNode<Language = Language>) -> Option<&Element> {
+        let ptr = SyntaxNodePtr::new(node.syntax());
+
+        self.fwd.get(&ptr)
+    }
+
+    /// Get syntax node for provided [`Element`].
+    ///
+    /// **Note:** If source map is constructed by correctly working [`Oracle`],
+    /// every [`Element`] should have a syntax node. This method will panic if given
+    /// [`Element`] doesn't have a syntax node. In which case there is something wrong
+    /// with [`Oracle`] implementation.
+    fn get_bck(&self, element: &Element) -> SyntaxNodePtr {
+        *self
+            .bck
+            .get(element)
+            .expect("oracle should construct source map correctly")
+    }
 }
