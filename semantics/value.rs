@@ -25,7 +25,7 @@
 use crate::StringId;
 
 /// Representation of a value.
-#[derive(Debug, PartialEq, derive_more::Display)]
+#[derive(Debug, PartialEq, derive_more::Display, Clone)]
 pub enum Value<'a> {
     #[display("`null`")]
     Null,
@@ -78,6 +78,7 @@ impl<'a> Value<'a> {
 }
 
 /// A field inside of the object.
+#[derive(Debug, Clone, PartialEq)]
 pub struct ObjectField<'a> {
     pub id: ObjectFieldId,
     pub name: StringId,
@@ -87,7 +88,7 @@ pub struct ObjectField<'a> {
 /// Object value returned by the [`ValueArena`].
 ///
 /// It's an iterator where each item is an [`ObjectField`].
-#[derive(derive_more::Debug, PartialEq)]
+#[derive(derive_more::Debug, PartialEq, Clone)]
 pub struct Object<'a> {
     #[debug(skip)]
     arena: &'a ValueArena,
@@ -125,7 +126,7 @@ impl<'a> Iterator for Object<'a> {
 /// Array value returned by the [`ValueArena`].
 ///
 /// It's an iterator where each item is an [`ArrayItem`].
-#[derive(derive_more::Debug, PartialEq)]
+#[derive(derive_more::Debug, PartialEq, Clone)]
 pub struct Array<'a> {
     #[debug(skip)]
     arena: &'a ValueArena,

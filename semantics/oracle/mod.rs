@@ -56,4 +56,18 @@ impl<'a> Oracle<'a> {
         self.analyze_metadata(root);
         // TODO: Implement the actual analysis
     }
+
+    #[cfg(test)]
+    /// Create a new [`Oracle`] without calling analyze on it.
+    /// Only used for testing.
+    fn new_raw(root: &'a ast::Root) -> Self {
+        Self {
+            root,
+            strings: Default::default(),
+            values: Default::default(),
+            types: Default::default(),
+            source_map: Default::default(),
+            reports: Default::default(),
+        }
+    }
 }
