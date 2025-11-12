@@ -5,25 +5,45 @@ use string_interner::DefaultStringInterner;
 
 use crate::Element;
 use crate::oracle::value::insert_array_values;
-use crate::typ::{PrimitiveType, Type, TypeId};
+use crate::typ::{OptionArrayBuilder, PrimitiveType, Type, TypeId};
 use crate::value::Value;
 
 use super::Oracle;
 
 impl<'a> Oracle<'a> {
-    pub(crate) fn parse_type(&mut self, typ: &ast::Type) -> TypeId {
+    pub(crate) fn parse_type(&mut self, typ: &ast::Type) -> Option<TypeId> {
         let id = match ParsedType::new(typ, &mut self.strings) {
             ParsedType::Primitive(primitive) => self.types.add_primitive(primitive),
             ParsedType::Enum(en) => self.parse_enum(en),
             ParsedType::Response(type_response) => todo!(),
             ParsedType::Record(record) => todo!(),
             ParsedType::Union(union) => todo!(),
-            ParsedType::Array(type_array) => todo!(),
-            ParsedType::Option(type_option) => todo!(),
+            ParsedType::Array(arr) => {
+                let inner = arr.typ()?;
+                let builder = self.types.start_array();
+                parse_array_option(
+                    &inner,
+                    builder,
+                    &mut self.reports,
+                    &mut self.strings,
+                    "array",
+                )?
+            }
+            ParsedType::Option(opt) => {
+                let inner = opt.typ()?;
+                let builder = self.types.start_option();
+                parse_array_option(
+                    &inner,
+                    builder,
+                    &mut self.reports,
+                    &mut self.strings,
+                    "option",
+                )?
+            }
         };
 
         self.source_map.insert(typ, Element::Type(id));
-        id
+        Some(id)
     }
 
     /// Parses enum type and inserts it into arena
@@ -31,7 +51,8 @@ impl<'a> Oracle<'a> {
         // TODO: Validate members types. For this value - type comparison function is needed.
 
         // Parse type of the enum and validate it
-        let enum_type_id = typ.typ().map(|t| self.parse_type(&t));
+        // Reports are handled by parser and self.parse_type methods already
+        let enum_type_id = typ.typ().and_then(|t| self.parse_type(&t));
         if let Some(id) = enum_type_id {
             self.validate_enum_type(id);
         }
@@ -68,7 +89,7 @@ impl<'a> Oracle<'a> {
             Type::I32 | Type::I64 | Type::U32 | Type::U64 | Type::String => (),
             typ => {
                 let node_ptr = self.source_map.get_bck(&Element::Type(enum_type_id));
-                let node = node_ptr.to_node(&self.root.syntax());
+                let node = node_ptr.to_node(self.root.syntax());
                 let range = node.text_range();
 
                 self.reports.push(
@@ -85,6 +106,75 @@ impl<'a> Oracle<'a> {
             }
         }
     }
+}
+
+fn parse_array_option(
+    inner: &ast::Type,
+    mut builder: OptionArrayBuilder,
+    reports: &mut Vec<Report>,
+    strings: &mut DefaultStringInterner,
+    outer_type_name: &str,
+) -> Option<TypeId> {
+    match ParsedType::new(inner, strings) {
+        ParsedType::Primitive(primitive) => Some(builder.finish(primitive)),
+        ParsedType::Array(arr) => {
+            // Error for empty inner type is reported by parser.
+            let inner = arr.typ()?;
+            builder.start_array();
+            parse_array_option(&inner, builder, reports, strings, outer_type_name)
+        }
+        ParsedType::Option(opt) => {
+            // Error for empty inner type is reported by parser.
+            let inner = opt.typ()?;
+            builder.start_option();
+            parse_array_option(&inner, builder, reports, strings, outer_type_name)
+        }
+
+        ParsedType::Enum(_) => {
+            reports.push(new_invalid_array_option_type_report(
+                "enum",
+                outer_type_name,
+                inner,
+            ));
+            None
+        }
+        ParsedType::Response(_) => {
+            reports.push(new_invalid_array_option_type_report(
+                "response",
+                outer_type_name,
+                inner,
+            ));
+            None
+        }
+        ParsedType::Record(_) => {
+            reports.push(new_invalid_array_option_type_report(
+                "record",
+                outer_type_name,
+                inner,
+            ));
+            None
+        }
+        ParsedType::Union(_) => {
+            reports.push(new_invalid_array_option_type_report(
+                "union",
+                outer_type_name,
+                inner,
+            ));
+            None
+        }
+    }
+}
+
+fn new_invalid_array_option_type_report(inner: &str, outer: &str, node: &impl AstNode) -> Report {
+    let range = node.syntax().text_range();
+    Report::error(format!("invalid {inner} type inside of {outer}"))
+        .with_label(Label::new(
+            format!("invalid {inner} type"),
+            Span::new(range.start().into(), range.end().into()),
+        ))
+        .with_note(format!(
+            "help: create a new named {inner} type, and use it's identifier inside of {outer} type"
+        ))
 }
 
 enum ParsedType<'a> {

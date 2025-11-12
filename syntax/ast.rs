@@ -487,10 +487,24 @@ ast_node! {
     struct TypeOption;
 }
 
+impl TypeOption {
+    /// Returns the type of the option
+    pub fn typ(&self) -> Option<Type> {
+        self.0.children().find_map(Type::cast)
+    }
+}
+
 ast_node! {
     #[from(NODE_TYPE_ARRAY)]
     /// Array type
     struct TypeArray;
+}
+
+impl TypeArray {
+    /// Returns the type of the array
+    pub fn typ(&self) -> Option<Type> {
+        self.0.children().find_map(Type::cast)
+    }
 }
 
 ast_node! {
