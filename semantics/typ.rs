@@ -532,13 +532,23 @@ impl<'p> OptionArrayBuilder<'p> {
     }
 
     /// Start a new array inside the current array or option.
-    pub fn start_array(&mut self) {
+    ///
+    /// Returns id of the array type that was started. If the builder
+    /// is not finished, the returned id is invalid.
+    pub fn start_array(&mut self) -> TypeId {
+        let idx = self.parent.data().len();
         self.parent.data().push(Slot::Array { end: TypeId(0) });
+        TypeId(idx as u32)
     }
 
     /// Start a new option inside the current array or option.
-    pub fn start_option(&mut self) {
+    ///
+    /// Returns id of the option type that was started. If the builder
+    /// is not finished, the returned id is invalid.
+    pub fn start_option(&mut self) -> TypeId {
+        let idx = self.parent.data().len();
         self.parent.data().push(Slot::Option { end: TypeId(0) });
+        TypeId(idx as u32)
     }
 
     /// Finish building this type.

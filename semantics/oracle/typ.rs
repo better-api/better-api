@@ -3,10 +3,10 @@ use better_api_syntax::ast;
 use better_api_syntax::ast::AstNode;
 use string_interner::DefaultStringInterner;
 
-use crate::Element;
 use crate::oracle::value::insert_array_values;
 use crate::typ::{OptionArrayBuilder, PrimitiveType, Type, TypeId};
 use crate::value::Value;
+use crate::{Element, SourceMap};
 
 use super::Oracle;
 
@@ -24,6 +24,7 @@ impl<'a> Oracle<'a> {
                 parse_array_option(
                     &inner,
                     builder,
+                    &mut self.source_map,
                     &mut self.reports,
                     &mut self.strings,
                     "array",
@@ -35,6 +36,7 @@ impl<'a> Oracle<'a> {
                 parse_array_option(
                     &inner,
                     builder,
+                    &mut self.source_map,
                     &mut self.reports,
                     &mut self.strings,
                     "option",
@@ -111,23 +113,38 @@ impl<'a> Oracle<'a> {
 fn parse_array_option(
     inner: &ast::Type,
     mut builder: OptionArrayBuilder,
+    source_map: &mut SourceMap,
     reports: &mut Vec<Report>,
     strings: &mut DefaultStringInterner,
     outer_type_name: &str,
 ) -> Option<TypeId> {
-    match ParsedType::new(inner, strings) {
-        ParsedType::Primitive(primitive) => Some(builder.finish(primitive)),
+    let id = match ParsedType::new(inner, strings) {
+        ParsedType::Primitive(primitive) => builder.finish(primitive),
         ParsedType::Array(arr) => {
             // Error for empty inner type is reported by parser.
             let inner = arr.typ()?;
             builder.start_array();
-            parse_array_option(&inner, builder, reports, strings, outer_type_name)
+            parse_array_option(
+                &inner,
+                builder,
+                source_map,
+                reports,
+                strings,
+                outer_type_name,
+            )?
         }
         ParsedType::Option(opt) => {
             // Error for empty inner type is reported by parser.
             let inner = opt.typ()?;
             builder.start_option();
-            parse_array_option(&inner, builder, reports, strings, outer_type_name)
+            parse_array_option(
+                &inner,
+                builder,
+                source_map,
+                reports,
+                strings,
+                outer_type_name,
+            )?
         }
 
         ParsedType::Enum(_) => {
@@ -136,7 +153,7 @@ fn parse_array_option(
                 outer_type_name,
                 inner,
             ));
-            None
+            return None;
         }
         ParsedType::Response(_) => {
             reports.push(new_invalid_array_option_type_report(
@@ -144,7 +161,7 @@ fn parse_array_option(
                 outer_type_name,
                 inner,
             ));
-            None
+            return None;
         }
         ParsedType::Record(_) => {
             reports.push(new_invalid_array_option_type_report(
@@ -152,7 +169,7 @@ fn parse_array_option(
                 outer_type_name,
                 inner,
             ));
-            None
+            return None;
         }
         ParsedType::Union(_) => {
             reports.push(new_invalid_array_option_type_report(
@@ -160,9 +177,12 @@ fn parse_array_option(
                 outer_type_name,
                 inner,
             ));
-            None
+            return None;
         }
-    }
+    };
+
+    source_map.insert(inner, Element::Type(id));
+    Some(id)
 }
 
 fn new_invalid_array_option_type_report(inner: &str, outer: &str, node: &impl AstNode) -> Report {
