@@ -1,7 +1,8 @@
 //! Defines core type responsible for semantic analysis.
 
 use better_api_diagnostic::Report;
-use better_api_syntax::ast;
+use better_api_syntax::ast::AstNode;
+use better_api_syntax::{SyntaxNode, SyntaxNodePtr, ast};
 
 use crate::SourceMap;
 use crate::typ::TypeArena;
@@ -55,6 +56,10 @@ impl<'a> Oracle<'a> {
     fn analyze(&mut self, root: &ast::Root) {
         self.analyze_metadata(root);
         // TODO: Implement the actual analysis
+    }
+
+    fn node(&self, ptr: SyntaxNodePtr) -> SyntaxNode {
+        ptr.to_node(self.root.syntax())
     }
 
     #[cfg(test)]

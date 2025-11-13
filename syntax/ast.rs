@@ -565,10 +565,34 @@ ast_node! {
     struct TypeResponse;
 }
 
+impl TypeResponse {
+    /// Returns content type
+    pub fn content_type(&self) -> Option<ResponseContentType> {
+        self.0.children().find_map(ResponseContentType::cast)
+    }
+
+    /// Returns headers
+    pub fn headers(&self) -> Option<ResponseHeaders> {
+        self.0.children().find_map(ResponseHeaders::cast)
+    }
+
+    /// Returns body
+    pub fn body(&self) -> Option<ResponseBody> {
+        self.0.children().find_map(ResponseBody::cast)
+    }
+}
+
 ast_node! {
     #[from(NODE_TYPE_RESP_CONTENT_TYPE)]
     /// Response content type.
     struct ResponseContentType;
+}
+
+impl ResponseContentType {
+    /// Returns value of content type
+    pub fn value(&self) -> Option<Value> {
+        self.0.children().find_map(Value::cast)
+    }
 }
 
 ast_node! {
@@ -577,10 +601,24 @@ ast_node! {
     struct ResponseHeaders;
 }
 
+impl ResponseHeaders {
+    /// Returns type of headers
+    pub fn typ(&self) -> Option<Type> {
+        self.0.children().find_map(Type::cast)
+    }
+}
+
 ast_node! {
     #[from(NODE_TYPE_RESP_BODY)]
     /// Response body.
     struct ResponseBody;
+}
+
+impl ResponseBody {
+    /// Returns type of response body
+    pub fn typ(&self) -> Option<Type> {
+        self.0.children().find_map(Type::cast)
+    }
 }
 
 ast_node! {

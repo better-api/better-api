@@ -5,7 +5,7 @@ use string_interner::DefaultStringInterner;
 
 use crate::oracle::value::insert_array_values;
 use crate::typ::{OptionArrayBuilder, PrimitiveType, Type, TypeId};
-use crate::value::Value;
+use crate::value::{Value, ValueId};
 use crate::{Element, SourceMap};
 
 use super::Oracle;
@@ -15,7 +15,7 @@ impl<'a> Oracle<'a> {
         let id = match ParsedType::new(typ, &mut self.strings) {
             ParsedType::Primitive(primitive) => self.types.add_primitive(primitive),
             ParsedType::Enum(en) => self.parse_enum(en),
-            ParsedType::Response(type_response) => todo!(),
+            ParsedType::Response(resp) => self.parse_response(resp),
             ParsedType::Record(record) => todo!(),
             ParsedType::Union(union) => todo!(),
             ParsedType::Array(arr) => {
@@ -82,6 +82,36 @@ impl<'a> Oracle<'a> {
         self.types.add_enum(enum_type_id, members_id)
     }
 
+    fn parse_response(&mut self, resp: &ast::TypeResponse) -> TypeId {
+        // Parse and validate content type
+        let content_type_id = resp
+            .content_type()
+            .and_then(|v| v.value())
+            .map(|v| self.parse_value(&v));
+        if let Some(id) = content_type_id {
+            self.validate_response_content_type(id);
+        }
+
+        // Parse and validate header type
+        let headers_id = resp
+            .headers()
+            .and_then(|h| h.typ())
+            .and_then(|t| self.parse_type(&t));
+        // TODO: Check that headers type is a record. Do not forget to resolve named references
+
+        // Parse and validate response body
+        let body_id = resp
+            .body()
+            .and_then(|b| b.typ())
+            .and_then(|t| self.parse_type(&t));
+        // TODO: Check that body type is valid (not a response)
+
+        // TODO: Check response body type and header mime type match.
+
+        self.types
+            .add_response(body_id, headers_id, content_type_id)
+    }
+
     /// Validates type of the enum (not enum itself).
     ///
     /// When declaring an enum, you do `enum (T) {...}`. This function validates
@@ -91,7 +121,7 @@ impl<'a> Oracle<'a> {
             Type::I32 | Type::I64 | Type::U32 | Type::U64 | Type::String => (),
             typ => {
                 let node_ptr = self.source_map.get_bck(&Element::Type(enum_type_id));
-                let node = node_ptr.to_node(self.root.syntax());
+                let node = self.node(node_ptr);
                 let range = node.text_range();
 
                 self.reports.push(
@@ -104,6 +134,36 @@ impl<'a> Oracle<'a> {
                             "help: enum must have a type `i32`, `i64`, `u32`, `u64`, or `string`"
                                 .to_string(),
                         ),
+                );
+            }
+        }
+    }
+
+    /// Validates if content type value of response is valid.
+    ///
+    /// If the content type isn't valid, report is generated.
+    fn validate_response_content_type(&mut self, content_type_id: ValueId) {
+        match self.values.get(content_type_id) {
+            Value::String(str_id) => {
+                let content_type = self
+                    .strings
+                    .resolve(str_id)
+                    .expect("stored string should be interned");
+
+                // TODO: Validate that header has a valid mime type and is not a random string
+            }
+            val => {
+                let node_ptr = self.source_map.get_bck(&Element::Value(content_type_id));
+                let node = self.node(node_ptr);
+                let range = node.text_range();
+
+                self.reports.push(
+                    Report::error(format!("invalid response content type {val}"))
+                        .with_label(Label::new(
+                            format!("invalid response content type {val}"),
+                            Span::new(range.start().into(), range.end().into()),
+                        ))
+                        .with_note("help: response content type must be a string".to_string()),
                 );
             }
         }
