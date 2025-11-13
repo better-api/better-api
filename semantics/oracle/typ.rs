@@ -97,14 +97,14 @@ impl<'a> Oracle<'a> {
             .headers()
             .and_then(|h| h.typ())
             .and_then(|t| self.parse_type(&t));
-        // TODO: Check that headers type is a record. Do not forget to resolve named references
+        // TODO: Check that headers type is a record. Do not forget to resolve named references.
 
         // Parse and validate response body
         let body_id = resp
             .body()
             .and_then(|b| b.typ())
             .and_then(|t| self.parse_type(&t));
-        // TODO: Check that body type is valid (not a response)
+        // TODO: Check that body type is valid (not a response). Again, resolve named references
 
         // TODO: Check response body type and header mime type match.
 
