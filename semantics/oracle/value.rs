@@ -11,7 +11,7 @@ use crate::{Element, SourceMap, StringId};
 
 use super::Oracle;
 
-/// Represents object or type field with interned name.
+/// Represents object field with interned name.
 #[derive(Clone)]
 struct InternedField {
     name: StringId,
@@ -147,6 +147,7 @@ fn insert_object_fields(
             .expect("inserted field should have a value");
 
         let field_id = match ParsedValue::new(&value, reports, strings) {
+            // TODO: get value id of inserted primitive and add it to source map.
             ParsedValue::Primitive(primitive) => builder.add_primitive(field.name, primitive),
             ParsedValue::Object(obj) => {
                 let fields = parse_object_fields(obj, reports, strings);

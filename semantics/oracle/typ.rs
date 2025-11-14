@@ -1,14 +1,64 @@
+use std::borrow::Cow;
+
 use better_api_diagnostic::{Label, Report, Span};
 use better_api_syntax::ast;
 use better_api_syntax::ast::AstNode;
 use string_interner::DefaultStringInterner;
 
 use crate::oracle::value::insert_array_values;
-use crate::typ::{OptionArrayBuilder, PrimitiveType, Type, TypeId};
+use crate::text::{parse_string, validate_name};
+use crate::typ::{FieldBuilder, OptionArrayBuilder, PrimitiveType, Type, TypeId};
 use crate::value::{Value, ValueId};
-use crate::{Element, SourceMap};
+use crate::{Element, SourceMap, StringId};
 
 use super::Oracle;
+
+/// Represents type field with interned name.
+#[derive(Clone)]
+struct InternedField {
+    name: StringId,
+    field: ast::TypeField,
+}
+
+enum ParsedType<'a> {
+    Primitive(PrimitiveType),
+    Enum(&'a ast::Enum),
+    Response(&'a ast::TypeResponse),
+    Record(&'a ast::Record),
+    Union(&'a ast::Union),
+    Array(&'a ast::TypeArray),
+    Option(&'a ast::TypeOption),
+}
+
+impl<'a> ParsedType<'a> {
+    fn new(typ: &'a ast::Type, strings: &mut DefaultStringInterner) -> Self {
+        match typ {
+            ast::Type::TypeOption(opt) => Self::Option(opt),
+            ast::Type::TypeArray(arr) => Self::Array(arr),
+            ast::Type::Record(rec) => Self::Record(rec),
+            ast::Type::Enum(en) => Self::Enum(en),
+            ast::Type::Union(union) => Self::Union(union),
+            ast::Type::TypeResponse(resp) => Self::Response(resp),
+            ast::Type::TypeRef(typ_ref) => {
+                let token = typ_ref.name();
+                let str_id = strings.get_or_intern(token.text());
+
+                Self::Primitive(PrimitiveType::Reference(str_id))
+            }
+            ast::Type::TypeI32(_) => Self::Primitive(PrimitiveType::I32),
+            ast::Type::TypeI64(_) => Self::Primitive(PrimitiveType::I64),
+            ast::Type::TypeU32(_) => Self::Primitive(PrimitiveType::U32),
+            ast::Type::TypeU64(_) => Self::Primitive(PrimitiveType::U64),
+            ast::Type::TypeF32(_) => Self::Primitive(PrimitiveType::F32),
+            ast::Type::TypeF64(_) => Self::Primitive(PrimitiveType::F64),
+            ast::Type::TypeDate(_) => Self::Primitive(PrimitiveType::Date),
+            ast::Type::TypeTimestamp(_) => Self::Primitive(PrimitiveType::Timestamp),
+            ast::Type::TypeBool(_) => Self::Primitive(PrimitiveType::Bool),
+            ast::Type::TypeString(_) => Self::Primitive(PrimitiveType::String),
+            ast::Type::TypeFile(_) => Self::Primitive(PrimitiveType::File),
+        }
+    }
+}
 
 impl<'a> Oracle<'a> {
     pub(crate) fn parse_type(&mut self, typ: &ast::Type) -> Option<TypeId> {
@@ -16,8 +66,8 @@ impl<'a> Oracle<'a> {
             ParsedType::Primitive(primitive) => self.types.add_primitive(primitive),
             ParsedType::Enum(en) => self.parse_enum(en),
             ParsedType::Response(resp) => self.parse_response(resp),
-            ParsedType::Record(record) => todo!(),
-            ParsedType::Union(union) => todo!(),
+            ParsedType::Record(record) => self.parse_record(record),
+            ParsedType::Union(union) => self.parse_union(union),
             ParsedType::Array(arr) => {
                 let inner = arr.typ()?;
                 let builder = self.types.start_array();
@@ -50,10 +100,11 @@ impl<'a> Oracle<'a> {
 
     /// Parses enum type and inserts it into arena
     fn parse_enum(&mut self, typ: &ast::Enum) -> TypeId {
-        // TODO: Validate members types. For this value - type comparison function is needed.
+        // TODO: Validate members types. For this value -> type comparison function is needed.
 
         // Parse type of the enum and validate it
         // Reports are handled by parser and self.parse_type methods already
+        // TODO: move this in the shared type validation logic
         let enum_type_id = typ.typ().and_then(|t| self.parse_type(&t));
         if let Some(id) = enum_type_id {
             self.validate_enum_type(id);
@@ -88,6 +139,7 @@ impl<'a> Oracle<'a> {
             .content_type()
             .and_then(|v| v.value())
             .map(|v| self.parse_value(&v));
+        // TODO: Move validation to shared validation logic.
         if let Some(id) = content_type_id {
             self.validate_response_content_type(id);
         }
@@ -110,6 +162,73 @@ impl<'a> Oracle<'a> {
 
         self.types
             .add_response(body_id, headers_id, content_type_id)
+    }
+
+    fn parse_record(&mut self, record: &ast::Record) -> TypeId {
+        let fields = self.parse_type_fields(record.fields());
+        let builder = self.types.start_record();
+        insert_type_fields(
+            fields,
+            builder,
+            &mut self.source_map,
+            &mut self.reports,
+            &mut self.strings,
+            "record field",
+        )
+    }
+
+    fn parse_union(&mut self, union: &ast::Union) -> TypeId {
+        // TODO: Parse discriminator
+        let fields = self.parse_type_fields(union.fields());
+        let builder = self.types.start_union(None);
+        insert_type_fields(
+            fields,
+            builder,
+            &mut self.source_map,
+            &mut self.reports,
+            &mut self.strings,
+            "union field",
+        )
+    }
+
+    /// Collects type fields into a vector.
+    ///
+    /// Only valid fields are collected. Field is valid if it has a valid name and a type.
+    /// Names are interned.
+    ///
+    /// Returned vector is sorted by name, which stabilizes the fields. This is useful for
+    /// type checking.
+    fn parse_type_fields(
+        &mut self,
+        fields: impl Iterator<Item = ast::TypeField>,
+    ) -> Vec<InternedField> {
+        let mut fields: Vec<_> = fields
+            .filter_map(|f| {
+                f.typ()?;
+
+                let name = f.name().map(|n| n.token())?;
+                let name_str: Cow<_> = match &name {
+                    ast::NameToken::Identifier(ident) => ident.text().into(),
+                    ast::NameToken::String(string) => parse_string(string, &mut self.reports),
+                };
+
+                if let Err(report) = validate_name(&name_str, name.text_range()) {
+                    self.reports.push(report);
+                    return None;
+                }
+
+                let name_id = self.strings.get_or_intern(name_str);
+                Some(InternedField {
+                    name: name_id,
+                    field: f,
+                })
+            })
+            .collect();
+
+        fields.sort_by_key(|f| f.name);
+        // TODO: Check fields are unique in the place where type validation happens
+
+        fields
     }
 
     /// Validates type of the enum (not enum itself).
@@ -208,35 +327,19 @@ fn parse_array_option(
         }
 
         ParsedType::Enum(_) => {
-            reports.push(new_invalid_array_option_type_report(
-                "enum",
-                outer_type_name,
-                inner,
-            ));
+            reports.push(new_invalid_inner_type("enum", outer_type_name, inner));
             return None;
         }
         ParsedType::Response(_) => {
-            reports.push(new_invalid_array_option_type_report(
-                "response",
-                outer_type_name,
-                inner,
-            ));
+            reports.push(new_invalid_inner_type("response", outer_type_name, inner));
             return None;
         }
         ParsedType::Record(_) => {
-            reports.push(new_invalid_array_option_type_report(
-                "record",
-                outer_type_name,
-                inner,
-            ));
+            reports.push(new_invalid_inner_type("record", outer_type_name, inner));
             return None;
         }
         ParsedType::Union(_) => {
-            reports.push(new_invalid_array_option_type_report(
-                "union",
-                outer_type_name,
-                inner,
-            ));
+            reports.push(new_invalid_inner_type("union", outer_type_name, inner));
             return None;
         }
     };
@@ -245,7 +348,7 @@ fn parse_array_option(
     Some(id)
 }
 
-fn new_invalid_array_option_type_report(inner: &str, outer: &str, node: &impl AstNode) -> Report {
+fn new_invalid_inner_type(inner: &str, outer: &str, node: &impl AstNode) -> Report {
     let range = node.syntax().text_range();
     Report::error(format!("invalid {inner} type inside of {outer}"))
         .with_label(Label::new(
@@ -253,46 +356,86 @@ fn new_invalid_array_option_type_report(inner: &str, outer: &str, node: &impl As
             Span::new(range.start().into(), range.end().into()),
         ))
         .with_note(format!(
-            "help: create a new named {inner} type, and use it's identifier inside of {outer} type"
+            "help: create a new named {inner} type, and use it's identifier inside of {outer}"
         ))
 }
 
-enum ParsedType<'a> {
-    Primitive(PrimitiveType),
-    Enum(&'a ast::Enum),
-    Response(&'a ast::TypeResponse),
-    Record(&'a ast::Record),
-    Union(&'a ast::Union),
-    Array(&'a ast::TypeArray),
-    Option(&'a ast::TypeOption),
-}
+fn insert_type_fields(
+    fields: Vec<InternedField>,
+    mut builder: FieldBuilder,
+    source_map: &mut SourceMap,
+    reports: &mut Vec<Report>,
+    strings: &mut DefaultStringInterner,
+    type_field_name: &str,
+) -> TypeId {
+    for field in fields {
+        let typ = field
+            .field
+            .typ()
+            .expect("inserted field should have a type");
 
-impl<'a> ParsedType<'a> {
-    fn new(typ: &'a ast::Type, strings: &mut DefaultStringInterner) -> Self {
-        match typ {
-            ast::Type::TypeOption(opt) => Self::Option(opt),
-            ast::Type::TypeArray(arr) => Self::Array(arr),
-            ast::Type::Record(rec) => Self::Record(rec),
-            ast::Type::Enum(en) => Self::Enum(en),
-            ast::Type::Union(union) => Self::Union(union),
-            ast::Type::TypeResponse(resp) => Self::Response(resp),
-            ast::Type::TypeRef(typ_ref) => {
-                let token = typ_ref.name();
-                let str_id = strings.get_or_intern(token.text());
+        // TODO: Handle default
+        let default = None;
 
-                Self::Primitive(PrimitiveType::Reference(str_id))
+        let field_id = match ParsedType::new(&typ, strings) {
+            // TODO: get type id of inserted primitive and add it to source map
+            ParsedType::Primitive(primitive) => builder.add_simple(field.name, primitive, default),
+            ParsedType::Array(arr) => {
+                let Some(inner) = arr.typ() else {
+                    continue;
+                };
+
+                let child_builder = builder.start_array(field.name, default);
+                let type_id = parse_array_option(
+                    &inner,
+                    child_builder,
+                    source_map,
+                    reports,
+                    strings,
+                    "array",
+                );
+                if let Some(type_id) = type_id {
+                    source_map.insert(&typ, Element::Type(type_id));
+                }
             }
-            ast::Type::TypeI32(_) => Self::Primitive(PrimitiveType::I32),
-            ast::Type::TypeI64(_) => Self::Primitive(PrimitiveType::I64),
-            ast::Type::TypeU32(_) => Self::Primitive(PrimitiveType::U32),
-            ast::Type::TypeU64(_) => Self::Primitive(PrimitiveType::U64),
-            ast::Type::TypeF32(_) => Self::Primitive(PrimitiveType::F32),
-            ast::Type::TypeF64(_) => Self::Primitive(PrimitiveType::F64),
-            ast::Type::TypeDate(_) => Self::Primitive(PrimitiveType::Date),
-            ast::Type::TypeTimestamp(_) => Self::Primitive(PrimitiveType::Timestamp),
-            ast::Type::TypeBool(_) => Self::Primitive(PrimitiveType::Bool),
-            ast::Type::TypeString(_) => Self::Primitive(PrimitiveType::String),
-            ast::Type::TypeFile(_) => Self::Primitive(PrimitiveType::File),
-        }
+            ParsedType::Option(opt) => {
+                let Some(inner) = opt.typ() else {
+                    continue;
+                };
+
+                let child_builder = builder.start_option(field.name, default);
+                let type_id = parse_array_option(
+                    &inner,
+                    child_builder,
+                    source_map,
+                    reports,
+                    strings,
+                    "option",
+                );
+                if let Some(type_id) = type_id {
+                    source_map.insert(&typ, Element::Type(type_id));
+                }
+            }
+            ParsedType::Enum(_) => {
+                reports.push(new_invalid_inner_type("enum", type_field_name, &typ));
+                continue;
+            }
+            ParsedType::Response(_) => {
+                reports.push(new_invalid_inner_type("response", type_field_name, &typ));
+                continue;
+            }
+            ParsedType::Record(_) => {
+                reports.push(new_invalid_inner_type("record", type_field_name, &typ));
+                continue;
+            }
+            ParsedType::Union(_) => {
+                reports.push(new_invalid_inner_type("union", type_field_name, &typ));
+                continue;
+            }
+        };
+
+        // TODO: Insert field id to source map
     }
+
+    builder.finish()
 }

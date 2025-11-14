@@ -55,6 +55,14 @@ impl<'a> Oracle<'a> {
 
     fn analyze(&mut self, root: &ast::Root) {
         self.analyze_metadata(root);
+
+        // A placeholder, just so that warning about unused `Oracle::parse_type`
+        // goes away
+        // TODO: Remove this in the future.
+        if let Some(t) = root.dummy_type() {
+            self.parse_type(&t);
+        }
+
         // TODO: Implement the actual analysis
     }
 

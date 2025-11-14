@@ -110,6 +110,13 @@ impl Root {
     pub fn servers(&self) -> impl Iterator<Item = Server> {
         self.0.children().filter_map(Server::cast)
     }
+
+    /// A placeholder, just so that warning about unused `Oracle::parse_type`
+    /// goes away
+    /// TODO: Remove this in the future.
+    pub fn dummy_type(&self) -> Option<Type> {
+        None
+    }
 }
 
 /////////////////
@@ -513,6 +520,13 @@ ast_node! {
     struct Record;
 }
 
+impl Record {
+    /// Returns iterator over fields in the record
+    pub fn fields(&self) -> impl Iterator<Item = TypeField> {
+        self.0.children().filter_map(TypeField::cast)
+    }
+}
+
 ast_node! {
     #[from(NODE_TYPE_ENUM)]
     /// Enum type
@@ -537,10 +551,34 @@ ast_node! {
     struct Union;
 }
 
+impl Union {
+    /// Returns iterator over fields in the record
+    pub fn fields(&self) -> impl Iterator<Item = TypeField> {
+        self.0.children().filter_map(TypeField::cast)
+    }
+}
+
 ast_node! {
     #[from(NODE_TYPE_FIELD)]
     /// Field used in records and unions
     struct TypeField;
+}
+
+impl TypeField {
+    /// Returns name of the field.
+    pub fn name(&self) -> Option<Name> {
+        self.0.children().find_map(Name::cast)
+    }
+
+    /// Returns type of the field.
+    pub fn typ(&self) -> Option<Type> {
+        self.0.children().find_map(Type::cast)
+    }
+
+    /// Returns field's prologue.
+    pub fn prologue(&self) -> Option<Prologue> {
+        self.0.children().find_map(Prologue::cast)
+    }
 }
 
 ast_node! {
