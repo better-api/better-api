@@ -178,9 +178,27 @@ impl<'a> Oracle<'a> {
     }
 
     fn parse_union(&mut self, union: &ast::Union) -> TypeId {
-        // TODO: Parse discriminator
+        let discriminator = union
+            .discriminator()
+            .map(|v| (self.parse_value(&v), v.syntax().text_range()))
+            .and_then(|(id, range)| match self.values.get(id) {
+                Value::String(id) => Some(id),
+                val => {
+                    self.reports.push(
+                        Report::error(format!("union discriminator must be a string, got {val}"))
+                            .with_label(Label::new(
+                                "invalid union discrminator".to_string(),
+                                Span::new(range.start().into(), range.end().into()),
+                            ))
+                            .with_note("help: union discrminator must be a string".to_string()),
+                    );
+
+                    None
+                }
+            });
+
         let fields = self.parse_type_fields(union.fields());
-        let builder = self.types.start_union(None);
+        let builder = self.types.start_union(discriminator);
         insert_type_fields(
             fields,
             builder,
