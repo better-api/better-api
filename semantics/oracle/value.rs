@@ -147,29 +147,25 @@ fn insert_object_fields(
             .expect("inserted field should have a value");
 
         let field_id = match ParsedValue::new(&value, reports, strings) {
-            // TODO: get value id of inserted primitive and add it to source map.
             ParsedValue::Primitive(primitive) => builder.add_primitive(field.name, primitive),
             ParsedValue::Object(obj) => {
                 let fields = parse_object_fields(obj, reports, strings);
                 let (child_builder, field_id) = builder.start_object(field.name);
 
-                let val_id =
-                    insert_object_fields(fields, child_builder, source_map, reports, strings);
-                source_map.insert(&value, Element::Value(val_id));
+                insert_object_fields(fields, child_builder, source_map, reports, strings);
 
                 field_id
             }
             ParsedValue::Array(arr) => {
                 let (child_builder, field_id) = builder.start_array(field.name);
 
-                let val_id =
-                    insert_array_values(arr.values(), child_builder, source_map, reports, strings);
-                source_map.insert(&value, Element::Value(val_id));
+                insert_array_values(arr.values(), child_builder, source_map, reports, strings);
 
                 field_id
             }
         };
 
+        source_map.insert(&value, Element::Value(field_id.value_id()));
         source_map.insert(&field.field, Element::ObjectField(field_id));
     }
 
@@ -247,8 +243,8 @@ mod test {
     use better_api_syntax::{parse, tokenize};
     use indoc::indoc;
 
-    use crate::Oracle;
     use crate::value::Value;
+    use crate::{Element, Oracle};
 
     #[test]
     fn parse_primitive_integer() {
@@ -267,6 +263,7 @@ mod test {
 
         assert_eq!(oracle.reports(), vec![]);
         assert_eq!(oracle.values.get(id), Value::Integer(10));
+        oracle.source_map.get_bck(&Element::Value(id));
     }
 
     #[test]
@@ -286,6 +283,7 @@ mod test {
 
         assert_eq!(oracle.reports(), vec![]);
         assert_eq!(oracle.values.get(id), Value::Float(4.20));
+        oracle.source_map.get_bck(&Element::Value(id));
     }
 
     #[test]
@@ -306,10 +304,12 @@ mod test {
         let value1 = api_names.next().unwrap().value().unwrap();
         let id1 = oracle.parse_value(&value1);
         assert_eq!(oracle.values.get(id1), Value::Bool(true));
+        oracle.source_map.get_bck(&Element::Value(id1));
 
         let value2 = api_names.next().unwrap().value().unwrap();
         let id2 = oracle.parse_value(&value2);
         assert_eq!(oracle.values.get(id2), Value::Bool(false));
+        oracle.source_map.get_bck(&Element::Value(id2));
 
         assert_eq!(oracle.reports(), vec![]);
     }
@@ -338,6 +338,7 @@ mod test {
             }
             other => panic!("expected string value, got {other:?}"),
         }
+        oracle.source_map.get_bck(&Element::Value(id));
     }
 
     #[test]
@@ -363,6 +364,7 @@ mod test {
             }
             other => panic!("expected string value, got {other:?}"),
         }
+        oracle.source_map.get_bck(&Element::Value(id));
     }
 
     #[test]
@@ -387,11 +389,22 @@ mod test {
             other => panic!("expected array value, got {other:?}"),
         };
 
-        let items: Vec<_> = array.map(|it| it.value).collect();
+        let item_ids: Vec<_> = array.map(|it| it.id).collect();
         assert_eq!(
-            items,
+            item_ids
+                .iter()
+                .map(|&id| oracle.values.get(id))
+                .collect::<Vec<_>>(),
             vec![Value::Integer(1), Value::Integer(2), Value::Integer(3),]
         );
+
+        // Verify array and all items are in source map
+        assert_eq!(oracle.source_map.fwd.len(), 4);
+        assert_eq!(oracle.source_map.bck.len(), 4);
+        oracle.source_map.get_bck(&Element::Value(id));
+        for id in item_ids {
+            oracle.source_map.get_bck(&Element::Value(id));
+        }
     }
 
     #[test]
@@ -414,6 +427,10 @@ mod test {
             Value::Array(arr) => assert_eq!(arr.count(), 0),
             other => panic!("expected array value, got {other:?}"),
         }
+
+        assert_eq!(oracle.source_map.fwd.len(), 1);
+        assert_eq!(oracle.source_map.bck.len(), 1);
+        oracle.source_map.get_bck(&Element::Value(id));
     }
 
     #[test]
@@ -437,18 +454,37 @@ mod test {
             Value::Array(arr) => arr,
             other => panic!("expected array value, got {other:?}"),
         };
-        let outer_items: Vec<_> = outer.map(|it| it.value).collect();
-        assert_eq!(outer_items.len(), 3);
-        assert_eq!(outer_items[0], Value::Integer(1));
-        assert_eq!(outer_items[2], Value::Integer(4));
+        oracle.source_map.get_bck(&Element::Value(id));
 
-        let inner = match &outer_items[1] {
+        let outer_items: Vec<_> = outer.map(|it| (it.id, it.value)).collect();
+        assert_eq!(outer_items.len(), 3);
+        assert_eq!(outer_items[0].1, Value::Integer(1));
+        assert_eq!(outer_items[2].1, Value::Integer(4));
+
+        // Verify all outer items are in source map
+        for (item_id, _) in &outer_items {
+            oracle.source_map.get_bck(&Element::Value(*item_id));
+        }
+
+        let inner = match &outer_items[1].1 {
             Value::Array(arr) => arr.clone(),
             other => panic!("expected array value, got {other:?}"),
         };
 
-        let inner_items: Vec<_> = inner.map(|it| it.value).collect();
-        assert_eq!(inner_items, vec![Value::Integer(2), Value::Integer(3),]);
+        let inner_items: Vec<_> = inner.map(|it| (it.id, it.value)).collect();
+        assert_eq!(
+            inner_items.iter().map(|(_, v)| v).collect::<Vec<_>>(),
+            vec![&Value::Integer(2), &Value::Integer(3)]
+        );
+
+        // Verify all inner items are in source map
+        for (item_id, _) in &inner_items {
+            oracle.source_map.get_bck(&Element::Value(*item_id));
+        }
+
+        // Verify length of source map
+        assert_eq!(oracle.source_map.fwd.len(), 6);
+        assert_eq!(oracle.source_map.bck.len(), 6);
     }
 
     #[test]
@@ -473,6 +509,7 @@ mod test {
             }
             other => panic!("expected object value, got {other:?}"),
         }
+        oracle.source_map.get_bck(&Element::Value(id));
     }
 
     #[test]
@@ -508,6 +545,7 @@ mod test {
                 Value::Object(obj) => obj,
                 other => panic!("expected object value, got {other:?}"),
             };
+            oracle.source_map.get_bck(&Element::Value(id));
 
             let fields: Vec<_> = obj.collect();
             assert_eq!(fields.len(), 2);
@@ -518,10 +556,22 @@ mod test {
                 .collect();
             assert_eq!(names, vec!["foo", "bar"]);
 
+            // Verify all fields and their values are in source map
+            for field in &fields {
+                oracle.source_map.get_bck(&Element::ObjectField(field.id));
+                oracle
+                    .source_map
+                    .get_bck(&Element::Value(field.id.value_id()));
+            }
+
             let values: Vec<_> = fields.into_iter().map(|field| field.value).collect();
             assert_eq!(values[0], Value::Integer(10));
             assert!(matches!(values[1], Value::String(_)));
         }
+
+        // Verify source map is correct length
+        assert_eq!(oracle.source_map.fwd.len(), 10);
+        assert_eq!(oracle.source_map.bck.len(), 10);
     }
 
     #[test]
@@ -547,6 +597,7 @@ mod test {
             Value::Object(obj) => obj,
             other => panic!("expected object value, got {other:?}"),
         };
+        oracle.source_map.get_bck(&Element::Value(id));
 
         let fields: Vec<_> = obj.collect();
         assert_eq!(fields.len(), 2);
@@ -557,9 +608,21 @@ mod test {
             .collect();
         assert_eq!(names, vec!["foo-bar", "baz"]);
 
+        // Verify all fields and their values are in source map
+        for field in &fields {
+            oracle.source_map.get_bck(&Element::ObjectField(field.id));
+            oracle
+                .source_map
+                .get_bck(&Element::Value(field.id.value_id()));
+        }
+
         let values: Vec<_> = fields.into_iter().map(|field| field.value).collect();
         assert_eq!(values[0], Value::Integer(10));
         assert_eq!(values[1], Value::Integer(20));
+
+        // Verify source map is correct length
+        assert_eq!(oracle.source_map.fwd.len(), 5);
+        assert_eq!(oracle.source_map.bck.len(), 5);
     }
 
     #[test]
@@ -586,6 +649,7 @@ mod test {
             Value::Object(obj) => obj,
             other => panic!("expected object value, got {other:?}"),
         };
+        oracle.source_map.get_bck(&Element::Value(id));
 
         let fields: Vec<_> = obj.collect();
         assert_eq!(fields.len(), 1);
@@ -593,6 +657,17 @@ mod test {
         let field_name = oracle.strings.resolve(fields[0].name).unwrap();
         assert_eq!(field_name, "bar");
         assert_eq!(fields[0].value, Value::Integer(20));
+
+        oracle
+            .source_map
+            .get_bck(&Element::ObjectField(fields[0].id));
+        oracle
+            .source_map
+            .get_bck(&Element::Value(fields[0].id.value_id()));
+
+        // Verify source map is correct length
+        assert_eq!(oracle.source_map.fwd.len(), 3);
+        assert_eq!(oracle.source_map.bck.len(), 3);
     }
 
     #[test]
@@ -630,6 +705,7 @@ mod test {
             Value::Object(obj) => obj,
             other => panic!("expected object value, got {other:?}"),
         };
+        oracle.source_map.get_bck(&Element::Value(id));
 
         let fields: Vec<_> = obj.collect();
         assert_eq!(fields.len(), 1);
@@ -637,6 +713,17 @@ mod test {
         let field_name = oracle.strings.resolve(fields[0].name).unwrap();
         assert_eq!(field_name, "valid");
         assert_eq!(fields[0].value, Value::Integer(20));
+
+        oracle
+            .source_map
+            .get_bck(&Element::ObjectField(fields[0].id));
+        oracle
+            .source_map
+            .get_bck(&Element::Value(fields[0].id.value_id()));
+
+        // Verify source map is correct length
+        assert_eq!(oracle.source_map.fwd.len(), 3);
+        assert_eq!(oracle.source_map.bck.len(), 3);
     }
 
     #[test]
@@ -676,6 +763,7 @@ mod test {
             Value::Object(obj) => obj,
             other => panic!("expected object value, got {other:?}"),
         };
+        oracle.source_map.get_bck(&Element::Value(id));
 
         let fields: Vec<_> = obj.collect();
         assert_eq!(fields.len(), 3);
@@ -686,10 +774,22 @@ mod test {
             .collect();
         assert_eq!(names, vec!["foo", "foo", "bar"]);
 
+        // Verify all fields and their values are in source map
+        for field in &fields {
+            oracle.source_map.get_bck(&Element::ObjectField(field.id));
+            oracle
+                .source_map
+                .get_bck(&Element::Value(field.id.value_id()));
+        }
+
         let values: Vec<_> = fields.into_iter().map(|field| field.value).collect();
         assert_eq!(values[0], Value::Integer(10));
         assert_eq!(values[1], Value::Integer(10));
         assert_eq!(values[2], Value::Integer(20));
+
+        // Verify source map is correct length
+        assert_eq!(oracle.source_map.fwd.len(), 7);
+        assert_eq!(oracle.source_map.bck.len(), 7);
     }
 
     #[test]
@@ -717,12 +817,20 @@ mod test {
             Value::Object(obj) => obj,
             other => panic!("expected object value, got {other:?}"),
         };
+        oracle.source_map.get_bck(&Element::Value(id));
 
         let fields: Vec<_> = obj.collect();
         assert_eq!(fields.len(), 1);
 
         let field_name = oracle.strings.resolve(fields[0].name).unwrap();
         assert_eq!(field_name, "outer");
+
+        oracle
+            .source_map
+            .get_bck(&Element::ObjectField(fields[0].id));
+        oracle
+            .source_map
+            .get_bck(&Element::Value(fields[0].id.value_id()));
 
         // Get nested object from field value
         let inner_obj = match &fields[0].value {
@@ -736,6 +844,17 @@ mod test {
         let inner_field_name = oracle.strings.resolve(inner_fields[0].name).unwrap();
         assert_eq!(inner_field_name, "inner");
         assert_eq!(inner_fields[0].value, Value::Integer(42));
+
+        oracle
+            .source_map
+            .get_bck(&Element::ObjectField(inner_fields[0].id));
+        oracle
+            .source_map
+            .get_bck(&Element::Value(inner_fields[0].id.value_id()));
+
+        // Verify source map is correct length
+        assert_eq!(oracle.source_map.fwd.len(), 5);
+        assert_eq!(oracle.source_map.bck.len(), 5);
     }
 
     #[test]
@@ -767,12 +886,14 @@ mod test {
 
         let value = res.root.api_names().next().unwrap().value().unwrap();
         let id = oracle.parse_value(&value);
-
         assert_eq!(oracle.reports(), vec![]);
+
         let obj = match oracle.values.get(id) {
             Value::Object(obj) => obj,
             other => panic!("expected object value, got {other:?}"),
         };
+        // Test element is in map. If it isn't get_bck panics.
+        oracle.source_map.get_bck(&Element::Value(id));
 
         let fields: Vec<_> = obj.collect();
         assert_eq!(fields.len(), 2);
@@ -784,17 +905,30 @@ mod test {
             .collect();
         assert_eq!(names, vec!["users", "metadata"]);
 
+        // Verify top-level fields are in source map
+        for field in &fields {
+            oracle.source_map.get_bck(&Element::ObjectField(field.id));
+            oracle
+                .source_map
+                .get_bck(&Element::Value(field.id.value_id()));
+        }
+
         // Check users array
         let users_arr = match &fields[0].value {
             Value::Array(arr) => arr.clone(),
             other => panic!("expected users array, got {other:?}"),
         };
 
-        let users: Vec<_> = users_arr.map(|it| it.value).collect();
+        let users: Vec<_> = users_arr.map(|it| (it.id, it.value)).collect();
         assert_eq!(users.len(), 2);
 
+        // Verify array elements are in source map
+        for (user_id, _) in &users {
+            oracle.source_map.get_bck(&Element::Value(*user_id));
+        }
+
         // First user
-        let user1_obj = match &users[0] {
+        let user1_obj = match &users[0].1 {
             Value::Object(obj) => obj.clone(),
             other => panic!("expected user object, got {other:?}"),
         };
@@ -807,6 +941,14 @@ mod test {
             .collect();
         assert_eq!(user1_names, vec!["name", "age"]);
 
+        // Verify user1 fields are in source map
+        for field in &user1_fields {
+            oracle.source_map.get_bck(&Element::ObjectField(field.id));
+            oracle
+                .source_map
+                .get_bck(&Element::Value(field.id.value_id()));
+        }
+
         match user1_fields[0].value {
             Value::String(str_id) => {
                 assert_eq!(oracle.strings.resolve(str_id).unwrap(), "alice");
@@ -816,7 +958,7 @@ mod test {
         assert_eq!(user1_fields[1].value, Value::Integer(30));
 
         // Second user
-        let user2_obj = match &users[1] {
+        let user2_obj = match &users[1].1 {
             Value::Object(obj) => obj.clone(),
             other => panic!("expected user object, got {other:?}"),
         };
@@ -828,6 +970,14 @@ mod test {
             .map(|field| oracle.strings.resolve(field.name).unwrap())
             .collect();
         assert_eq!(user2_names, vec!["name", "age"]);
+
+        // Verify user2 fields are in source map
+        for field in &user2_fields {
+            oracle.source_map.get_bck(&Element::ObjectField(field.id));
+            oracle
+                .source_map
+                .get_bck(&Element::Value(field.id.value_id()));
+        }
 
         match user2_fields[0].value {
             Value::String(str_id) => {
@@ -852,7 +1002,19 @@ mod test {
             .collect();
         assert_eq!(metadata_names, vec!["count", "active"]);
 
+        // Verify metadata fields are in source map
+        for field in &metadata_fields {
+            oracle.source_map.get_bck(&Element::ObjectField(field.id));
+            oracle
+                .source_map
+                .get_bck(&Element::Value(field.id.value_id()));
+        }
+
         assert_eq!(metadata_fields[0].value, Value::Integer(2));
         assert_eq!(metadata_fields[1].value, Value::Bool(true));
+
+        // Test source map is correct length
+        assert_eq!(oracle.source_map.fwd.len(), 19);
+        assert_eq!(oracle.source_map.bck.len(), 19);
     }
 }

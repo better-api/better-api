@@ -108,7 +108,7 @@ impl<'a> Iterator for Object<'a> {
         }
 
         let field_id = ObjectFieldId {
-            value_id: self.id,
+            object_id: self.id,
             slot: self.current.0,
         };
         let field = self.arena.get_field(field_id);
@@ -348,7 +348,7 @@ impl<'p> ObjectBuilder<'p> {
         self.data().push(value.into());
 
         ObjectFieldId {
-            value_id: self.start,
+            object_id: self.start,
             slot,
         }
     }
@@ -361,7 +361,7 @@ impl<'p> ObjectBuilder<'p> {
         self.data().push(Slot::ObjectField(name));
 
         let field_id = ObjectFieldId {
-            value_id: self.start,
+            object_id: self.start,
             slot,
         };
         let builder = ObjectBuilder::new(self);
@@ -377,7 +377,7 @@ impl<'p> ObjectBuilder<'p> {
         self.data().push(Slot::ObjectField(name));
 
         let field_id = ObjectFieldId {
-            value_id: self.start,
+            object_id: self.start,
             slot,
         };
         let builder = ArrayBuilder::new(self);
@@ -427,15 +427,21 @@ pub struct ValueId(u32);
 /// Used for getting specific [`ObjectField`] with [`ValueArena::get_field`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ObjectFieldId {
-    value_id: ValueId,
+    object_id: ValueId,
+
     /// Index of the slot in the arena
     slot: u32,
 }
 
 impl ObjectFieldId {
     /// Get [`ValueId`] of the object that contains this field.
+    pub fn object_id(&self) -> ValueId {
+        self.object_id
+    }
+
+    /// Get [`ValueId`] of the field's value.
     pub fn value_id(&self) -> ValueId {
-        self.value_id
+        ValueId(self.slot + 1)
     }
 }
 
@@ -863,7 +869,7 @@ mod test {
         assert_eq!(
             container_field_id,
             ObjectFieldId {
-                value_id: root_id,
+                object_id: root_id,
                 slot: 6,
             }
         );
@@ -871,7 +877,7 @@ mod test {
         assert_eq!(
             numbers_field_id,
             ObjectFieldId {
-                value_id: container_id,
+                object_id: container_id,
                 slot: 8,
             }
         );
@@ -879,7 +885,7 @@ mod test {
         assert_eq!(
             nested_field_id,
             ObjectFieldId {
-                value_id: container_id,
+                object_id: container_id,
                 slot: 19,
             }
         );
@@ -887,7 +893,7 @@ mod test {
         assert_eq!(
             status_field_id,
             ObjectFieldId {
-                value_id: nested_obj_id,
+                object_id: nested_obj_id,
                 slot: 21,
             }
         );
@@ -895,7 +901,7 @@ mod test {
         assert_eq!(
             count_field_id,
             ObjectFieldId {
-                value_id: nested_obj_id,
+                object_id: nested_obj_id,
                 slot: 23,
             }
         );
