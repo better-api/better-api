@@ -74,7 +74,6 @@ impl<'a> Oracle<'a> {
                 parse_array_option(
                     &inner,
                     builder,
-                    &mut self.source_map,
                     &mut self.reports,
                     &mut self.strings,
                     "array",
@@ -86,7 +85,6 @@ impl<'a> Oracle<'a> {
                 parse_array_option(
                     &inner,
                     builder,
-                    &mut self.source_map,
                     &mut self.reports,
                     &mut self.strings,
                     "option",
@@ -282,7 +280,7 @@ impl<'a> Oracle<'a> {
     fn validate_response_content_type(&mut self, content_type_id: ValueId) {
         match self.values.get(content_type_id) {
             Value::String(str_id) => {
-                let content_type = self
+                let _content_type = self
                     .strings
                     .resolve(str_id)
                     .expect("stored string should be interned");
@@ -310,60 +308,42 @@ impl<'a> Oracle<'a> {
 fn parse_array_option(
     inner: &ast::Type,
     mut builder: OptionArrayBuilder,
-    source_map: &mut SourceMap,
     reports: &mut Vec<Report>,
     strings: &mut DefaultStringInterner,
     outer_type_name: &str,
 ) -> Option<TypeId> {
-    let id = match ParsedType::new(inner, strings) {
-        ParsedType::Primitive(primitive) => builder.finish(primitive),
+    match ParsedType::new(inner, strings) {
+        ParsedType::Primitive(primitive) => Some(builder.finish(primitive)),
         ParsedType::Array(arr) => {
             // Error for empty inner type is reported by parser.
             let inner = arr.typ()?;
             builder.start_array();
-            parse_array_option(
-                &inner,
-                builder,
-                source_map,
-                reports,
-                strings,
-                outer_type_name,
-            )?
+            parse_array_option(&inner, builder, reports, strings, outer_type_name)
         }
         ParsedType::Option(opt) => {
             // Error for empty inner type is reported by parser.
             let inner = opt.typ()?;
             builder.start_option();
-            parse_array_option(
-                &inner,
-                builder,
-                source_map,
-                reports,
-                strings,
-                outer_type_name,
-            )?
+            parse_array_option(&inner, builder, reports, strings, outer_type_name)
         }
 
         ParsedType::Enum(_) => {
             reports.push(new_invalid_inner_type("enum", outer_type_name, inner));
-            return None;
+            None
         }
         ParsedType::Response(_) => {
             reports.push(new_invalid_inner_type("response", outer_type_name, inner));
-            return None;
+            None
         }
         ParsedType::Record(_) => {
             reports.push(new_invalid_inner_type("record", outer_type_name, inner));
-            return None;
+            None
         }
         ParsedType::Union(_) => {
             reports.push(new_invalid_inner_type("union", outer_type_name, inner));
-            return None;
+            None
         }
-    };
-
-    source_map.insert(inner, Element::Type(id));
-    Some(id)
+    }
 }
 
 fn new_invalid_inner_type(inner: &str, outer: &str, node: &impl AstNode) -> Report {
@@ -396,24 +376,21 @@ fn insert_type_fields(
         let default = None;
 
         let field_id = match ParsedType::new(&typ, strings) {
-            // TODO: get type id of inserted primitive and add it to source map
-            ParsedType::Primitive(primitive) => builder.add_simple(field.name, primitive, default),
+            ParsedType::Primitive(primitive) => {
+                Some(builder.add_primitive(field.name, primitive, default))
+            }
             ParsedType::Array(arr) => {
                 let Some(inner) = arr.typ() else {
                     continue;
                 };
 
-                let child_builder = builder.start_array(field.name, default);
-                let type_id = parse_array_option(
-                    &inner,
-                    child_builder,
-                    source_map,
-                    reports,
-                    strings,
-                    "array",
-                );
-                if let Some(type_id) = type_id {
-                    source_map.insert(&typ, Element::Type(type_id));
+                let (child_builder, field_id) = builder.start_array(field.name, default);
+                let type_id = parse_array_option(&inner, child_builder, reports, strings, "array");
+
+                if type_id.is_some() {
+                    Some(field_id)
+                } else {
+                    None
                 }
             }
             ParsedType::Option(opt) => {
@@ -421,17 +398,13 @@ fn insert_type_fields(
                     continue;
                 };
 
-                let child_builder = builder.start_option(field.name, default);
-                let type_id = parse_array_option(
-                    &inner,
-                    child_builder,
-                    source_map,
-                    reports,
-                    strings,
-                    "option",
-                );
-                if let Some(type_id) = type_id {
-                    source_map.insert(&typ, Element::Type(type_id));
+                let (child_builder, field_id) = builder.start_option(field.name, default);
+                let type_id = parse_array_option(&inner, child_builder, reports, strings, "option");
+
+                if type_id.is_some() {
+                    Some(field_id)
+                } else {
+                    None
                 }
             }
             ParsedType::Enum(_) => {
@@ -452,7 +425,12 @@ fn insert_type_fields(
             }
         };
 
-        // TODO: Insert field id to source map
+        let Some(field_id) = field_id else {
+            continue;
+        };
+
+        source_map.insert(&typ, Element::Type(field_id.type_id()));
+        source_map.insert(&field.field, Element::TypeField(field_id));
     }
 
     builder.finish()

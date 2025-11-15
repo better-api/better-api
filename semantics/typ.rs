@@ -175,7 +175,7 @@ impl<'a> Iterator for TypeFieldIterator<'a> {
         }
 
         let field_id = TypeFieldId {
-            type_id: self.id,
+            container_id: self.id,
             slot: self.current.0,
         };
         let field = self.arena.get_field(field_id);
@@ -229,7 +229,7 @@ pub struct TypeId(u32);
 /// Used for getting specific [`TypeField`] with [`TypeArena::get_field`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TypeFieldId {
-    type_id: TypeId,
+    container_id: TypeId,
 
     /// Index of the slot in the arena
     slot: u32,
@@ -237,8 +237,13 @@ pub struct TypeFieldId {
 
 impl TypeFieldId {
     /// Get [`TypeId`] of the record or union that contains this field.
+    pub fn container_id(&self) -> TypeId {
+        self.container_id
+    }
+
+    /// Get [`TypeId`] of the field's type.
     pub fn type_id(&self) -> TypeId {
-        self.type_id
+        TypeId(self.slot + 1)
     }
 }
 
@@ -397,19 +402,25 @@ impl<'p> FieldBuilder<'p> {
         &mut self.arena.data
     }
 
-    /// Add a new field with a simple type.
+    /// Add a new field with a primitive type.
     ///
     /// `default` is a default value stored in the [`value::ValueArena`].
-    pub fn add_simple(
+    pub fn add_primitive(
         &mut self,
         name: StringId,
         typ: PrimitiveType,
         default: Option<value::ValueId>,
-    ) {
+    ) -> TypeFieldId {
+        let slot = self.data().len() as u32;
         self.last_field_idx = Some(self.data().len() as u32);
 
         self.data().push(Slot::TypeField { name, default });
         self.data().push(typ.into());
+
+        TypeFieldId {
+            container_id: self.start,
+            slot,
+        }
     }
 
     /// Add a new field of array type.
@@ -421,12 +432,19 @@ impl<'p> FieldBuilder<'p> {
         &'a mut self,
         name: StringId,
         default: Option<value::ValueId>,
-    ) -> OptionArrayBuilder<'a> {
+    ) -> (OptionArrayBuilder<'a>, TypeFieldId) {
+        let slot = self.data().len() as u32;
         self.last_field_idx = Some(self.data().len() as u32);
 
         self.data().push(Slot::TypeField { name, default });
 
-        OptionArrayBuilder::new_array(self)
+        let field_id = TypeFieldId {
+            container_id: self.start,
+            slot,
+        };
+        let builder = OptionArrayBuilder::new_array(self);
+
+        (builder, field_id)
     }
 
     /// Add a new field of option type.
@@ -438,12 +456,19 @@ impl<'p> FieldBuilder<'p> {
         &'a mut self,
         name: StringId,
         default: Option<value::ValueId>,
-    ) -> OptionArrayBuilder<'a> {
+    ) -> (OptionArrayBuilder<'a>, TypeFieldId) {
+        let slot = self.data().len() as u32;
         self.last_field_idx = Some(self.data().len() as u32);
 
         self.data().push(Slot::TypeField { name, default });
 
-        OptionArrayBuilder::new_option(self)
+        let field_id = TypeFieldId {
+            container_id: self.start,
+            slot,
+        };
+        let builder = OptionArrayBuilder::new_option(self);
+
+        (builder, field_id)
     }
 
     /// Finalize the record or union currently being built.
@@ -713,7 +738,7 @@ impl BuilderParent for TypeArena {
 mod test {
     use string_interner::DefaultStringInterner;
 
-    use crate::typ::{PrimitiveType, Type, TypeArena, TypeId};
+    use crate::typ::{PrimitiveType, Type, TypeArena, TypeFieldId, TypeId};
 
     use super::Slot;
 
@@ -744,13 +769,13 @@ mod test {
         //   metadata: [[bool]?]
         // }
         let mut root = arena.start_record();
-        root.add_simple(id_str, PrimitiveType::I64, None);
+        root.add_primitive(id_str, PrimitiveType::I64, None);
 
-        let simple_array = root.start_array(simple_array_str, None);
+        let (simple_array, simple_array_field_id) = root.start_array(simple_array_str, None);
         simple_array.finish(PrimitiveType::F32);
 
         // Build nested array type: [[[string?]]]
-        let mut values_builder = root.start_array(values_str, None);
+        let (mut values_builder, values_field_id) = root.start_array(values_str, None);
         values_builder.start_array();
         values_builder.start_array();
         values_builder.start_option();
@@ -763,7 +788,7 @@ mod test {
         }
 
         // Build nested array with option: [[bool]?]
-        let mut metadata_builder = root.start_array(metadata_str, None);
+        let (mut metadata_builder, metadata_field_id) = root.start_array(metadata_str, None);
         metadata_builder.start_array();
         metadata_builder.start_option();
         metadata_builder.finish(PrimitiveType::Bool);
@@ -773,14 +798,14 @@ mod test {
         // Test dropped builder (should not appear in arena)
         {
             let mut dropped_union = arena.start_union(None);
-            dropped_union.add_simple(unused_str, PrimitiveType::I32, None);
+            dropped_union.add_primitive(unused_str, PrimitiveType::I32, None);
             // Dropped without finish
         }
 
         // Build a union type separately
         let mut union_builder = arena.start_union(None);
-        union_builder.add_simple(success_str, PrimitiveType::Bool, None);
-        union_builder.add_simple(error_str, PrimitiveType::String, None);
+        union_builder.add_primitive(success_str, PrimitiveType::Bool, None);
+        union_builder.add_primitive(error_str, PrimitiveType::String, None);
         let union_id = union_builder.finish();
 
         // Verify the arena structure
@@ -947,5 +972,30 @@ mod test {
             }
             other => panic!("expected array at values_id, got {other:?}"),
         }
+
+        // Check field ids
+        assert_eq!(
+            simple_array_field_id,
+            TypeFieldId {
+                container_id: root_id,
+                slot: 6,
+            }
+        );
+
+        assert_eq!(
+            values_field_id,
+            TypeFieldId {
+                container_id: root_id,
+                slot: 9,
+            }
+        );
+
+        assert_eq!(
+            metadata_field_id,
+            TypeFieldId {
+                container_id: root_id,
+                slot: 15,
+            }
+        );
     }
 }
