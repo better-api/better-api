@@ -111,6 +111,10 @@ impl Root {
         self.0.children().filter_map(Server::cast)
     }
 
+    pub fn type_definitions(&self) -> impl Iterator<Item = TypeDefinition> {
+        self.0.children().filter_map(TypeDefinition::cast)
+    }
+
     /// A placeholder, just so that warning about unused `Oracle::parse_type`
     /// goes away
     /// TODO: Remove this in the future.
@@ -396,6 +400,13 @@ ast_node! {
     #[from(NODE_TYPE_DEF)]
     /// Type definition
     struct TypeDefinition;
+}
+
+impl TypeDefinition {
+    /// Returns type inside of definition
+    pub fn typ(&self) -> Option<Type> {
+        self.0.children().find_map(Type::cast)
+    }
 }
 
 ast_node! {

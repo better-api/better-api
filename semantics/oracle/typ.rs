@@ -435,3 +435,490 @@ fn insert_type_fields(
 
     builder.finish()
 }
+
+#[cfg(test)]
+mod test {
+    use better_api_diagnostic::{Label, Report, Span};
+    use better_api_syntax::{parse, tokenize};
+    use indoc::indoc;
+
+    use crate::{Element, Oracle, typ::Type};
+
+    #[test]
+    fn parse_primitive_i32() {
+        let text = indoc! {r#"
+            type Foo: i32
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+        assert_eq!(oracle.types.get(id), Type::I32);
+
+        oracle.source_map.get_bck(&Element::Type(id));
+        assert_eq!(oracle.source_map.fwd.len(), 1);
+        assert_eq!(oracle.source_map.bck.len(), 1);
+    }
+
+    #[test]
+    fn parse_primitive_i64() {
+        let text = indoc! {r#"
+            type Foo: i64
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+        assert_eq!(oracle.types.get(id), Type::I64);
+
+        oracle.source_map.get_bck(&Element::Type(id));
+        assert_eq!(oracle.source_map.fwd.len(), 1);
+        assert_eq!(oracle.source_map.bck.len(), 1);
+    }
+
+    #[test]
+    fn parse_primitive_u32() {
+        let text = indoc! {r#"
+            type Foo: u32
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+        assert_eq!(oracle.types.get(id), Type::U32);
+
+        oracle.source_map.get_bck(&Element::Type(id));
+        assert_eq!(oracle.source_map.fwd.len(), 1);
+        assert_eq!(oracle.source_map.bck.len(), 1);
+    }
+
+    #[test]
+    fn parse_primitive_u64() {
+        let text = indoc! {r#"
+            type Foo: u64
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+        assert_eq!(oracle.types.get(id), Type::U64);
+
+        oracle.source_map.get_bck(&Element::Type(id));
+        assert_eq!(oracle.source_map.fwd.len(), 1);
+        assert_eq!(oracle.source_map.bck.len(), 1);
+    }
+
+    #[test]
+    fn parse_primitive_f32() {
+        let text = indoc! {r#"
+            type Foo: f32
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+        assert_eq!(oracle.types.get(id), Type::F32);
+
+        oracle.source_map.get_bck(&Element::Type(id));
+        assert_eq!(oracle.source_map.fwd.len(), 1);
+        assert_eq!(oracle.source_map.bck.len(), 1);
+    }
+
+    #[test]
+    fn parse_primitive_f64() {
+        let text = indoc! {r#"
+            type Foo: f64
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+        assert_eq!(oracle.types.get(id), Type::F64);
+
+        oracle.source_map.get_bck(&Element::Type(id));
+        assert_eq!(oracle.source_map.fwd.len(), 1);
+        assert_eq!(oracle.source_map.bck.len(), 1);
+    }
+
+    #[test]
+    fn parse_primitive_date() {
+        let text = indoc! {r#"
+            type Foo: date
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+        assert_eq!(oracle.types.get(id), Type::Date);
+
+        oracle.source_map.get_bck(&Element::Type(id));
+        assert_eq!(oracle.source_map.fwd.len(), 1);
+        assert_eq!(oracle.source_map.bck.len(), 1);
+    }
+
+    #[test]
+    fn parse_primitive_timestamp() {
+        let text = indoc! {r#"
+            type Foo: timestamp
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+        assert_eq!(oracle.types.get(id), Type::Timestamp);
+
+        oracle.source_map.get_bck(&Element::Type(id));
+        assert_eq!(oracle.source_map.fwd.len(), 1);
+        assert_eq!(oracle.source_map.bck.len(), 1);
+    }
+
+    #[test]
+    fn parse_primitive_bool() {
+        let text = indoc! {r#"
+            type Foo: bool
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+        assert_eq!(oracle.types.get(id), Type::Bool);
+
+        oracle.source_map.get_bck(&Element::Type(id));
+        assert_eq!(oracle.source_map.fwd.len(), 1);
+        assert_eq!(oracle.source_map.bck.len(), 1);
+    }
+
+    #[test]
+    fn parse_primitive_string() {
+        let text = indoc! {r#"
+            type Foo: string
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+        assert_eq!(oracle.types.get(id), Type::String);
+
+        oracle.source_map.get_bck(&Element::Type(id));
+        assert_eq!(oracle.source_map.fwd.len(), 1);
+        assert_eq!(oracle.source_map.bck.len(), 1);
+    }
+
+    #[test]
+    fn parse_primitive_file() {
+        let text = indoc! {r#"
+            type Foo: file
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+        assert_eq!(oracle.types.get(id), Type::File);
+
+        oracle.source_map.get_bck(&Element::Type(id));
+        assert_eq!(oracle.source_map.fwd.len(), 1);
+        assert_eq!(oracle.source_map.bck.len(), 1);
+    }
+
+    #[test]
+    fn parse_primitive_reference() {
+        let text = indoc! {r#"
+            type Foo: Bar
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        let name = oracle.strings.get("Bar").unwrap();
+        assert_eq!(oracle.reports(), vec![]);
+        assert_eq!(oracle.types.get(id), Type::Reference(name));
+
+        oracle.source_map.get_bck(&Element::Type(id));
+        assert_eq!(oracle.source_map.fwd.len(), 1);
+        assert_eq!(oracle.source_map.bck.len(), 1);
+    }
+
+    #[test]
+    fn parse_simple_array() {
+        let text = indoc! {r#"
+            type Foo: [i32]
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+
+        let arr = match oracle.types.get(id) {
+            Type::Array(arr) => arr,
+            _ => panic!(),
+        };
+        assert_eq!(arr.typ(), Type::I32);
+
+        oracle.source_map.get_bck(&Element::Type(id));
+        assert_eq!(oracle.source_map.fwd.len(), 1);
+        assert_eq!(oracle.source_map.bck.len(), 1);
+    }
+
+    #[test]
+    fn parse_nested_array() {
+        let text = indoc! {r#"
+            type Foo: [[i32]]
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+
+        let arr = match oracle.types.get(id) {
+            Type::Array(arr) => arr,
+            _ => panic!(),
+        };
+        let arr = match arr.typ() {
+            Type::Array(arr) => arr,
+            _ => panic!(),
+        };
+        assert_eq!(arr.typ(), Type::I32);
+
+        oracle.source_map.get_bck(&Element::Type(id));
+        assert_eq!(oracle.source_map.fwd.len(), 1);
+        assert_eq!(oracle.source_map.bck.len(), 1);
+    }
+
+    #[test]
+    fn parse_empty_array() {
+        let text = indoc! {r#"
+            type Foo: []
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ);
+        assert_eq!(id, None);
+
+        assert_eq!(oracle.reports(), vec![]);
+
+        assert_eq!(oracle.source_map.fwd.len(), 0);
+        assert_eq!(oracle.source_map.bck.len(), 0);
+    }
+
+    #[test]
+    fn parse_invalid_array() {
+        let text = indoc! {r#"
+            type Foo: [rec {}]
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ);
+        assert_eq!(id, None);
+
+        assert_eq!(
+            oracle.reports(),
+            vec![
+                Report::error("invalid record type inside of array".to_string()).with_label(
+                    Label::new("invalid record type".to_string(), Span::new(11, 17))
+                ).with_note("help: create a new named record type, and use it's identifier inside of array".to_string())
+            ]
+        );
+
+        assert_eq!(oracle.source_map.fwd.len(), 0);
+        assert_eq!(oracle.source_map.bck.len(), 0);
+    }
+
+    #[test]
+    fn parse_simple_option() {
+        let text = indoc! {r#"
+            type Foo: i32?
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+
+        let opt = match oracle.types.get(id) {
+            Type::Option(opt) => opt,
+            _ => panic!(),
+        };
+        assert_eq!(opt.typ(), Type::I32);
+
+        oracle.source_map.get_bck(&Element::Type(id));
+        assert_eq!(oracle.source_map.fwd.len(), 1);
+        assert_eq!(oracle.source_map.bck.len(), 1);
+    }
+
+    #[test]
+    fn parse_nested_option() {
+        // This contains errors reported by parser. We don't care about them here.
+        // We are interested that there is a semantic Option<i32> type.
+        let text = indoc! {r#"
+            type Foo: i32??
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+
+        let opt = match oracle.types.get(id) {
+            Type::Option(opt) => opt,
+            _ => panic!(),
+        };
+        assert_eq!(opt.typ(), Type::I32);
+
+        oracle.source_map.get_bck(&Element::Type(id));
+        assert_eq!(oracle.source_map.fwd.len(), 1);
+        assert_eq!(oracle.source_map.bck.len(), 1);
+    }
+
+    #[test]
+    fn parse_invalid_option() {
+        let text = indoc! {r#"
+            type Foo: rec {}?
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        assert!(diagnostics.is_empty());
+        assert!(res.reports.is_empty());
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ);
+        assert_eq!(id, None);
+
+        assert_eq!(
+            oracle.reports(),
+            vec![
+                Report::error("invalid record type inside of option".to_string()).with_label(
+                    Label::new("invalid record type".to_string(), Span::new(10, 16))
+                ).with_note("help: create a new named record type, and use it's identifier inside of option".to_string())
+            ]
+        );
+
+        assert_eq!(oracle.source_map.fwd.len(), 0);
+        assert_eq!(oracle.source_map.bck.len(), 0);
+    }
+}
