@@ -76,6 +76,7 @@ impl<'a> Oracle<'a> {
                     builder,
                     &mut self.reports,
                     &mut self.strings,
+                    &mut self.source_map,
                     "array",
                 )?
             }
@@ -87,6 +88,7 @@ impl<'a> Oracle<'a> {
                     builder,
                     &mut self.reports,
                     &mut self.strings,
+                    &mut self.source_map,
                     "option",
                 )?
             }
@@ -305,45 +307,75 @@ impl<'a> Oracle<'a> {
     }
 }
 
+/// Parses array or option by using the [`OptionArrayBuilder`].
+///
+/// It inserts the `inner` type to the builder and returns the id of the constructed
+/// Array or Option type. All intermediate types are inserted into the source map.
 fn parse_array_option(
     inner: &ast::Type,
     mut builder: OptionArrayBuilder,
     reports: &mut Vec<Report>,
     strings: &mut DefaultStringInterner,
+    source_map: &mut SourceMap,
     outer_type_name: &str,
 ) -> Option<TypeId> {
-    match ParsedType::new(inner, strings) {
-        ParsedType::Primitive(primitive) => Some(builder.finish(primitive)),
+    let (container_id, inner_id) = match ParsedType::new(inner, strings) {
+        ParsedType::Primitive(primitive) => {
+            let res = builder.finish(primitive);
+            (res.container_id, res.primitive_id)
+        }
         ParsedType::Array(arr) => {
             // Error for empty inner type is reported by parser.
             let inner = arr.typ()?;
-            builder.start_array();
-            parse_array_option(&inner, builder, reports, strings, outer_type_name)
+            let inner_id = builder.start_array();
+            let container_id = parse_array_option(
+                &inner,
+                builder,
+                reports,
+                strings,
+                source_map,
+                outer_type_name,
+            )?;
+
+            (container_id, inner_id)
         }
         ParsedType::Option(opt) => {
             // Error for empty inner type is reported by parser.
             let inner = opt.typ()?;
-            builder.start_option();
-            parse_array_option(&inner, builder, reports, strings, outer_type_name)
+            let inner_id = builder.start_option();
+            let container_id = parse_array_option(
+                &inner,
+                builder,
+                reports,
+                strings,
+                source_map,
+                outer_type_name,
+            )?;
+
+            (container_id, inner_id)
         }
 
         ParsedType::Enum(_) => {
             reports.push(new_invalid_inner_type("enum", outer_type_name, inner));
-            None
+            return None;
         }
         ParsedType::Response(_) => {
             reports.push(new_invalid_inner_type("response", outer_type_name, inner));
-            None
+            return None;
         }
         ParsedType::Record(_) => {
             reports.push(new_invalid_inner_type("record", outer_type_name, inner));
-            None
+            return None;
         }
         ParsedType::Union(_) => {
             reports.push(new_invalid_inner_type("union", outer_type_name, inner));
-            None
+            return None;
         }
-    }
+    };
+
+    source_map.insert(inner, Element::Type(inner_id));
+
+    Some(container_id)
 }
 
 fn new_invalid_inner_type(inner: &str, outer: &str, node: &impl AstNode) -> Report {
@@ -385,7 +417,14 @@ fn insert_type_fields(
                 };
 
                 let (child_builder, field_id) = builder.start_array(field.name, default);
-                let type_id = parse_array_option(&inner, child_builder, reports, strings, "array");
+                let type_id = parse_array_option(
+                    &inner,
+                    child_builder,
+                    reports,
+                    strings,
+                    source_map,
+                    "array",
+                );
 
                 if type_id.is_some() {
                     Some(field_id)
@@ -399,7 +438,14 @@ fn insert_type_fields(
                 };
 
                 let (child_builder, field_id) = builder.start_option(field.name, default);
-                let type_id = parse_array_option(&inner, child_builder, reports, strings, "option");
+                let type_id = parse_array_option(
+                    &inner,
+                    child_builder,
+                    reports,
+                    strings,
+                    source_map,
+                    "option",
+                );
 
                 if type_id.is_some() {
                     Some(field_id)
@@ -745,8 +791,9 @@ mod test {
         assert_eq!(arr.typ(), Type::I32);
 
         oracle.source_map.get_bck(&Element::Type(id));
-        assert_eq!(oracle.source_map.fwd.len(), 1);
-        assert_eq!(oracle.source_map.bck.len(), 1);
+        oracle.source_map.get_bck(&Element::Type(arr.id));
+        assert_eq!(oracle.source_map.fwd.len(), 2);
+        assert_eq!(oracle.source_map.bck.len(), 2);
     }
 
     #[test]
@@ -770,15 +817,17 @@ mod test {
             Type::Array(arr) => arr,
             _ => panic!(),
         };
-        let arr = match arr.typ() {
+        let arr_inner = match arr.typ() {
             Type::Array(arr) => arr,
             _ => panic!(),
         };
-        assert_eq!(arr.typ(), Type::I32);
+        assert_eq!(arr_inner.typ(), Type::I32);
 
         oracle.source_map.get_bck(&Element::Type(id));
-        assert_eq!(oracle.source_map.fwd.len(), 1);
-        assert_eq!(oracle.source_map.bck.len(), 1);
+        oracle.source_map.get_bck(&Element::Type(arr.id));
+        oracle.source_map.get_bck(&Element::Type(arr_inner.id));
+        assert_eq!(oracle.source_map.fwd.len(), 3);
+        assert_eq!(oracle.source_map.bck.len(), 3);
     }
 
     #[test]
@@ -856,8 +905,9 @@ mod test {
         assert_eq!(opt.typ(), Type::I32);
 
         oracle.source_map.get_bck(&Element::Type(id));
-        assert_eq!(oracle.source_map.fwd.len(), 1);
-        assert_eq!(oracle.source_map.bck.len(), 1);
+        oracle.source_map.get_bck(&Element::Type(opt.id));
+        assert_eq!(oracle.source_map.fwd.len(), 2);
+        assert_eq!(oracle.source_map.bck.len(), 2);
     }
 
     #[test]
@@ -886,8 +936,9 @@ mod test {
         assert_eq!(opt.typ(), Type::I32);
 
         oracle.source_map.get_bck(&Element::Type(id));
-        assert_eq!(oracle.source_map.fwd.len(), 1);
-        assert_eq!(oracle.source_map.bck.len(), 1);
+        oracle.source_map.get_bck(&Element::Type(opt.id));
+        assert_eq!(oracle.source_map.fwd.len(), 2);
+        assert_eq!(oracle.source_map.bck.len(), 2);
     }
 
     #[test]

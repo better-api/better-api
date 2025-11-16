@@ -533,6 +533,15 @@ pub struct OptionArrayBuilder<'p> {
     finished: bool,
 }
 
+/// Result returned when [`OptionArrayBuilder`] is finished.
+pub struct OptionArray {
+    /// Id of the final primitive type inserted into the builder.
+    pub primitive_id: TypeId,
+
+    /// Id of the constructed Option or Array.
+    pub container_id: TypeId,
+}
+
 impl<'p> OptionArrayBuilder<'p> {
     fn new_array(parent: &'p mut dyn BuilderParent) -> Self {
         let idx = parent.data().len();
@@ -577,7 +586,7 @@ impl<'p> OptionArrayBuilder<'p> {
     }
 
     /// Finish building this type.
-    pub fn finish(mut self, typ: PrimitiveType) -> TypeId {
+    pub fn finish(mut self, typ: PrimitiveType) -> OptionArray {
         self.finished = true;
 
         let start = self.start.0 as usize;
@@ -595,7 +604,10 @@ impl<'p> OptionArrayBuilder<'p> {
 
         self.parent.data().push(typ.into());
 
-        self.start
+        OptionArray {
+            primitive_id: TypeId(len as u32),
+            container_id: self.start,
+        }
     }
 }
 
@@ -945,7 +957,7 @@ mod test {
         assert!(union_fields.next().is_none());
 
         // Test getting values array type directly
-        let values_type = arena.get(values_id);
+        let values_type = arena.get(values_id.container_id);
         match values_type {
             Type::Array(ref inner) => {
                 let level1 = inner.typ();
@@ -972,6 +984,8 @@ mod test {
             }
             other => panic!("expected array at values_id, got {other:?}"),
         }
+
+        assert_eq!(values_id.primitive_id, TypeId(14));
 
         // Check field ids
         assert_eq!(
