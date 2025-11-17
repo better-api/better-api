@@ -365,19 +365,35 @@ fn parse_array_option(
         }
 
         ParsedType::Enum(_) => {
-            reports.push(new_invalid_inner_type("enum", outer_type_name, inner));
+            reports.push(new_invalid_inner_type(
+                InvalidInnerContext::Enum,
+                outer_type_name,
+                inner,
+            ));
             return None;
         }
         ParsedType::Response(_) => {
-            reports.push(new_invalid_inner_type("response", outer_type_name, inner));
+            reports.push(new_invalid_inner_type(
+                InvalidInnerContext::Response,
+                outer_type_name,
+                inner,
+            ));
             return None;
         }
         ParsedType::Record(_) => {
-            reports.push(new_invalid_inner_type("record", outer_type_name, inner));
+            reports.push(new_invalid_inner_type(
+                InvalidInnerContext::Record,
+                outer_type_name,
+                inner,
+            ));
             return None;
         }
         ParsedType::Union(_) => {
-            reports.push(new_invalid_inner_type("union", outer_type_name, inner));
+            reports.push(new_invalid_inner_type(
+                InvalidInnerContext::Union,
+                outer_type_name,
+                inner,
+            ));
             return None;
         }
     };
@@ -387,15 +403,38 @@ fn parse_array_option(
     Some(container_id)
 }
 
-fn new_invalid_inner_type(inner: &str, outer: &str, node: &impl AstNode) -> Report {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display)]
+enum InvalidInnerContext {
+    #[display("enum")]
+    Enum,
+
+    #[display("union")]
+    Union,
+
+    #[display("record")]
+    Record,
+
+    #[display("response")]
+    Response,
+}
+
+fn new_invalid_inner_type(inner: InvalidInnerContext, outer: &str, node: &impl AstNode) -> Report {
     let range = node.syntax().text_range();
-    Report::error(format!("invalid {inner} type inside of {outer}"))
+
+    let syntax_example = match inner {
+        InvalidInnerContext::Enum => "type MyEnum: enum (T) { ... }",
+        InvalidInnerContext::Union => "type MyUnion: union (\"discriminator\") { ... }",
+        InvalidInnerContext::Record => "type MyRecord: rec { ... }",
+        InvalidInnerContext::Response => "type MyResponse: resp { ... }",
+    };
+
+    Report::error(format!("inline {inner} not allowed in {outer}"))
         .with_label(Label::new(
-            format!("invalid {inner} type"),
+            format!("inline {inner} type not allowed"),
             Span::new(range.start().into(), range.end().into()),
         ))
         .with_note(format!(
-            "help: create a new named {inner} type, and use it's identifier inside of {outer}"
+            "help: define a named type first, then reference it\n      example: `{syntax_example}`"
         ))
 }
 
@@ -460,19 +499,35 @@ fn insert_type_fields(
                 }
             }
             ParsedType::Enum(_) => {
-                reports.push(new_invalid_inner_type("enum", type_field_name, &typ));
+                reports.push(new_invalid_inner_type(
+                    InvalidInnerContext::Enum,
+                    type_field_name,
+                    &typ,
+                ));
                 continue;
             }
             ParsedType::Response(_) => {
-                reports.push(new_invalid_inner_type("response", type_field_name, &typ));
+                reports.push(new_invalid_inner_type(
+                    InvalidInnerContext::Response,
+                    type_field_name,
+                    &typ,
+                ));
                 continue;
             }
             ParsedType::Record(_) => {
-                reports.push(new_invalid_inner_type("record", type_field_name, &typ));
+                reports.push(new_invalid_inner_type(
+                    InvalidInnerContext::Record,
+                    type_field_name,
+                    &typ,
+                ));
                 continue;
             }
             ParsedType::Union(_) => {
-                reports.push(new_invalid_inner_type("union", type_field_name, &typ));
+                reports.push(new_invalid_inner_type(
+                    InvalidInnerContext::Union,
+                    type_field_name,
+                    &typ,
+                ));
                 continue;
             }
         };
@@ -494,7 +549,7 @@ mod test {
     use better_api_syntax::{parse, tokenize};
     use indoc::indoc;
 
-    use crate::{Element, Oracle, typ::Type};
+    use crate::{Element, Oracle, typ::Type, value::Value};
 
     #[test]
     fn parse_primitives() {
@@ -645,7 +700,7 @@ mod test {
     #[test]
     fn parse_invalid_array() {
         let text = indoc! {r#"
-            type Foo: [rec {}]
+            type Foo: [union (string) {}]
         "#};
 
         let mut diagnostics = vec![];
@@ -661,9 +716,9 @@ mod test {
         assert_eq!(
             oracle.reports(),
             vec![
-                Report::error("invalid record type inside of array".to_string()).with_label(
-                    Label::new("invalid record type".to_string(), Span::new(11, 17))
-                ).with_note("help: create a new named record type, and use it's identifier inside of array".to_string())
+                Report::error("inline union not allowed in array".to_string()).with_label(
+                    Label::new("inline union type not allowed".to_string(), Span::new(11, 28))
+                ).with_note("help: define a named type first, then reference it\n      example: `type MyUnion: union (\"discriminator\") { ... }`".to_string())
             ]
         );
 
@@ -753,13 +808,152 @@ mod test {
         assert_eq!(
             oracle.reports(),
             vec![
-                Report::error("invalid record type inside of option".to_string()).with_label(
-                    Label::new("invalid record type".to_string(), Span::new(10, 16))
-                ).with_note("help: create a new named record type, and use it's identifier inside of option".to_string())
+                Report::error("inline record not allowed in option".to_string())
+                    .with_label(Label::new(
+                        "inline record type not allowed".to_string(),
+                        Span::new(10, 16)
+                    ))
+                    .with_note(
+                        "help: define a named type first, then reference it\n      example: `type MyRecord: rec { ... }`"
+                            .to_string()
+                    )
             ]
         );
 
         assert_eq!(oracle.source_map.fwd.len(), 0);
         assert_eq!(oracle.source_map.bck.len(), 0);
+    }
+
+    #[test]
+    fn parse_simple_record() {
+        let text = indoc! {r#"
+            type Foo: rec {
+                foo: string
+                bar: [i32]
+
+                @default(69420)
+                baz: u32
+            }
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+
+        // Check record was inserted and is in source map
+        let rec = match oracle.types.get(id) {
+            Type::Record(rec) => rec,
+            _ => panic!(),
+        };
+        oracle.source_map.get_bck(&Element::Type(id));
+
+        let fields: Vec<_> = rec.collect();
+
+        // Check field names are correct
+        let names: Vec<_> = fields
+            .iter()
+            .map(|field| oracle.strings.resolve(field.name).unwrap())
+            .collect();
+        assert_eq!(names, vec!["foo", "bar", "baz"]);
+
+        // Check field @default's are correct
+        let defaults: Vec<_> = fields
+            .iter()
+            .map(|field| field.default.map(|id| oracle.values.get(id)))
+            .collect();
+        assert_eq!(defaults, vec![None, None, Some(Value::Integer(69420))]);
+
+        // Check default values are in source map
+        for default_id in fields.iter().filter_map(|field| field.default) {
+            oracle.source_map.get_bck(&Element::Value(default_id));
+        }
+
+        // Check fields and field types are in source map
+        for field in &fields {
+            oracle.source_map.get_bck(&Element::TypeField(field.id));
+            oracle
+                .source_map
+                .get_bck(&Element::Type(field.id.type_id()));
+        }
+
+        // Check source map size
+        assert_eq!(oracle.source_map.fwd.len(), 9);
+        assert_eq!(oracle.source_map.bck.len(), 9);
+    }
+
+    #[test]
+    fn parse_empty_record() {
+        let text = indoc! {r#"
+            type Foo: rec {}
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+
+        let rec = match oracle.types.get(id) {
+            Type::Record(rec) => rec,
+            _ => panic!(),
+        };
+        oracle.source_map.get_bck(&Element::Type(id));
+
+        assert_eq!(rec.count(), 0);
+
+        // Check source map
+        assert_eq!(oracle.source_map.fwd.len(), 1);
+        assert_eq!(oracle.source_map.bck.len(), 1);
+    }
+
+    #[test]
+    fn parse_invalid_record() {
+        let text = indoc! {r#"
+            type Foo: rec {
+                invalid: rec {}
+            }
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(
+            oracle.reports(),
+            vec![
+                Report::error("inline record not allowed in record field".to_string()).with_label(
+                    Label::new("inline record type not allowed".to_string(), Span::new(29, 35))
+                ).with_note("help: define a named type first, then reference it\n      example: `type MyRecord: rec { ... }`".to_string())
+            ]
+        );
+
+        let rec = match oracle.types.get(id) {
+            Type::Record(rec) => rec,
+            _ => panic!(),
+        };
+        oracle.source_map.get_bck(&Element::Type(id));
+
+        assert_eq!(rec.count(), 0);
+
+        // Check source map
+        assert_eq!(oracle.source_map.fwd.len(), 1);
+        assert_eq!(oracle.source_map.bck.len(), 1);
     }
 }
