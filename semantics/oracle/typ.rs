@@ -17,6 +17,7 @@ use super::Oracle;
 #[derive(Clone)]
 struct InternedField {
     name: StringId,
+    default: Option<ValueId>,
     field: ast::TypeField,
 }
 
@@ -236,8 +237,16 @@ impl<'a> Oracle<'a> {
                 }
 
                 let name_id = self.strings.get_or_intern(name_str);
+
+                let default = f
+                    .prologue()
+                    .and_then(|p| p.default())
+                    .and_then(|d| d.value())
+                    .map(|val| self.parse_value(&val));
+
                 Some(InternedField {
                     name: name_id,
+                    default,
                     field: f,
                 })
             })
@@ -404,19 +413,16 @@ fn insert_type_fields(
             .typ()
             .expect("inserted field should have a type");
 
-        // TODO: Handle default
-        let default = None;
-
         let field_id = match ParsedType::new(&typ, strings) {
             ParsedType::Primitive(primitive) => {
-                Some(builder.add_primitive(field.name, primitive, default))
+                Some(builder.add_primitive(field.name, primitive, field.default))
             }
             ParsedType::Array(arr) => {
                 let Some(inner) = arr.typ() else {
                     continue;
                 };
 
-                let (child_builder, field_id) = builder.start_array(field.name, default);
+                let (child_builder, field_id) = builder.start_array(field.name, field.default);
                 let type_id = parse_array_option(
                     &inner,
                     child_builder,
@@ -437,7 +443,7 @@ fn insert_type_fields(
                     continue;
                 };
 
-                let (child_builder, field_id) = builder.start_option(field.name, default);
+                let (child_builder, field_id) = builder.start_option(field.name, field.default);
                 let type_id = parse_array_option(
                     &inner,
                     child_builder,

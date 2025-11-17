@@ -179,6 +179,26 @@ ast_node! {
     struct Prologue;
 }
 
+impl Prologue {
+    /// Returns the default modifier inside the prologue.
+    pub fn default(&self) -> Option<Default> {
+        self.0.children().find_map(Default::cast)
+    }
+}
+
+ast_node! {
+    #[from(NODE_DEFAULT)]
+    /// Default modifier
+    struct Default;
+}
+
+impl Default {
+    /// Returns the value inside of the default modifier
+    pub fn value(&self) -> Option<Value> {
+        self.0.children().find_map(Value::cast)
+    }
+}
+
 //////////////////////////////////
 // Direct children of root node //
 //////////////////////////////////
