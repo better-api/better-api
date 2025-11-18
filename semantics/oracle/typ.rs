@@ -956,4 +956,150 @@ mod test {
         assert_eq!(oracle.source_map.fwd.len(), 1);
         assert_eq!(oracle.source_map.bck.len(), 1);
     }
+
+    #[test]
+    fn parse_simple_enum() {
+        let text = indoc! {r#"
+            type Foo: enum (i32) {
+                1
+                2
+                3
+            }
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+
+        // Check enum was inserted and is in source map
+        let enum_type = match oracle.types.get(id) {
+            Type::Enum(e) => e,
+            _ => panic!(),
+        };
+        oracle.source_map.get_bck(&Element::Type(id));
+
+        // Check enum type is i32
+        let enum_type_inner = enum_type.typ.unwrap();
+        assert_eq!(enum_type_inner.typ(), Type::I32);
+
+        // Check enum type is inside of source map
+        oracle
+            .source_map
+            .get_bck(&Element::Type(enum_type_inner.id));
+
+        // Check enum members
+        let members: Vec<_> = match oracle.values.get(enum_type.values) {
+            Value::Array(arr) => arr.collect(),
+            _ => panic!(),
+        };
+
+        let member_vals: Vec<_> = members.iter().map(|m| m.value.clone()).collect();
+
+        assert_eq!(
+            member_vals,
+            vec![Value::Integer(1), Value::Integer(2), Value::Integer(3)]
+        );
+
+        // Check enum members are in source map
+        for member in members {
+            oracle.source_map.get_bck(&Element::EnumMember(member.id));
+            oracle.source_map.get_bck(&Element::Value(member.id));
+        }
+
+        // Check source map size
+        assert_eq!(oracle.source_map.fwd.len(), 8);
+        assert_eq!(oracle.source_map.bck.len(), 8);
+    }
+
+    #[test]
+    fn parse_empty_enum() {
+        let text = indoc! {r#"
+            type Foo: enum (string) {}
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+
+        let enum_type = match oracle.types.get(id) {
+            Type::Enum(e) => e,
+            _ => panic!(),
+        };
+        oracle.source_map.get_bck(&Element::Type(id));
+
+        // Check enum members array is empty
+        let members = match oracle.values.get(enum_type.values) {
+            Value::Array(arr) => arr,
+            _ => panic!(),
+        };
+
+        assert_eq!(members.count(), 0);
+
+        // Check source map
+        assert_eq!(oracle.source_map.fwd.len(), 2);
+        assert_eq!(oracle.source_map.bck.len(), 2);
+    }
+
+    #[test]
+    fn parse_invalid_enum() {
+        let text = indoc! {r#"
+            type Foo: enum ([i32]) {
+                [1, 2, 3]
+            }
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        let enum_type = match oracle.types.get(id) {
+            Type::Enum(e) => e,
+            _ => panic!(),
+        };
+        oracle.source_map.get_bck(&Element::Type(id));
+
+        assert_eq!(
+            oracle.reports(),
+            vec![
+                Report::error("invalid enum type `array`".to_string())
+                    .with_label(Label::new(
+                        "invalid enum type `array`".to_string(),
+                        Span::new(16, 21)
+                    ))
+                    .with_note(
+                        "help: enum must have a type `i32`, `i64`, `u32`, `u64`, or `string`"
+                            .to_string()
+                    )
+            ]
+        );
+
+        let members: Vec<_> = match oracle.values.get(enum_type.values) {
+            Value::Array(arr) => arr.collect(),
+            _ => panic!(),
+        };
+
+        assert_eq!(members.len(), 1);
+
+        assert_eq!(oracle.source_map.fwd.len(), 8);
+        assert_eq!(oracle.source_map.bck.len(), 8);
+    }
 }
