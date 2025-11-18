@@ -147,7 +147,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.skip_whitespace();
         self.expect(TOKEN_CURLY_LEFT);
 
-        self.parse_type_fields();
+        self.parse_type_fields(PrologueBehavior::Full);
 
         self.builder.finish_node();
     }
@@ -225,7 +225,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.skip_whitespace();
         self.expect(TOKEN_CURLY_LEFT);
 
-        self.parse_type_fields();
+        self.parse_type_fields(PrologueBehavior::NoDefault);
 
         self.builder.finish_node();
     }
@@ -315,13 +315,13 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.builder.finish_node();
     }
 
-    fn parse_type_fields(&mut self) {
+    fn parse_type_fields(&mut self, prologue_behavior: PrologueBehavior) {
         loop {
             let prologue = self.parse_prologue();
 
             match self.peek() {
                 Some(TOKEN_IDENTIFIER) | Some(TOKEN_STRING) => {
-                    self.start_node(NODE_TYPE_FIELD, prologue, PrologueBehavior::Full);
+                    self.start_node(NODE_TYPE_FIELD, prologue, prologue_behavior);
 
                     self.builder.start_node(NODE_NAME.into());
                     self.advance();
@@ -530,6 +530,9 @@ mod test {
             type Foo: union("type") {
                 bar: Bar
                 "baz str": Baz
+                
+                @default("invalid usage")
+                forbidden_default: Kaboom
             }
 
             // Very invalid union

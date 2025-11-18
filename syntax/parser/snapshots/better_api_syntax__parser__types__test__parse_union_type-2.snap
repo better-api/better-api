@@ -1,8 +1,22 @@
 ---
 source: syntax/parser/types.rs
-expression: diagnostics
+expression: res.reports
 ---
 [
+    Report {
+        severity: Error,
+        title: "unexpected `@default`",
+        label: Some(
+            Label {
+                message: "unexpected `@default`",
+                span: Span {
+                    start: 67,
+                    end: 93,
+                },
+            },
+        ),
+        note: None,
+    },
     Report {
         severity: Error,
         title: "expected `(`, found a string",
@@ -10,8 +24,8 @@ expression: diagnostics
             Label {
                 message: "unexpected token",
                 span: Span {
-                    start: 99,
-                    end: 105,
+                    start: 164,
+                    end: 170,
                 },
             },
         ),
@@ -24,8 +38,8 @@ expression: diagnostics
             Label {
                 message: "unexpected token",
                 span: Span {
-                    start: 106,
-                    end: 107,
+                    start: 171,
+                    end: 172,
                 },
             },
         ),
@@ -38,8 +52,8 @@ expression: diagnostics
             Label {
                 message: "unexpected token",
                 span: Span {
-                    start: 115,
-                    end: 116,
+                    start: 180,
+                    end: 181,
                 },
             },
         ),
