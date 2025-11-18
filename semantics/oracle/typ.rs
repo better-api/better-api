@@ -166,7 +166,7 @@ impl<'a> Oracle<'a> {
     }
 
     fn parse_record(&mut self, record: &ast::Record) -> TypeId {
-        let fields = self.parse_type_fields(record.fields());
+        let fields = self.parse_type_fields(record.fields(), true);
         let builder = self.types.start_record();
         insert_type_fields(
             fields,
@@ -188,7 +188,7 @@ impl<'a> Oracle<'a> {
                     self.reports.push(
                         Report::error(format!("union discriminator must be a string, got {val}"))
                             .with_label(Label::new(
-                                "invalid union discrminator".to_string(),
+                                "invalid union discriminator".to_string(),
                                 Span::new(range.start().into(), range.end().into()),
                             ))
                             .with_note("help: union discrminator must be a string".to_string()),
@@ -198,7 +198,7 @@ impl<'a> Oracle<'a> {
                 }
             });
 
-        let fields = self.parse_type_fields(union.fields());
+        let fields = self.parse_type_fields(union.fields(), false);
         let builder = self.types.start_union(discriminator);
         insert_type_fields(
             fields,
@@ -220,6 +220,7 @@ impl<'a> Oracle<'a> {
     fn parse_type_fields(
         &mut self,
         fields: impl Iterator<Item = ast::TypeField>,
+        parse_default: bool,
     ) -> Vec<InternedField> {
         let mut fields: Vec<_> = fields
             .filter_map(|f| {
@@ -238,11 +239,16 @@ impl<'a> Oracle<'a> {
 
                 let name_id = self.strings.get_or_intern(name_str);
 
-                let default = f
-                    .prologue()
-                    .and_then(|p| p.default())
-                    .and_then(|d| d.value())
-                    .map(|val| self.parse_value(&val));
+                let default = if parse_default {
+                    f.prologue()
+                        .and_then(|p| p.default())
+                        .and_then(|d| d.value())
+                        .map(|val| self.parse_value(&val))
+                } else {
+                    // No need to report an error if default is present in field.
+                    // It's already reported by the parser.
+                    None
+                };
 
                 Some(InternedField {
                     name: name_id,
@@ -826,6 +832,10 @@ mod test {
 
     #[test]
     fn parse_simple_record() {
+        // Test parsing of simple records.
+        // We have two records that are the same, but with different field ordering.
+        // This test also checks that ordering of parsed is the same, which means we have
+        // stable ordering.
         let text = indoc! {r#"
             type Foo: rec {
                 foo: string
@@ -833,6 +843,13 @@ mod test {
 
                 @default(69420)
                 baz: u32
+            }
+
+            type Foo: rec {
+                @default(69420)
+                baz: u32
+                bar: [i32]
+                foo: string
             }
         "#};
 
@@ -842,50 +859,55 @@ mod test {
 
         let mut oracle = Oracle::new_raw(&res.root);
 
-        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-        let id = oracle.parse_type(&typ).unwrap();
+        assert_eq!(res.root.type_definitions().count(), 2);
 
-        assert_eq!(oracle.reports(), vec![]);
+        for typ in res.root.type_definitions() {
+            let typ = typ.typ().unwrap();
+            let id = oracle.parse_type(&typ).unwrap();
 
-        // Check record was inserted and is in source map
-        let rec = match oracle.types.get(id) {
-            Type::Record(rec) => rec,
-            _ => panic!(),
-        };
-        oracle.source_map.get_bck(&Element::Type(id));
+            assert_eq!(oracle.reports(), vec![]);
 
-        let fields: Vec<_> = rec.collect();
+            // Check record was inserted and is in source map
+            let rec = match oracle.types.get(id) {
+                Type::Record(rec) => rec,
+                _ => panic!(),
+            };
+            oracle.source_map.get_bck(&Element::Type(id));
 
-        // Check field names are correct
-        let names: Vec<_> = fields
-            .iter()
-            .map(|field| oracle.strings.resolve(field.name).unwrap())
-            .collect();
-        assert_eq!(names, vec!["foo", "bar", "baz"]);
+            let fields: Vec<_> = rec.collect();
 
-        // Check field @default's are correct
-        let defaults: Vec<_> = fields
-            .iter()
-            .map(|field| field.default.map(|id| oracle.values.get(id)))
-            .collect();
-        assert_eq!(defaults, vec![None, None, Some(Value::Integer(69420))]);
+            // Check field names are correct
+            let names: Vec<_> = fields
+                .iter()
+                .map(|field| oracle.strings.resolve(field.name).unwrap())
+                .collect();
+            assert_eq!(names, vec!["foo", "bar", "baz"]);
 
-        // Check default values are in source map
-        for default_id in fields.iter().filter_map(|field| field.default) {
-            oracle.source_map.get_bck(&Element::Value(default_id));
-        }
+            // Check field @default's are correct
+            let defaults: Vec<_> = fields
+                .iter()
+                .map(|field| field.default.map(|id| oracle.values.get(id)))
+                .collect();
+            assert_eq!(defaults, vec![None, None, Some(Value::Integer(69420))]);
 
-        // Check fields and field types are in source map
-        for field in &fields {
-            oracle.source_map.get_bck(&Element::TypeField(field.id));
-            oracle
-                .source_map
-                .get_bck(&Element::Type(field.id.type_id()));
+            // Check default values are in source map
+            for default_id in fields.iter().filter_map(|field| field.default) {
+                oracle.source_map.get_bck(&Element::Value(default_id));
+            }
+
+            // Check fields and field types are in source map
+            for field in &fields {
+                oracle.source_map.get_bck(&Element::TypeField(field.id));
+                oracle
+                    .source_map
+                    .get_bck(&Element::Type(field.id.type_id()));
+            }
         }
 
         // Check source map size
-        assert_eq!(oracle.source_map.fwd.len(), 9);
-        assert_eq!(oracle.source_map.bck.len(), 9);
+        // Times two, since we have two of the same type
+        assert_eq!(oracle.source_map.fwd.len(), 9 * 2);
+        assert_eq!(oracle.source_map.bck.len(), 9 * 2);
     }
 
     #[test]
@@ -1101,5 +1123,141 @@ mod test {
 
         assert_eq!(oracle.source_map.fwd.len(), 8);
         assert_eq!(oracle.source_map.bck.len(), 8);
+    }
+
+    #[test]
+    fn parse_simple_union() {
+        let text = indoc! {r#"
+            type Foo: union ("type") {
+                foo: Foo
+
+                // Default should be ignored
+                @default(69420)
+                bar: Bar
+            }
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+
+        // Check union was inserted and is in source map
+        let union = match oracle.types.get(id) {
+            Type::Union(u) => u,
+            _ => panic!(),
+        };
+        oracle.source_map.get_bck(&Element::Type(id));
+
+        // Check discriminator
+        let discriminator = union.disriminator.unwrap();
+        assert_eq!(oracle.strings.resolve(discriminator).unwrap(), "type");
+
+        let fields: Vec<_> = union.fields.collect();
+
+        // Check field names are correct
+        let names: Vec<_> = fields
+            .iter()
+            .map(|field| oracle.strings.resolve(field.name).unwrap())
+            .collect();
+        assert_eq!(names, vec!["foo", "bar"]);
+
+        // Check field @default's are correct
+        assert!(fields.iter().all(|field| field.default.is_none()));
+
+        // Check fields and field types are in source map
+        for field in &fields {
+            oracle.source_map.get_bck(&Element::TypeField(field.id));
+            oracle
+                .source_map
+                .get_bck(&Element::Type(field.id.type_id()));
+        }
+
+        // Check source map size
+        assert_eq!(oracle.source_map.fwd.len(), 6);
+        assert_eq!(oracle.source_map.bck.len(), 6);
+    }
+
+    #[test]
+    fn parse_empty_union() {
+        let text = indoc! {r#"
+            type Foo: union ("kind") {}
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+
+        let union = match oracle.types.get(id) {
+            Type::Union(u) => u,
+            _ => panic!(),
+        };
+        oracle.source_map.get_bck(&Element::Type(id));
+
+        // Check discriminator
+        let discriminator = union.disriminator.unwrap();
+        assert_eq!(oracle.strings.resolve(discriminator).unwrap(), "kind");
+
+        assert_eq!(union.fields.count(), 0);
+
+        // Check source map
+        assert_eq!(oracle.source_map.fwd.len(), 2);
+        assert_eq!(oracle.source_map.bck.len(), 2);
+    }
+
+    #[test]
+    fn parse_invalid_union() {
+        let text = indoc! {r#"
+            type Foo: union (42) {
+                invalid: rec {}
+            }
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let mut oracle = Oracle::new_raw(&res.root);
+
+        let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+        let id = oracle.parse_type(&typ).unwrap();
+
+        assert_eq!(
+            oracle.reports(),
+            vec![
+                Report::error("union discriminator must be a string, got integer".to_string()).with_label(Label::new("invalid union discriminator".to_string(), Span::new(17, 19))).with_note("help: union discrminator must be a string".to_string()),
+                Report::error("inline record not allowed in union field".to_string()).with_label(
+                    Label::new("inline record type not allowed".to_string(), Span::new(36, 42))
+                ).with_note("help: define a named type first, then reference it\n      example: `type MyRecord: rec { ... }`".to_string())
+            ]
+        );
+
+        let union = match oracle.types.get(id) {
+            Type::Union(u) => u,
+            _ => panic!(),
+        };
+        oracle.source_map.get_bck(&Element::Type(id));
+
+        // Check discriminator
+        assert!(union.disriminator.is_none());
+
+        assert_eq!(union.fields.count(), 0);
+
+        // Check source map
+        assert_eq!(oracle.source_map.fwd.len(), 2);
+        assert_eq!(oracle.source_map.bck.len(), 2);
     }
 }
