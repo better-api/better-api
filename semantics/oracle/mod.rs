@@ -12,6 +12,9 @@ mod metadata;
 mod typ;
 mod value;
 
+#[cfg(test)]
+mod tests;
+
 /// Core type responsible for semantic analysis.
 #[derive(Clone)]
 pub struct Oracle<'a> {
