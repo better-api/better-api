@@ -1,14 +1,17 @@
 //! Defines core type responsible for semantic analysis.
 
+use std::collections::HashMap;
+
 use better_api_diagnostic::Report;
 use better_api_syntax::ast::AstNode;
 use better_api_syntax::{SyntaxNode, SyntaxNodePtr, ast};
 
-use crate::SourceMap;
-use crate::typ::TypeArena;
+use crate::typ::{TypeArena, TypeId};
 use crate::value::ValueArena;
+use crate::{SourceMap, StringId};
 
 mod metadata;
+mod symbols;
 mod typ;
 mod value;
 
@@ -25,6 +28,7 @@ pub struct Oracle<'a> {
     strings: string_interner::DefaultStringInterner,
     values: ValueArena,
     types: TypeArena,
+    symbol_table: HashMap<StringId, TypeId>,
 
     source_map: SourceMap,
 
@@ -43,6 +47,7 @@ impl<'a> Oracle<'a> {
             strings: Default::default(),
             values: Default::default(),
             types: Default::default(),
+            symbol_table: Default::default(),
             source_map: Default::default(),
             reports: Default::default(),
         };
@@ -82,6 +87,7 @@ impl<'a> Oracle<'a> {
             strings: Default::default(),
             values: Default::default(),
             types: Default::default(),
+            symbol_table: Default::default(),
             source_map: Default::default(),
             reports: Default::default(),
         }

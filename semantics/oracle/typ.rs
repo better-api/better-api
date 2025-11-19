@@ -21,6 +21,7 @@ struct InternedField {
     field: ast::TypeField,
 }
 
+/// Helper type for handling primitive types separately from composite ones.
 enum ParsedType<'a> {
     Primitive(PrimitiveType),
     Enum(&'a ast::Enum),
@@ -62,6 +63,12 @@ impl<'a> ParsedType<'a> {
 }
 
 impl<'a> Oracle<'a> {
+    /// Parse a syntactical type and store it into the type arena and source map.
+    ///
+    /// Returns [`TypeId`] if type could be parsed, and `None` otherwise.
+    ///
+    /// If type was parsed successfully it doesn't automatically mean that it's valid.
+    /// Additional validation has to be performed after all the types have been parsed.
     pub(crate) fn parse_type(&mut self, typ: &ast::Type) -> Option<TypeId> {
         let id = match ParsedType::new(typ, &mut self.strings) {
             ParsedType::Primitive(primitive) => self.types.add_primitive(primitive),
@@ -134,6 +141,7 @@ impl<'a> Oracle<'a> {
         self.types.add_enum(enum_type_id, members_id)
     }
 
+    /// Parses response type and inserts it into arena
     fn parse_response(&mut self, resp: &ast::TypeResponse) -> TypeId {
         // Parse and validate content type
         let content_type_id = resp
@@ -165,6 +173,7 @@ impl<'a> Oracle<'a> {
             .add_response(body_id, headers_id, content_type_id)
     }
 
+    /// Parses record type and inserts it into arena
     fn parse_record(&mut self, record: &ast::Record) -> TypeId {
         let fields = self.parse_type_fields(record.fields(), true);
         let builder = self.types.start_record();
@@ -178,6 +187,7 @@ impl<'a> Oracle<'a> {
         )
     }
 
+    /// Parses union type and inserts it into arena
     fn parse_union(&mut self, union: &ast::Union) -> TypeId {
         let discriminator = union
             .discriminator()
@@ -409,6 +419,8 @@ fn parse_array_option(
     Some(container_id)
 }
 
+/// Helper type for passing around the context in which an invalid inner
+/// type has been found.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display)]
 enum InvalidInnerContext {
     #[display("enum")]
@@ -424,6 +436,10 @@ enum InvalidInnerContext {
     Response,
 }
 
+/// Constructs a [`Report`] for reporting that a type contains invalid inner(inline) type.
+///
+/// For instance, when parsing a record, not all types are valid inside a record field.
+/// This function can be used to construct a [`Report`] that tells the user about invalid type.
 fn new_invalid_inner_type(inner: InvalidInnerContext, outer: &str, node: &impl AstNode) -> Report {
     let range = node.syntax().text_range();
 
@@ -444,6 +460,7 @@ fn new_invalid_inner_type(inner: InvalidInnerContext, outer: &str, node: &impl A
         ))
 }
 
+/// Inserts type fields into the type arena.
 fn insert_type_fields(
     fields: Vec<InternedField>,
     mut builder: FieldBuilder,
