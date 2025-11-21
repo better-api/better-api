@@ -63,12 +63,58 @@ impl<'a> ParsedType<'a> {
 }
 
 impl<'a> Oracle<'a> {
+    /// Parses type definitions and checks for cycles.
+    ///
+    /// The parsed types are not validated completely, that has to be done
+    /// after _all_ the types have been parsed.
+    pub(crate) fn analyze_type_definitions(&mut self, root: &ast::Root) {
+        for def in root.type_definitions() {
+            self.parse_type_def(&def);
+        }
+
+        // TODO: Check for cycles
+    }
+
+    /// Parse type definition node.
+    fn parse_type_def(&mut self, def: &ast::TypeDefinition) {
+        let Some(name_id) = def.name().and_then(|n| self.parse_name(&n)) else {
+            return;
+        };
+
+        let Some(type_id) = def.typ().and_then(|t| self.parse_type(&t)) else {
+            return;
+        };
+
+        if self.symbol_table.contains_key(&name_id) {
+            let name = self
+                .strings
+                .resolve(name_id)
+                .expect("interned string should be resolvable");
+            let range = def.syntax().text_range();
+
+            self.reports.push(
+                Report::error(format!("name `{name}` is defined multiple times")).with_label(
+                    Label::new(
+                        format!("name `{name}` is defined multiple times"),
+                        Span::new(range.start().into(), range.end().into()),
+                    ),
+                ),
+            );
+
+            return;
+        };
+
+        self.symbol_table.insert(name_id, type_id);
+        self.source_map
+            .insert(def, Element::TypeDefinition(name_id));
+    }
+
     /// Parse a syntactical type and store it into the type arena and source map.
     ///
     /// Returns [`TypeId`] if type could be parsed, and `None` otherwise.
     ///
-    /// If type was parsed successfully it doesn't automatically mean that it's valid.
-    /// Additional validation has to be performed after all the types have been parsed.
+    /// If type was parsed successfully it's not yet completely validated..
+    /// This has to be done after _all_ the types have been parsed.
     pub(crate) fn parse_type(&mut self, typ: &ast::Type) -> Option<TypeId> {
         let id = match ParsedType::new(typ, &mut self.strings) {
             ParsedType::Primitive(primitive) => self.types.add_primitive(primitive),
@@ -236,18 +282,7 @@ impl<'a> Oracle<'a> {
             .filter_map(|f| {
                 f.typ()?;
 
-                let name = f.name().map(|n| n.token())?;
-                let name_str: Cow<_> = match &name {
-                    ast::NameToken::Identifier(ident) => ident.text().into(),
-                    ast::NameToken::String(string) => parse_string(string, &mut self.reports),
-                };
-
-                if let Err(report) = validate_name(&name_str, name.text_range()) {
-                    self.reports.push(report);
-                    return None;
-                }
-
-                let name_id = self.strings.get_or_intern(name_str);
+                let name_id = f.name().and_then(|n| self.parse_name(&n))?;
 
                 let default = if parse_default {
                     f.prologue()
@@ -272,6 +307,26 @@ impl<'a> Oracle<'a> {
         // TODO: Check fields are unique in the place where type validation happens
 
         fields
+    }
+
+    /// Validates name and interns it.
+    ///
+    /// Returns interned string id of the name if it's valid.
+    fn parse_name(&mut self, name: &ast::Name) -> Option<StringId> {
+        let token = name.token();
+
+        let name_str: Cow<_> = match &token {
+            ast::NameToken::Identifier(ident) => ident.text().into(),
+            ast::NameToken::String(string) => parse_string(string, &mut self.reports),
+        };
+
+        if let Err(report) = validate_name(&name_str, token.text_range()) {
+            self.reports.push(report);
+            return None;
+        }
+
+        let name_id = self.strings.get_or_intern(name_str);
+        Some(name_id)
     }
 
     /// Validates type of the enum (not enum itself).

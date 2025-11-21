@@ -61,8 +61,48 @@ impl<'a> Oracle<'a> {
         &self.reports
     }
 
+    /// Analyzes the complete syntax tree and populates the analyzer arenas.
+    ///
+    /// The analysis is performed in strictly sequential phases to ensure that later
+    /// phases can rely on data collected by earlier ones (e.g., all named types are
+    /// available before full type validation).
+    ///
+    /// Phases:
+    /// 1. **Metadata analysis**  
+    ///    Validates global metadata nodes (`name`, `servers`, `security`, etc.).
+    ///    Checks that each metadata key appears the correct number of times and that
+    ///    its value has the expected type/shape.
+    ///
+    /// 2. **Named type definition parsing**  
+    ///    Parses all top-level type definitions and inserts them into the type arena
+    ///    and source map. Detects and reports cyclic type definitions.  
+    ///    *Note:* Only basic syntactic validity and name-uniqueness are checked here.
+    ///    Full semantic validation is deferred to phase 4 (see below).
+    ///
+    /// 3. **Route & endpoint parsing**  
+    ///    Parses `route` blocks, creates endpoint entries in the arena, and registers
+    ///    any inline types they contain. Also performs:
+    ///    - Route/path uniqueness checks
+    ///    - Path-parameter vs. parameters-record consistency
+    ///
+    /// 4. **Complete type validation**  
+    ///    Now that **all** types (named + inline) are present in the arena, performs
+    ///    exhaustive semantic validation that requires the full type graph.  
+    ///    Examples:
+    ///    - All variants of a `union` must be record types
+    ///    - Field types exist and are used correctly
+    ///    - Enum variants, default values, constraints, etc.
+    ///
+    ///    Keeping this validation in a separate pass avoids duplicating logic between
+    ///    named types and inline types used in endpoints.
+    ///
+    /// 5. **Example parsing & validation**  
+    ///    Parses `example` blocks, inserts them into the value arena,
+    ///    and verifies that each example conforms to its declared type.
     fn analyze(&mut self, root: &ast::Root) {
         self.analyze_metadata(root);
+
+        self.analyze_type_definitions(root);
 
         // A placeholder, just so that warning about unused `Oracle::parse_type`
         // goes away

@@ -111,6 +111,7 @@ impl Root {
         self.0.children().filter_map(Server::cast)
     }
 
+    /// Get iterator through all type definitions.
     pub fn type_definitions(&self) -> impl Iterator<Item = TypeDefinition> {
         self.0.children().filter_map(TypeDefinition::cast)
     }
@@ -423,6 +424,11 @@ ast_node! {
 }
 
 impl TypeDefinition {
+    /// Returns the name of the type
+    pub fn name(&self) -> Option<Name> {
+        self.0.children().find_map(Name::cast)
+    }
+
     /// Returns type inside of definition
     pub fn typ(&self) -> Option<Type> {
         self.0.children().find_map(Type::cast)

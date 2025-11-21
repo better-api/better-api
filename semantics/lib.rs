@@ -21,6 +21,7 @@ pub enum Element {
     Type(typ::TypeId),
     TypeField(typ::TypeFieldId),
     EnumMember(value::ValueId),
+    TypeDefinition(StringId),
 }
 
 /// Maps syntax nodes to semantic elements.
