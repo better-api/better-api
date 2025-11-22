@@ -18,7 +18,7 @@
 use crate::{StringId, value};
 
 /// Representation of a type.
-#[derive(Debug, PartialEq, derive_more::Display)]
+#[derive(Debug, Clone, PartialEq, derive_more::Display)]
 pub enum Type<'a> {
     #[display("`i32`")]
     I32,
@@ -126,7 +126,7 @@ impl<'a> Type<'a> {
 }
 
 /// Reference to a type stored in the [`TypeArena`].
-#[derive(derive_more::Debug, PartialEq)]
+#[derive(derive_more::Debug, PartialEq, Clone)]
 pub struct Reference<'a> {
     /// Id of the type in the arena.
     pub id: TypeId,
@@ -155,7 +155,7 @@ pub struct TypeField<'a> {
 /// Iterator returned for composite types.
 ///
 /// Each item is a [`TypeField`].
-#[derive(derive_more::Debug, PartialEq)]
+#[derive(derive_more::Debug, Clone, PartialEq)]
 pub struct TypeFieldIterator<'a> {
     #[debug(skip)]
     arena: &'a TypeArena,
@@ -196,7 +196,7 @@ impl<'a> Iterator for TypeFieldIterator<'a> {
 /// Semantic representation of a tagged union.
 ///
 /// Fields are exposed through a [`TypeFieldIterator`].
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Union<'a> {
     pub disriminator: Option<StringId>,
     pub fields: TypeFieldIterator<'a>,
@@ -206,14 +206,14 @@ pub struct Union<'a> {
 ///
 /// Optional `typ` describes the type of enum values, while `values` points to
 /// an array in the [`value::ValueArena`].
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Enum<'a> {
     pub typ: Option<Reference<'a>>,
     pub values: value::ValueId,
 }
 
 /// Semantic information about a response type.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Response<'a> {
     pub body: Option<Reference<'a>>,
     pub headers: Option<Reference<'a>>,

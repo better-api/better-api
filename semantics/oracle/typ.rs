@@ -72,7 +72,7 @@ impl<'a> Oracle<'a> {
             self.lower_type_def(&def);
         }
 
-        // TODO: Check for cycles
+        self.report_symbol_cycles();
     }
 
     /// Lowers type definition node.
@@ -85,16 +85,29 @@ impl<'a> Oracle<'a> {
             return;
         };
 
-        if let Some(original) = self.symbol_table.get(&name_id) {
+        // There is already a symbol with the same name, so we report an error.
+        if self.symbol_table.contains_key(&name_id) {
             let name = self
                 .strings
                 .resolve(name_id)
+                // We intern the string at the beginning of the function.
                 .expect("interned string should be resolvable");
-            let range = def.syntax().text_range();
+            let range = def
+                .name()
+                // We check name node exists at the beginning of the function.
+                .expect("name should exist here")
+                .syntax()
+                .text_range();
 
-            let original_range = self
-                .source_map
-                .get_bck(&Element::Type(*original))
+            // If symbol table contains the name already, we should also have a valid type def
+            // node, so expects should be fine.
+            let original_def = self
+                .type_def_node(name_id)
+                .expect("original type definition should exist");
+            let original_range = original_def
+                .name()
+                .expect("name of original type def should exist")
+                .syntax()
                 .text_range();
 
             self.reports.push(
