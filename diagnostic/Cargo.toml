@@ -11,4 +11,4 @@ version.workspace = true
 path = "lib.rs"
 
 [dependencies]
-rowan = "0.16"
+rowan.workspace = true

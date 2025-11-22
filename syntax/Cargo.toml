@@ -11,9 +11,9 @@ version.workspace = true
 path = "lib.rs"
 
 [dependencies]
-rowan = "0.16"
 better-api-diagnostic = { path = "../diagnostic" }
 derive_more.workspace = true
+rowan.workspace = true
 
 [dev-dependencies]
 insta.workspace = true

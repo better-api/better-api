@@ -13,9 +13,9 @@ path = "lib.rs"
 [dependencies]
 better-api-syntax = { path = "../syntax" }
 better-api-diagnostic = { path = "../diagnostic" }
-derive_more.workspace = true
 string-interner = "0.19"
-smallvec = "1.15"
+derive_more.workspace = true
+smallvec.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
