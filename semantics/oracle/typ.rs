@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use better_api_diagnostic::{Label, Report, Span};
+use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast;
 use better_api_syntax::ast::AstNode;
 use string_interner::DefaultStringInterner;
@@ -96,7 +96,7 @@ impl<'a> Oracle<'a> {
                 Report::error(format!("name `{name}` is defined multiple times")).with_label(
                     Label::new(
                         format!("name `{name}` is defined multiple times"),
-                        Span::new(range.start().into(), range.end().into()),
+                        range.into(),
                     ),
                 ),
             );
@@ -245,7 +245,7 @@ impl<'a> Oracle<'a> {
                         Report::error(format!("union discriminator must be a string, got {val}"))
                             .with_label(Label::new(
                                 "invalid union discriminator".to_string(),
-                                Span::new(range.start().into(), range.end().into()),
+                                range.into(),
                             ))
                             .with_note("help: union discrminator must be a string".to_string()),
                     );
@@ -343,10 +343,7 @@ impl<'a> Oracle<'a> {
 
                 self.reports.push(
                     Report::error(format!("invalid enum type {typ}"))
-                        .with_label(Label::new(
-                            format!("invalid enum type {typ}"),
-                            Span::new(range.start().into(), range.end().into()),
-                        ))
+                        .with_label(Label::new(format!("invalid enum type {typ}"), range.into()))
                         .with_note(
                             "help: enum must have a type `i32`, `i64`, `u32`, `u64`, or `string`"
                                 .to_string(),
@@ -378,7 +375,7 @@ impl<'a> Oracle<'a> {
                     Report::error(format!("invalid response content type {val}"))
                         .with_label(Label::new(
                             format!("invalid response content type {val}"),
-                            Span::new(range.start().into(), range.end().into()),
+                            range.into(),
                         ))
                         .with_note("help: response content type must be a string".to_string()),
                 );
@@ -508,7 +505,7 @@ fn new_invalid_inner_type(inner: InvalidInnerContext, outer: &str, node: &impl A
     Report::error(format!("inline {inner} not allowed in {outer}"))
         .with_label(Label::new(
             format!("inline {inner} type not allowed"),
-            Span::new(range.start().into(), range.end().into()),
+            range.into(),
         ))
         .with_note(format!(
             "help: define a named type first, then reference it\n      example: `{syntax_example}`"

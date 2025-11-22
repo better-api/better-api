@@ -9,6 +9,9 @@ version = "0.1.0"
 [[package]]
 name = "better-api-diagnostic"
 version = "0.1.0"
+dependencies = [
+ "rowan",
+]
 
 [[package]]
 name = "better-api-semantics"

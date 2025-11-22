@@ -15,7 +15,7 @@ pub fn validate_name(name: &str, range: TextRange) -> Result<(), Report> {
     if is_valid {
         Ok(())
     } else {
-        Err(Report::error("invalid name".to_string()).with_label(Label::new("invalid name".to_string(), Span::new(range.start().into(), range.end().into()))).with_note(
+        Err(Report::error("invalid name".to_string()).with_label(Label::new("invalid name".to_string(), range.into())).with_note(
                 "help: name can only contain alphanumeric characters, `_`, `-` and `.`. It also has to start with alphabetic character.".to_string(),
             ))
     }

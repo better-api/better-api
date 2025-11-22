@@ -1,4 +1,4 @@
-use better_api_diagnostic::{Label, Report, Span};
+use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast::AstNode;
 use better_api_syntax::{TextRange, ast};
 
@@ -60,12 +60,8 @@ impl<'a> Oracle<'a> {
         if !matches!(value, Value::String(_)) {
             let range = value_node.syntax().text_range();
             self.reports.push(
-                Report::error(format!("`{directive}` must be a string, got {value}")).with_label(
-                    Label::new(
-                        "expected a string".to_string(),
-                        Span::new(range.start().into(), range.end().into()),
-                    ),
-                ),
+                Report::error(format!("`{directive}` must be a string, got {value}"))
+                    .with_label(Label::new("expected a string".to_string(), range.into())),
             );
         }
     }
@@ -76,7 +72,7 @@ impl<'a> Oracle<'a> {
             Report::error(format!("repeated `{directive}` directive"))
                 .with_label(Label::new(
                     format!("repeated `{directive}` directive"),
-                    Span::new(range.start().into(), range.end().into()),
+                    range.into(),
                 ))
                 .with_note(format!("help: provide only one `{directive}`")),
         );

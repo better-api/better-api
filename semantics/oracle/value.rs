@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use better_api_diagnostic::{Label, Report, Span};
+use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast;
 use better_api_syntax::ast::AstNode;
 use string_interner::DefaultStringInterner;
@@ -229,10 +229,8 @@ fn check_object_fields_unique(
             .text_range();
 
         reports.push(
-            Report::error(format!("repeated object key `{name}`")).with_label(Label::new(
-                "repeated object key".to_string(),
-                Span::new(range.start().into(), range.end().into()),
-            )),
+            Report::error(format!("repeated object key `{name}`"))
+                .with_label(Label::new("repeated object key".to_string(), range.into())),
         );
     }
 }

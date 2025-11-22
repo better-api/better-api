@@ -14,6 +14,12 @@ impl Span {
     }
 }
 
+impl From<rowan::TextRange> for Span {
+    fn from(range: rowan::TextRange) -> Self {
+        Self::new(range.start().into(), range.end().into())
+    }
+}
+
 /// Severity of the diagnostic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Severity {
