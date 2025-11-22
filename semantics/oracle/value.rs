@@ -19,8 +19,8 @@ struct InternedField {
 }
 
 impl<'a> Oracle<'a> {
-    /// Parse syntactical value [`ast::Value`] and store it in arena and source map mappings.
-    pub(crate) fn parse_value(&mut self, value: &ast::Value) -> ValueId {
+    /// Lower syntactical value [`ast::Value`] and store it in arena and source map mappings.
+    pub(crate) fn lower_value(&mut self, value: &ast::Value) -> ValueId {
         let id = match ParsedValue::new(value, &mut self.reports, &mut self.strings) {
             ParsedValue::Primitive(primitive) => self.values.add_primitive(primitive),
             ParsedValue::Object(obj) => {

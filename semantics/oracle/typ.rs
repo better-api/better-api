@@ -63,25 +63,25 @@ impl<'a> ParsedType<'a> {
 }
 
 impl<'a> Oracle<'a> {
-    /// Parses type definitions and checks for cycles.
+    /// Lowers type definitions and checks for cycles.
     ///
-    /// The parsed types are not validated completely, that has to be done
-    /// after _all_ the types have been parsed.
-    pub(crate) fn analyze_type_definitions(&mut self, root: &ast::Root) {
+    /// The lowered types are not validated completely, that has to be done
+    /// after _all_ the types have been lowered.
+    pub(crate) fn lower_type_definitions(&mut self, root: &ast::Root) {
         for def in root.type_definitions() {
-            self.parse_type_def(&def);
+            self.lower_type_def(&def);
         }
 
         // TODO: Check for cycles
     }
 
-    /// Parse type definition node.
-    fn parse_type_def(&mut self, def: &ast::TypeDefinition) {
-        let Some(name_id) = def.name().and_then(|n| self.parse_name(&n)) else {
+    /// Lowers type definition node.
+    fn lower_type_def(&mut self, def: &ast::TypeDefinition) {
+        let Some(name_id) = def.name().and_then(|n| self.lower_name(&n)) else {
             return;
         };
 
-        let Some(type_id) = def.typ().and_then(|t| self.parse_type(&t)) else {
+        let Some(type_id) = def.typ().and_then(|t| self.lower_type(&t)) else {
             return;
         };
 
@@ -109,23 +109,23 @@ impl<'a> Oracle<'a> {
             .insert(def, Element::TypeDefinition(name_id));
     }
 
-    /// Parse a syntactical type and store it into the type arena and source map.
+    /// Lower a syntactical type and store it into the type arena and source map.
     ///
     /// Returns [`TypeId`] if type could be parsed, and `None` otherwise.
     ///
-    /// If type was parsed successfully it's not yet completely validated..
-    /// This has to be done after _all_ the types have been parsed.
-    pub(crate) fn parse_type(&mut self, typ: &ast::Type) -> Option<TypeId> {
+    /// If type was lowered successfully it's not yet completely validated.
+    /// This has to be done after _all_ the types have been lowered.
+    pub(crate) fn lower_type(&mut self, typ: &ast::Type) -> Option<TypeId> {
         let id = match ParsedType::new(typ, &mut self.strings) {
             ParsedType::Primitive(primitive) => self.types.add_primitive(primitive),
-            ParsedType::Enum(en) => self.parse_enum(en),
-            ParsedType::Response(resp) => self.parse_response(resp),
-            ParsedType::Record(record) => self.parse_record(record),
-            ParsedType::Union(union) => self.parse_union(union),
+            ParsedType::Enum(en) => self.lower_enum(en),
+            ParsedType::Response(resp) => self.lower_response(resp),
+            ParsedType::Record(record) => self.lower_record(record),
+            ParsedType::Union(union) => self.lower_union(union),
             ParsedType::Array(arr) => {
                 let inner = arr.typ()?;
                 let builder = self.types.start_array();
-                parse_array_option(
+                lower_array_option(
                     &inner,
                     builder,
                     &mut self.reports,
@@ -137,7 +137,7 @@ impl<'a> Oracle<'a> {
             ParsedType::Option(opt) => {
                 let inner = opt.typ()?;
                 let builder = self.types.start_option();
-                parse_array_option(
+                lower_array_option(
                     &inner,
                     builder,
                     &mut self.reports,
@@ -152,14 +152,14 @@ impl<'a> Oracle<'a> {
         Some(id)
     }
 
-    /// Parses enum type and inserts it into arena
-    fn parse_enum(&mut self, typ: &ast::Enum) -> TypeId {
+    /// Lowers enum type and inserts it into arena
+    fn lower_enum(&mut self, typ: &ast::Enum) -> TypeId {
         // TODO: Validate members types. For this value -> type comparison function is needed.
 
         // Parse type of the enum and validate it
         // Reports are handled by parser and self.parse_type methods already
         // TODO: move this in the shared type validation logic
-        let enum_type_id = typ.typ().and_then(|t| self.parse_type(&t));
+        let enum_type_id = typ.typ().and_then(|t| self.lower_type(&t));
         if let Some(id) = enum_type_id {
             self.validate_enum_type(id);
         }
@@ -187,13 +187,13 @@ impl<'a> Oracle<'a> {
         self.types.add_enum(enum_type_id, members_id)
     }
 
-    /// Parses response type and inserts it into arena
-    fn parse_response(&mut self, resp: &ast::TypeResponse) -> TypeId {
+    /// Lowers response type and inserts it into arena
+    fn lower_response(&mut self, resp: &ast::TypeResponse) -> TypeId {
         // Parse and validate content type
         let content_type_id = resp
             .content_type()
             .and_then(|v| v.value())
-            .map(|v| self.parse_value(&v));
+            .map(|v| self.lower_value(&v));
         // TODO: Move validation to shared validation logic.
         if let Some(id) = content_type_id {
             self.validate_response_content_type(id);
@@ -203,14 +203,14 @@ impl<'a> Oracle<'a> {
         let headers_id = resp
             .headers()
             .and_then(|h| h.typ())
-            .and_then(|t| self.parse_type(&t));
+            .and_then(|t| self.lower_type(&t));
         // TODO: Check that headers type is a record. Do not forget to resolve named references.
 
         // Parse and validate response body
         let body_id = resp
             .body()
             .and_then(|b| b.typ())
-            .and_then(|t| self.parse_type(&t));
+            .and_then(|t| self.lower_type(&t));
         // TODO: Check that body type is valid (not a response). Again, resolve named references
 
         // TODO: Check response body type and header mime type match.
@@ -219,8 +219,8 @@ impl<'a> Oracle<'a> {
             .add_response(body_id, headers_id, content_type_id)
     }
 
-    /// Parses record type and inserts it into arena
-    fn parse_record(&mut self, record: &ast::Record) -> TypeId {
+    /// Lowers record type and inserts it into arena
+    fn lower_record(&mut self, record: &ast::Record) -> TypeId {
         let fields = self.parse_type_fields(record.fields(), true);
         let builder = self.types.start_record();
         insert_type_fields(
@@ -233,11 +233,11 @@ impl<'a> Oracle<'a> {
         )
     }
 
-    /// Parses union type and inserts it into arena
-    fn parse_union(&mut self, union: &ast::Union) -> TypeId {
+    /// Lowers union type and inserts it into arena
+    fn lower_union(&mut self, union: &ast::Union) -> TypeId {
         let discriminator = union
             .discriminator()
-            .map(|v| (self.parse_value(&v), v.syntax().text_range()))
+            .map(|v| (self.lower_value(&v), v.syntax().text_range()))
             .and_then(|(id, range)| match self.values.get(id) {
                 Value::String(id) => Some(id),
                 val => {
@@ -282,13 +282,13 @@ impl<'a> Oracle<'a> {
             .filter_map(|f| {
                 f.typ()?;
 
-                let name_id = f.name().and_then(|n| self.parse_name(&n))?;
+                let name_id = f.name().and_then(|n| self.lower_name(&n))?;
 
                 let default = if parse_default {
                     f.prologue()
                         .and_then(|p| p.default())
                         .and_then(|d| d.value())
-                        .map(|val| self.parse_value(&val))
+                        .map(|val| self.lower_value(&val))
                 } else {
                     // No need to report an error if default is present in field.
                     // It's already reported by the parser.
@@ -309,10 +309,10 @@ impl<'a> Oracle<'a> {
         fields
     }
 
-    /// Validates name and interns it.
+    /// Lowers name by parsing, validating and interning it.
     ///
     /// Returns interned string id of the name if it's valid.
-    fn parse_name(&mut self, name: &ast::Name) -> Option<StringId> {
+    fn lower_name(&mut self, name: &ast::Name) -> Option<StringId> {
         let token = name.token();
 
         let name_str: Cow<_> = match &token {
@@ -387,11 +387,11 @@ impl<'a> Oracle<'a> {
     }
 }
 
-/// Parses array or option by using the [`OptionArrayBuilder`].
+/// Lowers array or option by using the [`OptionArrayBuilder`].
 ///
 /// It inserts the `inner` type to the builder and returns the id of the constructed
 /// Array or Option type. All intermediate types are inserted into the source map.
-fn parse_array_option(
+fn lower_array_option(
     inner: &ast::Type,
     mut builder: OptionArrayBuilder,
     reports: &mut Vec<Report>,
@@ -408,7 +408,7 @@ fn parse_array_option(
             // Error for empty inner type is reported by parser.
             let inner = arr.typ()?;
             let inner_id = builder.start_array();
-            let container_id = parse_array_option(
+            let container_id = lower_array_option(
                 &inner,
                 builder,
                 reports,
@@ -423,7 +423,7 @@ fn parse_array_option(
             // Error for empty inner type is reported by parser.
             let inner = opt.typ()?;
             let inner_id = builder.start_option();
-            let container_id = parse_array_option(
+            let container_id = lower_array_option(
                 &inner,
                 builder,
                 reports,
@@ -540,7 +540,7 @@ fn insert_type_fields(
                 };
 
                 let (child_builder, field_id) = builder.start_array(field.name, field.default);
-                let type_id = parse_array_option(
+                let type_id = lower_array_option(
                     &inner,
                     child_builder,
                     reports,
@@ -561,7 +561,7 @@ fn insert_type_fields(
                 };
 
                 let (child_builder, field_id) = builder.start_option(field.name, field.default);
-                let type_id = parse_array_option(
+                let type_id = lower_array_option(
                     &inner,
                     child_builder,
                     reports,

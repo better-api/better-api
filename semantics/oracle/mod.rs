@@ -73,14 +73,14 @@ impl<'a> Oracle<'a> {
     ///    Checks that each metadata key appears the correct number of times and that
     ///    its value has the expected type/shape.
     ///
-    /// 2. **Named type definition parsing**  
-    ///    Parses all top-level type definitions and inserts them into the type arena
+    /// 2. **Named type definition lowering**  
+    ///    Lowers all top-level type definitions and inserts them into the type arena
     ///    and source map. Detects and reports cyclic type definitions.  
     ///    *Note:* Only basic syntactic validity and name-uniqueness are checked here.
     ///    Full semantic validation is deferred to phase 4 (see below).
     ///
-    /// 3. **Route & endpoint parsing**  
-    ///    Parses `route` blocks, creates endpoint entries in the arena, and registers
+    /// 3. **Route & endpoint lowering**  
+    ///    Lowers routes and endpoints, and lowers
     ///    any inline types they contain. Also performs:
     ///    - Route/path uniqueness checks
     ///    - Path-parameter vs. parameters-record consistency
@@ -96,19 +96,19 @@ impl<'a> Oracle<'a> {
     ///    Keeping this validation in a separate pass avoids duplicating logic between
     ///    named types and inline types used in endpoints.
     ///
-    /// 5. **Example parsing & validation**  
-    ///    Parses `example` blocks, inserts them into the value arena,
+    /// 5. **Example lowering & validation**  
+    ///    Lowers `example` blocks, inserts them into the value arena,
     ///    and verifies that each example conforms to its declared type.
     fn analyze(&mut self, root: &ast::Root) {
         self.analyze_metadata(root);
 
-        self.analyze_type_definitions(root);
+        self.lower_type_definitions(root);
 
         // A placeholder, just so that warning about unused `Oracle::parse_type`
         // goes away
         // TODO: Remove this in the future.
         if let Some(t) = root.dummy_type() {
-            self.parse_type(&t);
+            self.lower_type(&t);
         }
 
         // TODO: Implement the actual analysis

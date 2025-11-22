@@ -42,7 +42,7 @@ impl<'a> Oracle<'a> {
                 continue;
             };
 
-            let server_id = self.parse_value(&server_value);
+            let server_id = self.lower_value(&server_value);
             // TODO: Check server is valid:
             //  - Implement `parse_type`
             //  - Parse "hardcoded" server type
@@ -54,7 +54,7 @@ impl<'a> Oracle<'a> {
     /// Analyze directive that expects value to be a string.
     /// This is `version`, `name` and `betterApi`
     fn analyze_string_directive(&mut self, value_node: &ast::Value, directive: &str) {
-        let value_id = self.parse_value(value_node);
+        let value_id = self.lower_value(value_node);
         let value = self.values.get(value_id);
 
         if !matches!(value, Value::String(_)) {

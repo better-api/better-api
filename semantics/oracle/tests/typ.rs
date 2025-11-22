@@ -30,7 +30,7 @@ fn parse_primitives() {
         let mut oracle = Oracle::new_raw(&res.root);
 
         let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-        let id = oracle.parse_type(&typ).unwrap();
+        let id = oracle.lower_type(&typ).unwrap();
 
         assert_eq!(oracle.reports(), vec![]);
         assert_eq!(oracle.types.get(id), expected);
@@ -54,7 +54,7 @@ fn parse_primitive_reference() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.parse_type(&typ).unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
 
     let name = oracle.strings.get("Bar").unwrap();
     assert_eq!(oracle.reports(), vec![]);
@@ -78,7 +78,7 @@ fn parse_simple_array() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.parse_type(&typ).unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
 
     assert_eq!(oracle.reports(), vec![]);
 
@@ -107,7 +107,7 @@ fn parse_nested_array() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.parse_type(&typ).unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
 
     assert_eq!(oracle.reports(), vec![]);
 
@@ -141,7 +141,7 @@ fn parse_empty_array() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.parse_type(&typ);
+    let id = oracle.lower_type(&typ);
     assert_eq!(id, None);
 
     assert_eq!(oracle.reports(), vec![]);
@@ -163,7 +163,7 @@ fn parse_invalid_array() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.parse_type(&typ);
+    let id = oracle.lower_type(&typ);
     assert_eq!(id, None);
 
     assert_eq!(
@@ -192,7 +192,7 @@ fn parse_simple_option() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.parse_type(&typ).unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
 
     assert_eq!(oracle.reports(), vec![]);
 
@@ -223,7 +223,7 @@ fn parse_nested_option() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.parse_type(&typ).unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
 
     assert_eq!(oracle.reports(), vec![]);
 
@@ -255,7 +255,7 @@ fn parse_invalid_option() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.parse_type(&typ);
+    let id = oracle.lower_type(&typ);
     assert_eq!(id, None);
 
     assert_eq!(
@@ -310,7 +310,7 @@ fn parse_simple_record() {
 
     for typ in res.root.type_definitions() {
         let typ = typ.typ().unwrap();
-        let id = oracle.parse_type(&typ).unwrap();
+        let id = oracle.lower_type(&typ).unwrap();
 
         assert_eq!(oracle.reports(), vec![]);
 
@@ -370,7 +370,7 @@ fn parse_empty_record() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.parse_type(&typ).unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
 
     assert_eq!(oracle.reports(), vec![]);
 
@@ -402,7 +402,7 @@ fn parse_invalid_record() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.parse_type(&typ).unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
 
     assert_eq!(
             oracle.reports(),
@@ -443,7 +443,7 @@ fn parse_simple_enum() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.parse_type(&typ).unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
 
     assert_eq!(oracle.reports(), vec![]);
 
@@ -500,7 +500,7 @@ fn parse_empty_enum() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.parse_type(&typ).unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
 
     assert_eq!(oracle.reports(), vec![]);
 
@@ -538,7 +538,7 @@ fn parse_invalid_enum() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.parse_type(&typ).unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
 
     let enum_type = match oracle.types.get(id) {
         Type::Enum(e) => e,
@@ -591,7 +591,7 @@ fn parse_simple_union() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.parse_type(&typ).unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
 
     assert_eq!(oracle.reports(), vec![]);
 
@@ -644,7 +644,7 @@ fn parse_empty_union() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.parse_type(&typ).unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
 
     assert_eq!(oracle.reports(), vec![]);
 
@@ -680,7 +680,7 @@ fn parse_invalid_union() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.parse_type(&typ).unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
 
     assert_eq!(
             oracle.reports(),

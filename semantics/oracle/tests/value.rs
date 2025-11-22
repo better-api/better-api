@@ -18,7 +18,7 @@ fn parse_primitive_integer() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let value = res.root.api_names().next().unwrap().value().unwrap();
-    let id = oracle.parse_value(&value);
+    let id = oracle.lower_value(&value);
 
     assert_eq!(oracle.reports(), vec![]);
     assert_eq!(oracle.values.get(id), Value::Integer(10));
@@ -38,7 +38,7 @@ fn parse_primitive_float() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let value = res.root.api_names().next().unwrap().value().unwrap();
-    let id = oracle.parse_value(&value);
+    let id = oracle.lower_value(&value);
 
     assert_eq!(oracle.reports(), vec![]);
     assert_eq!(oracle.values.get(id), Value::Float(4.20));
@@ -61,12 +61,12 @@ fn parse_primitive_bool() {
     let mut api_names = res.root.api_names();
 
     let value1 = api_names.next().unwrap().value().unwrap();
-    let id1 = oracle.parse_value(&value1);
+    let id1 = oracle.lower_value(&value1);
     assert_eq!(oracle.values.get(id1), Value::Bool(true));
     oracle.source_map.get_bck(&Element::Value(id1));
 
     let value2 = api_names.next().unwrap().value().unwrap();
-    let id2 = oracle.parse_value(&value2);
+    let id2 = oracle.lower_value(&value2);
     assert_eq!(oracle.values.get(id2), Value::Bool(false));
     oracle.source_map.get_bck(&Element::Value(id2));
 
@@ -86,7 +86,7 @@ fn parse_primitive_string() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let value = res.root.api_names().next().unwrap().value().unwrap();
-    let id = oracle.parse_value(&value);
+    let id = oracle.lower_value(&value);
 
     assert_eq!(oracle.reports(), vec![]);
 
@@ -113,7 +113,7 @@ fn parse_primitive_string_with_escapes() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let value = res.root.api_names().next().unwrap().value().unwrap();
-    let id = oracle.parse_value(&value);
+    let id = oracle.lower_value(&value);
 
     assert_eq!(oracle.reports(), vec![]);
     match oracle.values.get(id) {
@@ -139,7 +139,7 @@ fn parse_array() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let value = res.root.api_names().next().unwrap().value().unwrap();
-    let id = oracle.parse_value(&value);
+    let id = oracle.lower_value(&value);
 
     assert_eq!(oracle.reports(), vec![]);
 
@@ -179,7 +179,7 @@ fn parse_empty_array() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let value = res.root.api_names().next().unwrap().value().unwrap();
-    let id = oracle.parse_value(&value);
+    let id = oracle.lower_value(&value);
 
     assert_eq!(oracle.reports(), vec![]);
     match oracle.values.get(id) {
@@ -205,7 +205,7 @@ fn parse_nested_array() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let value = res.root.api_names().next().unwrap().value().unwrap();
-    let id = oracle.parse_value(&value);
+    let id = oracle.lower_value(&value);
 
     assert_eq!(oracle.reports(), vec![]);
 
@@ -259,7 +259,7 @@ fn parse_object_empty() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let value = res.root.api_names().next().unwrap().value().unwrap();
-    let id = oracle.parse_value(&value);
+    let id = oracle.lower_value(&value);
 
     assert_eq!(oracle.reports(), vec![]);
     match oracle.values.get(id) {
@@ -297,7 +297,7 @@ fn parse_object_simple() {
 
     assert_eq!(res.root.api_names().count(), 2);
     for name in res.root.api_names() {
-        let id = oracle.parse_value(&name.value().unwrap());
+        let id = oracle.lower_value(&name.value().unwrap());
 
         assert_eq!(oracle.reports(), vec![]);
         let obj = match oracle.values.get(id) {
@@ -349,7 +349,7 @@ fn parse_object_with_string_keys() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let value = res.root.api_names().next().unwrap().value().unwrap();
-    let id = oracle.parse_value(&value);
+    let id = oracle.lower_value(&value);
 
     assert_eq!(oracle.reports(), vec![]);
     let obj = match oracle.values.get(id) {
@@ -400,7 +400,7 @@ fn parse_object_missing_value() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let value = res.root.api_names().next().unwrap().value().unwrap();
-    let id = oracle.parse_value(&value);
+    let id = oracle.lower_value(&value);
     assert_eq!(oracle.reports(), vec![]);
 
     // Field with missing value should be skipped
@@ -445,7 +445,7 @@ fn parse_object_invalid_field_name() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let value = res.root.api_names().next().unwrap().value().unwrap();
-    let id = oracle.parse_value(&value);
+    let id = oracle.lower_value(&value);
 
     // Should have error for invalid name
     assert_eq!(
@@ -504,7 +504,7 @@ fn parse_object_duplicate_keys() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let value = res.root.api_names().next().unwrap().value().unwrap();
-    let id = oracle.parse_value(&value);
+    let id = oracle.lower_value(&value);
 
     // Should have error for duplicate key
     assert_eq!(
@@ -568,7 +568,7 @@ fn parse_object_nested() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let value = res.root.api_names().next().unwrap().value().unwrap();
-    let id = oracle.parse_value(&value);
+    let id = oracle.lower_value(&value);
 
     assert_eq!(oracle.reports(), vec![]);
 
@@ -644,7 +644,7 @@ fn parse_complex_nested_structure() {
     let mut oracle = Oracle::new_raw(&res.root);
 
     let value = res.root.api_names().next().unwrap().value().unwrap();
-    let id = oracle.parse_value(&value);
+    let id = oracle.lower_value(&value);
     assert_eq!(oracle.reports(), vec![]);
 
     let obj = match oracle.values.get(id) {
