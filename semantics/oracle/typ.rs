@@ -85,20 +85,28 @@ impl<'a> Oracle<'a> {
             return;
         };
 
-        if self.symbol_table.contains_key(&name_id) {
+        if let Some(original) = self.symbol_table.get(&name_id) {
             let name = self
                 .strings
                 .resolve(name_id)
                 .expect("interned string should be resolvable");
             let range = def.syntax().text_range();
 
+            let original_range = self
+                .source_map
+                .get_bck(&Element::Type(*original))
+                .text_range();
+
             self.reports.push(
-                Report::error(format!("name `{name}` is defined multiple times")).add_label(
-                    Label::primary(
+                Report::error(format!("name `{name}` is defined multiple times"))
+                    .add_label(Label::primary(
                         format!("name `{name}` is defined multiple times"),
                         range.into(),
-                    ),
-                ),
+                    ))
+                    .add_label(Label::secondary(
+                        format!("name `{name}` is first defined here"),
+                        original_range.into(),
+                    )),
             );
 
             return;
