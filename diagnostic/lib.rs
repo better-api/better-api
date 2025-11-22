@@ -31,9 +31,19 @@ pub enum Severity {
     Error,
 }
 
+/// Style of the label.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LabelStyle {
+    Primary,
+    Secondary,
+}
+
 /// Label describes a region of code connected to a `Report`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Label {
+    /// Style of the label.
+    pub style: LabelStyle,
+
     /// Message displayed to the user.
     pub message: String,
 
@@ -42,8 +52,22 @@ pub struct Label {
 }
 
 impl Label {
-    pub fn new(message: String, span: Span) -> Self {
-        Self { message, span }
+    /// Creates a new primary label
+    pub fn primary(message: String, span: Span) -> Self {
+        Self {
+            style: LabelStyle::Primary,
+            message,
+            span,
+        }
+    }
+
+    /// Creates a new secondary label
+    pub fn secondary(message: String, span: Span) -> Self {
+        Self {
+            style: LabelStyle::Secondary,
+            message,
+            span,
+        }
     }
 }
 
@@ -60,7 +84,7 @@ pub struct Report {
 
     /// Label connected to the report. This should contain a detailed message
     /// of the report, connected to the location from where the diagnostic report originates.
-    pub label: Option<Label>,
+    pub labels: Vec<Label>,
 
     /// Optional note displayed at the end of the report. Usually it contains a tip or a help
     /// message.
@@ -72,7 +96,7 @@ impl Report {
         Self {
             severity,
             title,
-            label: None,
+            labels: Default::default(),
             note: None,
         }
     }
@@ -85,8 +109,8 @@ impl Report {
         Self::new(Severity::Error, title)
     }
 
-    pub fn with_label(mut self, label: Label) -> Self {
-        self.label = Some(label);
+    pub fn add_label(mut self, label: Label) -> Self {
+        self.labels.push(label);
         self
     }
 

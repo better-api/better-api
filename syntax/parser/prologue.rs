@@ -18,7 +18,7 @@ impl Prologue {
         let default_span = self.default?;
 
         Some(
-            Report::error("unexpected `@default`".to_string()).with_label(Label::new(
+            Report::error("unexpected `@default`".to_string()).add_label(Label::primary(
                 "unexpected `@default`".to_string(),
                 default_span,
             )),
@@ -76,7 +76,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                         // Report error
                         self.reports.push(
                             Report::error("duplicated `@default` is not allowed".to_string())
-                                .with_label(Label::new(
+                                .add_label(Label::primary(
                                     "duplicated `@default`".to_string(),
                                     Span::new(start_pos, self.pos),
                                 )),

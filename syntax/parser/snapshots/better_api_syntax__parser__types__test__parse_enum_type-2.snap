@@ -6,71 +6,76 @@ expression: res.reports
     Report {
         severity: Error,
         title: "unexpected `@default`",
-        label: Some(
+        labels: [
             Label {
+                style: Primary,
                 message: "unexpected `@default`",
                 span: Span {
                     start: 78,
                     end: 107,
                 },
             },
-        ),
+        ],
         note: None,
     },
     Report {
         severity: Error,
         title: "expected `(`, found `string`",
-        label: Some(
+        labels: [
             Label {
+                style: Primary,
                 message: "unexpected token",
                 span: Span {
                     start: 156,
                     end: 162,
                 },
             },
-        ),
+        ],
         note: None,
     },
     Report {
         severity: Error,
         title: "expected `)`, found `{`",
-        label: Some(
+        labels: [
             Label {
+                style: Primary,
                 message: "unexpected token",
                 span: Span {
                     start: 163,
                     end: 164,
                 },
             },
-        ),
+        ],
         note: None,
     },
     Report {
         severity: Error,
         title: "expected new line, found a string",
-        label: Some(
+        labels: [
             Label {
+                style: Primary,
                 message: "unexpected token",
                 span: Span {
                     start: 170,
                     end: 175,
                 },
             },
-        ),
+        ],
         note: None,
     },
     Report {
         severity: Error,
         title: "expected new line, found `}`",
-        label: Some(
+        labels: [
             Label {
+                style: Primary,
                 message: "unexpected token",
                 span: Span {
                     start: 175,
                     end: 176,
                 },
             },
-        ),
+        ],
         note: None,
     },
 ]

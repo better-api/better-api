@@ -229,8 +229,10 @@ fn check_object_fields_unique(
             .text_range();
 
         reports.push(
-            Report::error(format!("repeated object key `{name}`"))
-                .with_label(Label::new("repeated object key".to_string(), range.into())),
+            Report::error(format!("repeated object key `{name}`")).add_label(Label::primary(
+                "repeated object key".to_string(),
+                range.into(),
+            )),
         );
     }
 }

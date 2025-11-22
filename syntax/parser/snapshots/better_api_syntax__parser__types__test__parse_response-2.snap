@@ -1,20 +1,21 @@
 ---
 source: syntax/parser/types.rs
-expression: diagnostics
+expression: res.reports
 ---
 [
     Report {
         severity: Error,
         title: "invalid response field `invalidField`",
-        label: Some(
+        labels: [
             Label {
+                style: Primary,
                 message: "invalid response field",
                 span: Span {
                     start: 260,
                     end: 272,
                 },
             },
-        ),
+        ],
         note: Some(
             "help: valid response fields are `body`, `contentType` and `headers`",
         ),

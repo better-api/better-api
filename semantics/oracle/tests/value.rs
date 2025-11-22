@@ -452,7 +452,7 @@ fn parse_object_invalid_field_name() {
             oracle.reports(),
             vec![
                 Report::error("invalid name".to_string())
-                    .with_label(Label::new("invalid name".to_string(), Span::new(12, 26)))
+                    .add_label(Label::primary("invalid name".to_string(), Span::new(12, 26)))
                     .with_note(
                         "help: name can only contain alphanumeric characters, `_`, `-` and `.`. It also has to start with alphabetic character.".to_string()
                     )
@@ -510,7 +510,7 @@ fn parse_object_duplicate_keys() {
     assert_eq!(
         oracle.reports(),
         vec![
-            Report::error("repeated object key `foo`".to_string()).with_label(Label::new(
+            Report::error("repeated object key `foo`".to_string()).add_label(Label::primary(
                 "repeated object key".to_string(),
                 Span::new(36, 39)
             ))

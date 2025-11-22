@@ -15,7 +15,7 @@ pub fn validate_name(name: &str, range: TextRange) -> Result<(), Report> {
     if is_valid {
         Ok(())
     } else {
-        Err(Report::error("invalid name".to_string()).with_label(Label::new("invalid name".to_string(), range.into())).with_note(
+        Err(Report::error("invalid name".to_string()).add_label(Label::primary("invalid name".to_string(), range.into())).with_note(
                 "help: name can only contain alphanumeric characters, `_`, `-` and `.`. It also has to start with alphabetic character.".to_string(),
             ))
     }
@@ -54,8 +54,8 @@ pub fn parse_string<'a>(token: &'a SyntaxToken, diagnostics: &mut Vec<Report>) -
 
         let Some((end, esc)) = chars.next() else {
             diagnostics.push(
-                Report::error("expected escaped character, got '\"'".to_string()).with_label(
-                    Label::new(
+                Report::error("expected escaped character, got '\"'".to_string()).add_label(
+                    Label::primary(
                         "expected escaped character".to_string(),
                         Span::new(token_start + idx, token_start + idx + 1),
                     ),
@@ -71,8 +71,8 @@ pub fn parse_string<'a>(token: &'a SyntaxToken, diagnostics: &mut Vec<Report>) -
             '\\' => res.push('\\'),
             _ => {
                 diagnostics.push(
-                    Report::error(format!("got invalid escape character `{esc}`")).with_label(
-                        Label::new(
+                    Report::error(format!("got invalid escape character `{esc}`")).add_label(
+                        Label::primary(
                             "invalid escape character".to_string(),
                             Span::new(token_start + idx, token_start + end + esc.len_utf8()),
                         ),
@@ -109,7 +109,7 @@ mod test {
     fn invalid_name() {
         let expected = Err(
                 Report::error("invalid name".to_string())
-                .with_label(Label::new("invalid name".to_string(), Span::new(0, 1)))
+                .add_label(Label::primary("invalid name".to_string(), Span::new(0, 1)))
                     .with_note("help: name can only contain alphanumeric characters, `_`, `-` and `.`. It also has to start with alphabetic character.".to_string()));
 
         assert_eq!(
@@ -161,8 +161,8 @@ mod test {
         assert_eq!(
             diags,
             vec![
-                Report::error("got invalid escape character `i`".to_string()).with_label(
-                    Label::new("invalid escape character".to_string(), Span::new(12, 14))
+                Report::error("got invalid escape character `i`".to_string()).add_label(
+                    Label::primary("invalid escape character".to_string(), Span::new(12, 14))
                 )
             ]
         );

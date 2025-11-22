@@ -6,57 +6,61 @@ expression: res.reports
     Report {
         severity: Error,
         title: "expected type, found `]`",
-        label: Some(
+        labels: [
             Label {
+                style: Primary,
                 message: "expected type",
                 span: Span {
                     start: 72,
                     end: 73,
                 },
             },
-        ),
+        ],
         note: None,
     },
     Report {
         severity: Error,
         title: "expected type, found new line",
-        label: Some(
+        labels: [
             Label {
+                style: Primary,
                 message: "expected type",
                 span: Span {
                     start: 92,
                     end: 93,
                 },
             },
-        ),
+        ],
         note: None,
     },
     Report {
         severity: Error,
         title: "expected `]`, found new line",
-        label: Some(
+        labels: [
             Label {
+                style: Primary,
                 message: "unexpected token",
                 span: Span {
                     start: 92,
                     end: 93,
                 },
             },
-        ),
+        ],
         note: None,
     },
     Report {
         severity: Error,
         title: "unexpected token `]`",
-        label: Some(
+        labels: [
             Label {
+                style: Primary,
                 message: "unexpected token",
                 span: Span {
                     start: 94,
                     end: 95,
                 },
             },
-        ),
+        ],
         note: None,
     },
 ]

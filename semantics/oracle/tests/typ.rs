@@ -169,8 +169,8 @@ fn parse_invalid_array() {
     assert_eq!(
             oracle.reports(),
             vec![
-                Report::error("inline union not allowed in array".to_string()).with_label(
-                    Label::new("inline union type not allowed".to_string(), Span::new(11, 28))
+                Report::error("inline union not allowed in array".to_string()).add_label(
+                    Label::primary("inline union type not allowed".to_string(), Span::new(11, 28))
                 ).with_note("help: define a named type first, then reference it\n      example: `type MyUnion: union (\"discriminator\") { ... }`".to_string())
             ]
         );
@@ -262,7 +262,7 @@ fn parse_invalid_option() {
             oracle.reports(),
             vec![
                 Report::error("inline record not allowed in option".to_string())
-                    .with_label(Label::new(
+                    .add_label(Label::primary(
                         "inline record type not allowed".to_string(),
                         Span::new(10, 16)
                     ))
@@ -407,8 +407,8 @@ fn parse_invalid_record() {
     assert_eq!(
             oracle.reports(),
             vec![
-                Report::error("inline record not allowed in record field".to_string()).with_label(
-                    Label::new("inline record type not allowed".to_string(), Span::new(29, 35))
+                Report::error("inline record not allowed in record field".to_string()).add_label(
+                    Label::primary("inline record type not allowed".to_string(), Span::new(29, 35))
                 ).with_note("help: define a named type first, then reference it\n      example: `type MyRecord: rec { ... }`".to_string())
             ]
         );
@@ -550,7 +550,7 @@ fn parse_invalid_enum() {
         oracle.reports(),
         vec![
             Report::error("invalid enum type `array`".to_string())
-                .with_label(Label::new(
+                .add_label(Label::primary(
                     "invalid enum type `array`".to_string(),
                     Span::new(16, 21)
                 ))
@@ -685,9 +685,9 @@ fn parse_invalid_union() {
     assert_eq!(
             oracle.reports(),
             vec![
-                Report::error("union discriminator must be a string, got integer".to_string()).with_label(Label::new("invalid union discriminator".to_string(), Span::new(17, 19))).with_note("help: union discrminator must be a string".to_string()),
-                Report::error("inline record not allowed in union field".to_string()).with_label(
-                    Label::new("inline record type not allowed".to_string(), Span::new(36, 42))
+                Report::error("union discriminator must be a string, got integer".to_string()).add_label(Label::primary("invalid union discriminator".to_string(), Span::new(17, 19))).with_note("help: union discrminator must be a string".to_string()),
+                Report::error("inline record not allowed in union field".to_string()).add_label(
+                    Label::primary("inline record type not allowed".to_string(), Span::new(36, 42))
                 ).with_note("help: define a named type first, then reference it\n      example: `type MyRecord: rec { ... }`".to_string())
             ]
         );

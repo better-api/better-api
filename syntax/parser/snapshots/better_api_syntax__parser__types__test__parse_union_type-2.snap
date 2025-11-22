@@ -6,57 +6,61 @@ expression: res.reports
     Report {
         severity: Error,
         title: "unexpected `@default`",
-        label: Some(
+        labels: [
             Label {
+                style: Primary,
                 message: "unexpected `@default`",
                 span: Span {
                     start: 67,
                     end: 93,
                 },
             },
-        ),
+        ],
         note: None,
     },
     Report {
         severity: Error,
         title: "expected `(`, found a string",
-        label: Some(
+        labels: [
             Label {
+                style: Primary,
                 message: "unexpected token",
                 span: Span {
                     start: 164,
                     end: 170,
                 },
             },
-        ),
+        ],
         note: None,
     },
     Report {
         severity: Error,
         title: "expected `)`, found `{`",
-        label: Some(
+        labels: [
             Label {
+                style: Primary,
                 message: "unexpected token",
                 span: Span {
                     start: 171,
                     end: 172,
                 },
             },
-        ),
+        ],
         note: None,
     },
     Report {
         severity: Error,
         title: "expected new line, found `}`",
-        label: Some(
+        labels: [
             Label {
+                style: Primary,
                 message: "unexpected token",
                 span: Span {
                     start: 180,
                     end: 181,
                 },
             },
-        ),
+        ],
         note: None,
     },
 ]

@@ -91,7 +91,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 self.peek()
                     .map_or_else(|| "end of file".to_string(), |k| k.to_string())
             ))
-            .with_label(Label::new(
+            .add_label(Label::primary(
                 "unexpected token".to_string(),
                 Span::new(
                     self.pos,
@@ -208,7 +208,7 @@ mod test {
         assert_eq!(
             res.reports,
             vec![
-                Report::error("unexpected `@default`".to_string()).with_label(Label::new(
+                Report::error("unexpected `@default`".to_string()).add_label(Label::primary(
                     "unexpected `@default`".to_string(),
                     Span::new(153, 170)
                 ))

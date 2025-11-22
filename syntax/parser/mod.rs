@@ -102,7 +102,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                         let span = self.parse_error(|_| false);
                         self.reports.push(
                             Report::error(error_msg)
-                                .with_label(Label::new("invalid property".to_string(), span)),
+                                .add_label(Label::primary("invalid property".to_string(), span)),
                         );
                     }
 
@@ -125,7 +125,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 let span = self.parse_error(|_| false);
                 self.reports.push(
                     Report::error(format!("unexpected token {token}"))
-                        .with_label(Label::new("unexpected token".to_string(), span)),
+                        .add_label(Label::primary("unexpected token".to_string(), span)),
                 );
             }
 

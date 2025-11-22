@@ -6,29 +6,31 @@ expression: res.reports
     Report {
         severity: Error,
         title: "expected field name, found end of file",
-        label: Some(
+        labels: [
             Label {
+                style: Primary,
                 message: "expected field name",
                 span: Span {
                     start: 308,
                     end: 309,
                 },
             },
-        ),
+        ],
         note: None,
     },
     Report {
         severity: Error,
         title: "expected new line, found end of file",
-        label: Some(
+        labels: [
             Label {
+                style: Primary,
                 message: "unexpected token",
                 span: Span {
                     start: 308,
                     end: 309,
                 },
             },
-        ),
+        ],
         note: None,
     },
 ]

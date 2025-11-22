@@ -23,13 +23,13 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 let span = self.parse_error(&is_recovery);
                 self.reports.push(
                     Report::error(format!("expected value, found {kind}"))
-                        .with_label(Label::new("expected value".to_string(), span)),
+                        .add_label(Label::primary("expected value".to_string(), span)),
                 );
             }
             None => {
                 self.reports.push(
-                    Report::error("expected value, found end of file".to_string()).with_label(
-                        Label::new(
+                    Report::error("expected value, found end of file".to_string()).add_label(
+                        Label::primary(
                             "expected value".to_string(),
                             Span::new(self.pos, self.pos + 1),
                         ),
@@ -81,7 +81,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                         self.peek()
                             .map_or_else(|| "end of file".to_string(), |k| k.to_string())
                     ))
-                    .with_label(Label::new(
+                    .add_label(Label::primary(
                         "unexpected token".to_string(),
                         Span::new(
                             self.pos,
@@ -109,7 +109,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 None => {
                     self.reports.push(
                         Report::error("expected array member, found end of file".to_string())
-                            .with_label(Label::new(
+                            .add_label(Label::primary(
                                 "expected array member".to_string(),
                                 Span::new(self.pos, self.pos + 1),
                             )),
@@ -160,7 +160,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                     let span = self.parse_error(|token| token == TOKEN_CURLY_RIGHT);
                     self.reports.push(
                         Report::error(format!("expected field name, found {kind}"))
-                            .with_label(Label::new("expected field name".to_string(), span))
+                            .add_label(Label::primary("expected field name".to_string(), span))
                             .with_note(
                                 "help: field name must be an identifier or string".to_string(),
                             ),
@@ -169,7 +169,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 None => {
                     self.reports.push(
                         Report::error("expected field name, found end of file".to_string())
-                            .with_label(Label::new(
+                            .add_label(Label::primary(
                                 "expected field name".to_string(),
                                 Span::new(self.pos, self.pos + 1),
                             ))

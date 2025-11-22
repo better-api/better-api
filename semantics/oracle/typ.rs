@@ -93,8 +93,8 @@ impl<'a> Oracle<'a> {
             let range = def.syntax().text_range();
 
             self.reports.push(
-                Report::error(format!("name `{name}` is defined multiple times")).with_label(
-                    Label::new(
+                Report::error(format!("name `{name}` is defined multiple times")).add_label(
+                    Label::primary(
                         format!("name `{name}` is defined multiple times"),
                         range.into(),
                     ),
@@ -243,7 +243,7 @@ impl<'a> Oracle<'a> {
                 val => {
                     self.reports.push(
                         Report::error(format!("union discriminator must be a string, got {val}"))
-                            .with_label(Label::new(
+                            .add_label(Label::primary(
                                 "invalid union discriminator".to_string(),
                                 range.into(),
                             ))
@@ -343,7 +343,10 @@ impl<'a> Oracle<'a> {
 
                 self.reports.push(
                     Report::error(format!("invalid enum type {typ}"))
-                        .with_label(Label::new(format!("invalid enum type {typ}"), range.into()))
+                        .add_label(Label::primary(
+                            format!("invalid enum type {typ}"),
+                            range.into(),
+                        ))
                         .with_note(
                             "help: enum must have a type `i32`, `i64`, `u32`, `u64`, or `string`"
                                 .to_string(),
@@ -373,7 +376,7 @@ impl<'a> Oracle<'a> {
 
                 self.reports.push(
                     Report::error(format!("invalid response content type {val}"))
-                        .with_label(Label::new(
+                        .add_label(Label::primary(
                             format!("invalid response content type {val}"),
                             range.into(),
                         ))
@@ -503,7 +506,7 @@ fn new_invalid_inner_type(inner: InvalidInnerContext, outer: &str, node: &impl A
     };
 
     Report::error(format!("inline {inner} not allowed in {outer}"))
-        .with_label(Label::new(
+        .add_label(Label::primary(
             format!("inline {inner} type not allowed"),
             range.into(),
         ))

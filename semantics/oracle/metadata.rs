@@ -60,8 +60,9 @@ impl<'a> Oracle<'a> {
         if !matches!(value, Value::String(_)) {
             let range = value_node.syntax().text_range();
             self.reports.push(
-                Report::error(format!("`{directive}` must be a string, got {value}"))
-                    .with_label(Label::new("expected a string".to_string(), range.into())),
+                Report::error(format!("`{directive}` must be a string, got {value}")).add_label(
+                    Label::primary("expected a string".to_string(), range.into()),
+                ),
             );
         }
     }
@@ -70,7 +71,7 @@ impl<'a> Oracle<'a> {
     fn emit_repeated_report(&mut self, directive: &str, range: TextRange) {
         self.reports.push(
             Report::error(format!("repeated `{directive}` directive"))
-                .with_label(Label::new(
+                .add_label(Label::primary(
                     format!("repeated `{directive}` directive"),
                     range.into(),
                 ))

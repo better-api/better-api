@@ -36,13 +36,13 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
                 self.reports.push(
                     Report::error(format!("expected endpoint path, found {kind}"))
-                        .with_label(Label::new("expected endpoint path".to_string(), span)),
+                        .add_label(Label::primary("expected endpoint path".to_string(), span)),
                 );
             }
             None => {
                 self.reports.push(
                     Report::error("expected endpoint path, found end of file".to_string())
-                        .with_label(Label::new(
+                        .add_label(Label::primary(
                             "expected endpoint path".to_string(),
                             Span::new(self.pos, self.pos + 1),
                         )),
@@ -85,13 +85,13 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
                 self.reports.push(
                     Report::error(format!("expected route path, found {kind}"))
-                        .with_label(Label::new("expected route path".to_string(), span)),
+                        .add_label(Label::primary("expected route path".to_string(), span)),
                 );
             }
             None => {
                 self.reports.push(
-                    Report::error("expected route path, found end of file".to_string()).with_label(
-                        Label::new(
+                    Report::error("expected route path, found end of file".to_string()).add_label(
+                        Label::primary(
                             "expected route path".to_string(),
                             Span::new(self.pos, self.pos + 1),
                         ),
@@ -186,8 +186,10 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
                         let span = self.parse_error(|token| token == TOKEN_CURLY_RIGHT);
                         self.reports.push(
-                            Report::error(report_msg)
-                                .with_label(Label::new("invalid endpoint field".to_string(), span)),
+                            Report::error(report_msg).add_label(Label::primary(
+                                "invalid endpoint field".to_string(),
+                                span,
+                            )),
                         );
                     }
                     None => unreachable!(),
@@ -200,13 +202,13 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
                     self.reports.push(
                         Report::error(format!("expected field name, found {kind}"))
-                            .with_label(Label::new("expected field name".to_string(), span)),
+                            .add_label(Label::primary("expected field name".to_string(), span)),
                     );
                 }
                 None => {
                     self.reports.push(
                         Report::error("expected field name, found end of file".to_string())
-                            .with_label(Label::new(
+                            .add_label(Label::primary(
                                 "expected field name".to_string(),
                                 Span::new(self.pos, self.pos + 1),
                             )),
@@ -247,7 +249,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
                     self.reports.push(
                         Report::error(format!("expected endpoint or response, found {kind}"))
-                            .with_label(Label::new(
+                            .add_label(Label::primary(
                                 "expected endpoint or response".to_string(),
                                 span,
                             ))
@@ -261,7 +263,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                         Report::error(
                             "expected endpoint or resopnse, found end of file".to_string(),
                         )
-                        .with_label(Label::new(
+                        .add_label(Label::primary(
                             "expected endpoint or resopnse".to_string(),
                             Span::new(self.pos, self.pos + 1),
                         ))
@@ -294,13 +296,13 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
                 self.reports.push(
                     Report::error(format!("expected response status, got {token}"))
-                        .with_label(Label::new("expected response status".to_string(), span)),
+                        .add_label(Label::primary("expected response status".to_string(), span)),
                 );
             }
             None => {
                 self.reports.push(
                     Report::error("expected response status, got end of file".to_string())
-                        .with_label(Label::new(
+                        .add_label(Label::primary(
                             "expected response status".to_string(),
                             Span::new(self.pos, self.pos + 1),
                         )),

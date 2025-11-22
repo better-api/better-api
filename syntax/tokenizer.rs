@@ -84,8 +84,8 @@ impl<'s, 'd> Tokenizer<'s, 'd> {
         {
             if *ch == '\n' {
                 self.reports.push(
-                    Report::error("missing string ending quotes '\"'".to_string()).with_label(
-                        Label::new(
+                    Report::error("missing string ending quotes '\"'".to_string()).add_label(
+                        Label::primary(
                             "expected '\"' before new line".to_string(),
                             Span::new(self.pos, self.pos + ch.len_utf8()),
                         ),
@@ -114,8 +114,8 @@ impl<'s, 'd> Tokenizer<'s, 'd> {
         match ch {
             None => {
                 self.reports.push(
-                    Report::error("missing string ending quotes '\"'".to_string()).with_label(
-                        Label::new(
+                    Report::error("missing string ending quotes '\"'".to_string()).add_label(
+                        Label::primary(
                             "expected '\"' before EOF".to_string(),
                             // We assume that the last character is one byte width. If this is not true
                             // we might have a strange report, but for now this is fine.
@@ -155,7 +155,7 @@ impl<'s, 'd> Tokenizer<'s, 'd> {
         if last_ch == "." {
             self.reports.push(
                 Report::error(format!("invalid float `{}`", self.current_value()))
-                    .with_label(Label::new(
+                    .add_label(Label::primary(
                         "invalid float".to_string(),
                         Span::new(self.start, self.pos),
                     ))
@@ -172,8 +172,11 @@ impl<'s, 'd> Tokenizer<'s, 'd> {
             1 => self.emit(TOKEN_FLOAT),
             _ => {
                 self.reports.push(
-                    Report::error(format!("invalid float `{}`", self.current_value())).with_label(
-                        Label::new("invalid float".to_string(), Span::new(self.start, self.pos)),
+                    Report::error(format!("invalid float `{}`", self.current_value())).add_label(
+                        Label::primary(
+                            "invalid float".to_string(),
+                            Span::new(self.start, self.pos),
+                        ),
                     ),
                 );
 
@@ -285,8 +288,8 @@ impl<'s, 'd> Iterator for Tokenizer<'s, 'd> {
 
                     _ => {
                         self.reports.push(
-                            Report::error(format!("invalid decorator `{value}`")).with_label(
-                                Label::new(
+                            Report::error(format!("invalid decorator `{value}`")).add_label(
+                                Label::primary(
                                     "invalid decorator".to_string(),
                                     Span::new(self.start, self.pos),
                                 ),
@@ -308,7 +311,7 @@ impl<'s, 'd> Iterator for Tokenizer<'s, 'd> {
                 } else {
                     self.reports.push(
                         Report::error("invalid number".to_string())
-                            .with_label(Label::new(
+                            .add_label(Label::primary(
                                 "invalid number".to_string(),
                                 Span::new(self.start, self.pos),
                             ))
@@ -327,8 +330,11 @@ impl<'s, 'd> Iterator for Tokenizer<'s, 'd> {
 
             _ => {
                 self.reports.push(
-                    Report::error(format!("unknown token `{}`", self.current_value())).with_label(
-                        Label::new("unknown token".to_string(), Span::new(self.start, self.pos)),
+                    Report::error(format!("unknown token `{}`", self.current_value())).add_label(
+                        Label::primary(
+                            "unknown token".to_string(),
+                            Span::new(self.start, self.pos),
+                        ),
                     ),
                 );
                 self.emit(TOKEN_ERROR)
@@ -416,7 +422,7 @@ mod test {
         assert_eq!(
             diagnostics,
             vec![
-                Report::error("invalid decorator `@error`".to_string()).with_label(Label::new(
+                Report::error("invalid decorator `@error`".to_string()).add_label(Label::primary(
                     "invalid decorator".to_string(),
                     Span::new(9, 15)
                 ))
@@ -457,11 +463,11 @@ mod test {
         assert_eq!(
             diagnostics,
             vec![
-                Report::error("missing string ending quotes '\"'".to_string()).with_label(
-                    Label::new("expected '\"' before new line".to_string(), Span::new(4, 5))
+                Report::error("missing string ending quotes '\"'".to_string()).add_label(
+                    Label::primary("expected '\"' before new line".to_string(), Span::new(4, 5))
                 ),
-                Report::error("missing string ending quotes '\"'".to_string()).with_label(
-                    Label::new("expected '\"' before EOF".to_string(), Span::new(8, 9))
+                Report::error("missing string ending quotes '\"'".to_string()).add_label(
+                    Label::primary("expected '\"' before EOF".to_string(), Span::new(8, 9))
                 ),
             ]
         );
@@ -490,8 +496,8 @@ mod test {
         assert_eq!(
             diagnostics,
             vec![
-                Report::error("missing string ending quotes '\"'".to_string()).with_label(
-                    Label::new("expected '\"' before EOF".to_string(), Span::new(4, 5,))
+                Report::error("missing string ending quotes '\"'".to_string()).add_label(
+                    Label::primary("expected '\"' before EOF".to_string(), Span::new(4, 5,))
                 )
             ]
         );

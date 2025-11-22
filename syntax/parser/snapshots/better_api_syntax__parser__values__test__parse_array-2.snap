@@ -6,15 +6,16 @@ expression: res.reports
     Report {
         severity: Error,
         title: "expected `,` or `]`, found an integer",
-        label: Some(
+        labels: [
             Label {
+                style: Primary,
                 message: "unexpected token",
                 span: Span {
                     start: 164,
                     end: 166,
                 },
             },
-        ),
+        ],
         note: Some(
             "help: array values must be separated with `,`",
         ),
@@ -22,15 +23,16 @@ expression: res.reports
     Report {
         severity: Error,
         title: "expected `,` or `]`, found a string",
-        label: Some(
+        labels: [
             Label {
+                style: Primary,
                 message: "unexpected token",
                 span: Span {
                     start: 171,
                     end: 182,
                 },
             },
-        ),
+        ],
         note: Some(
             "help: array values must be separated with `,`",
         ),
@@ -38,29 +40,31 @@ expression: res.reports
     Report {
         severity: Error,
         title: "expected `,` or `]`, found end of file",
-        label: Some(
+        labels: [
             Label {
+                style: Primary,
                 message: "unexpected token",
                 span: Span {
                     start: 205,
                     end: 206,
                 },
             },
-        ),
+        ],
         note: None,
     },
     Report {
         severity: Error,
         title: "expected new line, found end of file",
-        label: Some(
+        labels: [
             Label {
+                style: Primary,
                 message: "unexpected token",
                 span: Span {
                     start: 205,
                     end: 206,
                 },
             },
-        ),
+        ],
         note: None,
     },
 ]
