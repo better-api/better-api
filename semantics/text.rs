@@ -3,7 +3,34 @@
 use std::borrow::Cow;
 
 use better_api_diagnostic::{Label, Report, Span};
-use better_api_syntax::{Kind, SyntaxToken, TextRange};
+use better_api_syntax::{Kind, SyntaxToken, TextRange, ast};
+use string_interner::DefaultStringInterner;
+
+use crate::StringId;
+
+/// Lowers name by parsing, validating and interning it.
+///
+/// Returns interned string id of the name if it's valid.
+pub fn lower_name(
+    name: &ast::Name,
+    strings: &mut DefaultStringInterner,
+    reports: &mut Vec<Report>,
+) -> Option<StringId> {
+    let token = name.token();
+
+    let name_str: Cow<_> = match &token {
+        ast::NameToken::Identifier(ident) => ident.text().into(),
+        ast::NameToken::String(string) => parse_string(string, reports),
+    };
+
+    if let Err(report) = validate_name(&name_str, token.text_range()) {
+        reports.push(report);
+        return None;
+    }
+
+    let name_id = strings.get_or_intern(name_str);
+    Some(name_id)
+}
 
 /// Validates if given string is a valid name.
 pub fn validate_name(name: &str, range: TextRange) -> Result<(), Report> {

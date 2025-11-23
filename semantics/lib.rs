@@ -1,10 +1,9 @@
+mod source_map;
 mod text;
 
 pub mod oracle;
 pub mod typ;
 pub mod value;
-
-mod source_map;
 
 /// Re-export for simpler use case.
 pub use oracle::Oracle;

@@ -171,7 +171,10 @@ impl<'a> Oracle<'a> {
             .iter()
             .enumerate()
             .map(|(idx, id)| {
-                let def = self.source_map.get_type_definition(*id);
+                let def = self
+                    .source_map
+                    .get_type_definition(*id)
+                    .expect("resolved symbol name should be a valid type definition");
                 let range = def
                     .name()
                     .expect("valid type definition should have a name")

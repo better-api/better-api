@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast;
 use better_api_syntax::ast::AstNode;
@@ -8,7 +6,7 @@ use string_interner::DefaultStringInterner;
 use crate::StringId;
 use crate::oracle::value::insert_array_values;
 use crate::source_map::SourceMap;
-use crate::text::{parse_string, validate_name};
+use crate::text::lower_name;
 use crate::typ::{FieldBuilder, OptionArrayBuilder, PrimitiveType, Type, TypeId};
 use crate::value::{Value, ValueId};
 
@@ -78,7 +76,10 @@ impl<'a> Oracle<'a> {
 
     /// Lowers type definition node.
     fn lower_type_def(&mut self, def: &ast::TypeDefinition) {
-        let Some(name_id) = def.name().and_then(|n| self.lower_name(&n)) else {
+        let Some(name_id) = def
+            .name()
+            .and_then(|n| lower_name(&n, &mut self.strings, &mut self.reports))
+        else {
             return;
         };
 
@@ -102,7 +103,10 @@ impl<'a> Oracle<'a> {
 
             // If symbol table contains the name already, we should also have a valid type def
             // node, so expects should be fine.
-            let original_def = self.source_map.get_type_definition(name_id);
+            let original_def = self
+                .source_map
+                .get_type_definition(name_id)
+                .expect("original name should be a valid type definition");
             let original_range = original_def
                 .name()
                 .expect("name of original type def should exist")
@@ -291,7 +295,9 @@ impl<'a> Oracle<'a> {
             .filter_map(|f| {
                 f.typ()?;
 
-                let name_id = f.name().and_then(|n| self.lower_name(&n))?;
+                let name_id = f
+                    .name()
+                    .and_then(|n| lower_name(&n, &mut self.strings, &mut self.reports))?;
 
                 let default = if parse_default {
                     f.prologue()
@@ -316,26 +322,6 @@ impl<'a> Oracle<'a> {
         // TODO: Check fields are unique in the place where type validation happens
 
         fields
-    }
-
-    /// Lowers name by parsing, validating and interning it.
-    ///
-    /// Returns interned string id of the name if it's valid.
-    fn lower_name(&mut self, name: &ast::Name) -> Option<StringId> {
-        let token = name.token();
-
-        let name_str: Cow<_> = match &token {
-            ast::NameToken::Identifier(ident) => ident.text().into(),
-            ast::NameToken::String(string) => parse_string(string, &mut self.reports),
-        };
-
-        if let Err(report) = validate_name(&name_str, token.text_range()) {
-            self.reports.push(report);
-            return None;
-        }
-
-        let name_id = self.strings.get_or_intern(name_str);
-        Some(name_id)
     }
 
     /// Validates type of the enum (not enum itself).

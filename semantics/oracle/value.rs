@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast;
 use better_api_syntax::ast::AstNode;
@@ -7,7 +5,7 @@ use string_interner::DefaultStringInterner;
 
 use crate::StringId;
 use crate::source_map::SourceMap;
-use crate::text::{parse_string, validate_name};
+use crate::text::{lower_name, parse_string};
 use crate::value::{ArrayBuilder, ObjectBuilder, PrimitiveValue, ValueId};
 
 use super::Oracle;
@@ -108,22 +106,8 @@ fn parse_object_fields(
         .filter_map(|f| {
             f.value()?;
 
-            let name = f.name().map(|n| n.token())?;
-            let name_str: Cow<_> = match &name {
-                ast::NameToken::Identifier(ident) => ident.text().into(),
-                ast::NameToken::String(string) => parse_string(string, reports),
-            };
-
-            if let Err(report) = validate_name(&name_str, name.text_range()) {
-                reports.push(report);
-                return None;
-            }
-
-            let name_id = strings.get_or_intern(name_str);
-            Some(InternedField {
-                name: name_id,
-                field: f,
-            })
+            let name = f.name().and_then(|n| lower_name(&n, strings, reports))?;
+            Some(InternedField { name, field: f })
         })
         .collect();
 

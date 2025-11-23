@@ -80,14 +80,17 @@ impl<'a> SourceMap<'a> {
     }
 
     /// Get type definition node.
-    pub fn get_type_definition(&self, name: StringId) -> ast::TypeDefinition {
-        let ptr = self
-            .type_definitions
-            .get(&name)
-            .expect("source map for type definitions should be constructed correctly");
+    ///
+    /// This getter returns an Option, because not all strings are names of defined types.
+    /// Some are names of fields, and some are values. This way it's the caller's responsibility
+    /// to make sure it's passing in a valid type name.
+    pub fn get_type_definition(&self, name: StringId) -> Option<ast::TypeDefinition> {
+        let ptr = self.type_definitions.get(&name)?;
         let node = ptr.to_node(self.root.syntax());
-        ast::TypeDefinition::cast(node)
-            .expect("source map for type definition should point to ast::Value")
+        Some(
+            ast::TypeDefinition::cast(node)
+                .expect("source map for type definition should point to ast::Value"),
+        )
     }
 
     /// Get semantic element for specified syntax node.
