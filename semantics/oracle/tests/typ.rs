@@ -2,7 +2,7 @@ use better_api_diagnostic::{Label, Report, Span};
 use better_api_syntax::{parse, tokenize};
 use indoc::indoc;
 
-use crate::{Element, Oracle, typ::Type, value::Value};
+use crate::{Oracle, typ::Type, value::Value};
 
 #[test]
 fn parse_primitives() {
@@ -35,9 +35,7 @@ fn parse_primitives() {
         assert_eq!(oracle.reports(), vec![]);
         assert_eq!(oracle.types.get(id), expected);
 
-        oracle.source_map.get_bck(&Element::Type(id));
-        assert_eq!(oracle.source_map.fwd.len(), 1);
-        assert_eq!(oracle.source_map.bck.len(), 1);
+        oracle.source_map.get_type(id);
     }
 }
 
@@ -60,9 +58,7 @@ fn parse_primitive_reference() {
     assert_eq!(oracle.reports(), vec![]);
     assert_eq!(oracle.types.get(id), Type::Reference(name));
 
-    oracle.source_map.get_bck(&Element::Type(id));
-    assert_eq!(oracle.source_map.fwd.len(), 1);
-    assert_eq!(oracle.source_map.bck.len(), 1);
+    oracle.source_map.get_type(id);
 }
 
 #[test]
@@ -88,10 +84,8 @@ fn parse_simple_array() {
     };
     assert_eq!(arr.typ(), Type::I32);
 
-    oracle.source_map.get_bck(&Element::Type(id));
-    oracle.source_map.get_bck(&Element::Type(arr.id));
-    assert_eq!(oracle.source_map.fwd.len(), 2);
-    assert_eq!(oracle.source_map.bck.len(), 2);
+    oracle.source_map.get_type(id);
+    oracle.source_map.get_type(arr.id);
 }
 
 #[test]
@@ -121,11 +115,9 @@ fn parse_nested_array() {
     };
     assert_eq!(arr_inner.typ(), Type::I32);
 
-    oracle.source_map.get_bck(&Element::Type(id));
-    oracle.source_map.get_bck(&Element::Type(arr.id));
-    oracle.source_map.get_bck(&Element::Type(arr_inner.id));
-    assert_eq!(oracle.source_map.fwd.len(), 3);
-    assert_eq!(oracle.source_map.bck.len(), 3);
+    oracle.source_map.get_type(id);
+    oracle.source_map.get_type(arr.id);
+    oracle.source_map.get_type(arr_inner.id);
 }
 
 #[test]
@@ -145,9 +137,6 @@ fn parse_empty_array() {
     assert_eq!(id, None);
 
     assert_eq!(oracle.reports(), vec![]);
-
-    assert_eq!(oracle.source_map.fwd.len(), 0);
-    assert_eq!(oracle.source_map.bck.len(), 0);
 }
 
 #[test]
@@ -174,9 +163,6 @@ fn parse_invalid_array() {
                 ).with_note("help: define a named type first, then reference it\n      example: `type MyUnion: union (\"discriminator\") { ... }`".to_string())
             ]
         );
-
-    assert_eq!(oracle.source_map.fwd.len(), 0);
-    assert_eq!(oracle.source_map.bck.len(), 0);
 }
 
 #[test]
@@ -202,10 +188,8 @@ fn parse_simple_option() {
     };
     assert_eq!(opt.typ(), Type::I32);
 
-    oracle.source_map.get_bck(&Element::Type(id));
-    oracle.source_map.get_bck(&Element::Type(opt.id));
-    assert_eq!(oracle.source_map.fwd.len(), 2);
-    assert_eq!(oracle.source_map.bck.len(), 2);
+    oracle.source_map.get_type(id);
+    oracle.source_map.get_type(opt.id);
 }
 
 #[test]
@@ -233,10 +217,8 @@ fn parse_nested_option() {
     };
     assert_eq!(opt.typ(), Type::I32);
 
-    oracle.source_map.get_bck(&Element::Type(id));
-    oracle.source_map.get_bck(&Element::Type(opt.id));
-    assert_eq!(oracle.source_map.fwd.len(), 2);
-    assert_eq!(oracle.source_map.bck.len(), 2);
+    oracle.source_map.get_type(id);
+    oracle.source_map.get_type(opt.id);
 }
 
 #[test]
@@ -272,9 +254,6 @@ fn parse_invalid_option() {
                     )
             ]
         );
-
-    assert_eq!(oracle.source_map.fwd.len(), 0);
-    assert_eq!(oracle.source_map.bck.len(), 0);
 }
 
 #[test]
@@ -319,7 +298,7 @@ fn parse_simple_record() {
             Type::Record(rec) => rec,
             _ => panic!(),
         };
-        oracle.source_map.get_bck(&Element::Type(id));
+        oracle.source_map.get_type(id);
 
         let fields: Vec<_> = rec.collect();
 
@@ -339,22 +318,14 @@ fn parse_simple_record() {
 
         // Check default values are in source map
         for default_id in fields.iter().filter_map(|field| field.default) {
-            oracle.source_map.get_bck(&Element::Value(default_id));
+            oracle.source_map.get_value(default_id);
         }
 
         // Check fields and field types are in source map
         for field in &fields {
-            oracle.source_map.get_bck(&Element::TypeField(field.id));
-            oracle
-                .source_map
-                .get_bck(&Element::Type(field.id.type_id()));
+            oracle.source_map.get_type(field.id.type_id());
         }
     }
-
-    // Check source map size
-    // Times two, since we have two of the same type
-    assert_eq!(oracle.source_map.fwd.len(), 9 * 2);
-    assert_eq!(oracle.source_map.bck.len(), 9 * 2);
 }
 
 #[test]
@@ -378,13 +349,9 @@ fn parse_empty_record() {
         Type::Record(rec) => rec,
         _ => panic!(),
     };
-    oracle.source_map.get_bck(&Element::Type(id));
+    oracle.source_map.get_type(id);
 
     assert_eq!(rec.count(), 0);
-
-    // Check source map
-    assert_eq!(oracle.source_map.fwd.len(), 1);
-    assert_eq!(oracle.source_map.bck.len(), 1);
 }
 
 #[test]
@@ -417,13 +384,9 @@ fn parse_invalid_record() {
         Type::Record(rec) => rec,
         _ => panic!(),
     };
-    oracle.source_map.get_bck(&Element::Type(id));
+    oracle.source_map.get_type(id);
 
     assert_eq!(rec.count(), 0);
-
-    // Check source map
-    assert_eq!(oracle.source_map.fwd.len(), 1);
-    assert_eq!(oracle.source_map.bck.len(), 1);
 }
 
 #[test]
@@ -452,16 +415,14 @@ fn parse_simple_enum() {
         Type::Enum(e) => e,
         _ => panic!(),
     };
-    oracle.source_map.get_bck(&Element::Type(id));
+    oracle.source_map.get_type(id);
 
     // Check enum type is i32
     let enum_type_inner = enum_type.typ.unwrap();
     assert_eq!(enum_type_inner.typ(), Type::I32);
 
     // Check enum type is inside of source map
-    oracle
-        .source_map
-        .get_bck(&Element::Type(enum_type_inner.id));
+    oracle.source_map.get_type(enum_type_inner.id);
 
     // Check enum members
     let members: Vec<_> = match oracle.values.get(enum_type.values) {
@@ -478,13 +439,8 @@ fn parse_simple_enum() {
 
     // Check enum members are in source map
     for member in members {
-        oracle.source_map.get_bck(&Element::EnumMember(member.id));
-        oracle.source_map.get_bck(&Element::Value(member.id));
+        oracle.source_map.get_value(member.id);
     }
-
-    // Check source map size
-    assert_eq!(oracle.source_map.fwd.len(), 8);
-    assert_eq!(oracle.source_map.bck.len(), 8);
 }
 
 #[test]
@@ -508,7 +464,7 @@ fn parse_empty_enum() {
         Type::Enum(e) => e,
         _ => panic!(),
     };
-    oracle.source_map.get_bck(&Element::Type(id));
+    oracle.source_map.get_type(id);
 
     // Check enum members array is empty
     let members = match oracle.values.get(enum_type.values) {
@@ -517,10 +473,6 @@ fn parse_empty_enum() {
     };
 
     assert_eq!(members.count(), 0);
-
-    // Check source map
-    assert_eq!(oracle.source_map.fwd.len(), 2);
-    assert_eq!(oracle.source_map.bck.len(), 2);
 }
 
 #[test]
@@ -544,7 +496,7 @@ fn parse_invalid_enum() {
         Type::Enum(e) => e,
         _ => panic!(),
     };
-    oracle.source_map.get_bck(&Element::Type(id));
+    oracle.source_map.get_type(id);
 
     assert_eq!(
         oracle.reports(),
@@ -567,9 +519,6 @@ fn parse_invalid_enum() {
     };
 
     assert_eq!(members.len(), 1);
-
-    assert_eq!(oracle.source_map.fwd.len(), 8);
-    assert_eq!(oracle.source_map.bck.len(), 8);
 }
 
 #[test]
@@ -600,7 +549,7 @@ fn parse_simple_union() {
         Type::Union(u) => u,
         _ => panic!(),
     };
-    oracle.source_map.get_bck(&Element::Type(id));
+    oracle.source_map.get_type(id);
 
     // Check discriminator
     let discriminator = union.disriminator.unwrap();
@@ -620,15 +569,8 @@ fn parse_simple_union() {
 
     // Check fields and field types are in source map
     for field in &fields {
-        oracle.source_map.get_bck(&Element::TypeField(field.id));
-        oracle
-            .source_map
-            .get_bck(&Element::Type(field.id.type_id()));
+        oracle.source_map.get_type(field.id.type_id());
     }
-
-    // Check source map size
-    assert_eq!(oracle.source_map.fwd.len(), 6);
-    assert_eq!(oracle.source_map.bck.len(), 6);
 }
 
 #[test]
@@ -652,17 +594,13 @@ fn parse_empty_union() {
         Type::Union(u) => u,
         _ => panic!(),
     };
-    oracle.source_map.get_bck(&Element::Type(id));
+    oracle.source_map.get_type(id);
 
     // Check discriminator
     let discriminator = union.disriminator.unwrap();
     assert_eq!(oracle.strings.resolve(discriminator).unwrap(), "kind");
 
     assert_eq!(union.fields.count(), 0);
-
-    // Check source map
-    assert_eq!(oracle.source_map.fwd.len(), 2);
-    assert_eq!(oracle.source_map.bck.len(), 2);
 }
 
 #[test]
@@ -696,14 +634,10 @@ fn parse_invalid_union() {
         Type::Union(u) => u,
         _ => panic!(),
     };
-    oracle.source_map.get_bck(&Element::Type(id));
+    oracle.source_map.get_type(id);
 
     // Check discriminator
     assert!(union.disriminator.is_none());
 
     assert_eq!(union.fields.count(), 0);
-
-    // Check source map
-    assert_eq!(oracle.source_map.fwd.len(), 2);
-    assert_eq!(oracle.source_map.bck.len(), 2);
 }

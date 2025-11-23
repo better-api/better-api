@@ -3,12 +3,12 @@
 use std::collections::HashMap;
 
 use better_api_diagnostic::Report;
-use better_api_syntax::ast::AstNode;
-use better_api_syntax::{SyntaxNode, SyntaxNodePtr, ast};
+use better_api_syntax::ast;
 
+use crate::StringId;
+use crate::source_map::SourceMap;
 use crate::typ::{TypeArena, TypeId};
 use crate::value::ValueArena;
-use crate::{SourceMap, StringId};
 
 mod metadata;
 mod symbols;
@@ -21,16 +21,13 @@ mod tests;
 /// Core type responsible for semantic analysis.
 #[derive(Clone)]
 pub struct Oracle<'a> {
-    /// Root node of the parsed tree.
-    root: &'a ast::Root,
-
     // Containers for primary oracle data
     strings: string_interner::DefaultStringInterner,
     values: ValueArena,
     types: TypeArena,
     symbol_table: HashMap<StringId, TypeId>,
 
-    source_map: SourceMap,
+    source_map: SourceMap<'a>,
 
     // Reports generated during semantic analysis
     reports: Vec<Report>,
@@ -43,12 +40,11 @@ impl<'a> Oracle<'a> {
     /// that can be queried for semantics info.
     pub fn new(root: &'a ast::Root) -> Self {
         let mut oracle = Self {
-            root,
             strings: Default::default(),
             values: Default::default(),
             types: Default::default(),
             symbol_table: Default::default(),
-            source_map: Default::default(),
+            source_map: SourceMap::new(root),
             reports: Default::default(),
         };
 
@@ -114,21 +110,16 @@ impl<'a> Oracle<'a> {
         // TODO: Implement the actual analysis
     }
 
-    fn node(&self, ptr: SyntaxNodePtr) -> SyntaxNode {
-        ptr.to_node(self.root.syntax())
-    }
-
     #[cfg(test)]
     /// Create a new [`Oracle`] without calling analyze on it.
     /// Only used for testing.
     fn new_raw(root: &'a ast::Root) -> Self {
         Self {
-            root,
             strings: Default::default(),
             values: Default::default(),
             types: Default::default(),
             symbol_table: Default::default(),
-            source_map: Default::default(),
+            source_map: SourceMap::new(root),
             reports: Default::default(),
         }
     }

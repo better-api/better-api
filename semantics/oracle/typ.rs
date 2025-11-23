@@ -5,11 +5,12 @@ use better_api_syntax::ast;
 use better_api_syntax::ast::AstNode;
 use string_interner::DefaultStringInterner;
 
+use crate::StringId;
 use crate::oracle::value::insert_array_values;
+use crate::source_map::SourceMap;
 use crate::text::{parse_string, validate_name};
 use crate::typ::{FieldBuilder, OptionArrayBuilder, PrimitiveType, Type, TypeId};
 use crate::value::{Value, ValueId};
-use crate::{Element, SourceMap, StringId};
 
 use super::Oracle;
 
@@ -101,9 +102,7 @@ impl<'a> Oracle<'a> {
 
             // If symbol table contains the name already, we should also have a valid type def
             // node, so expects should be fine.
-            let original_def = self
-                .type_def_node(name_id)
-                .expect("original type definition should exist");
+            let original_def = self.source_map.get_type_definition(name_id);
             let original_range = original_def
                 .name()
                 .expect("name of original type def should exist")
@@ -126,8 +125,7 @@ impl<'a> Oracle<'a> {
         };
 
         self.symbol_table.insert(name_id, type_id);
-        self.source_map
-            .insert(def, Element::TypeDefinition(name_id));
+        self.source_map.insert_type_definition(name_id, def);
     }
 
     /// Lower a syntactical type and store it into the type arena and source map.
@@ -169,7 +167,7 @@ impl<'a> Oracle<'a> {
             }
         };
 
-        self.source_map.insert(typ, Element::Type(id));
+        self.source_map.insert_type(id, typ);
         Some(id)
     }
 
@@ -194,16 +192,6 @@ impl<'a> Oracle<'a> {
             &mut self.reports,
             &mut self.strings,
         );
-
-        // Insert members into source map
-        let arr = match self.values.get(members_id) {
-            Value::Array(arr) => arr,
-            _ => unreachable!("inserted array should be an array"),
-        };
-        for (member, arr_item) in typ.members().filter(|m| m.value().is_some()).zip(arr) {
-            self.source_map
-                .insert(&member, Element::EnumMember(arr_item.id));
-        }
 
         self.types.add_enum(enum_type_id, members_id)
     }
@@ -358,9 +346,8 @@ impl<'a> Oracle<'a> {
         match self.types.get(enum_type_id) {
             Type::I32 | Type::I64 | Type::U32 | Type::U64 | Type::String => (),
             typ => {
-                let node_ptr = self.source_map.get_bck(&Element::Type(enum_type_id));
-                let node = self.node(node_ptr);
-                let range = node.text_range();
+                let node = self.source_map.get_type(enum_type_id);
+                let range = node.syntax().text_range();
 
                 self.reports.push(
                     Report::error(format!("invalid enum type {typ}"))
@@ -391,9 +378,8 @@ impl<'a> Oracle<'a> {
                 // TODO: Validate that header has a valid mime type and is not a random string
             }
             val => {
-                let node_ptr = self.source_map.get_bck(&Element::Value(content_type_id));
-                let node = self.node(node_ptr);
-                let range = node.text_range();
+                let node = self.source_map.get_value(content_type_id);
+                let range = node.syntax().text_range();
 
                 self.reports.push(
                     Report::error(format!("invalid response content type {val}"))
@@ -490,7 +476,7 @@ fn lower_array_option(
         }
     };
 
-    source_map.insert(inner, Element::Type(inner_id));
+    source_map.insert_type(inner_id, inner);
 
     Some(container_id)
 }
@@ -635,8 +621,7 @@ fn insert_type_fields(
             continue;
         };
 
-        source_map.insert(&typ, Element::Type(field_id.type_id()));
-        source_map.insert(&field.field, Element::TypeField(field_id));
+        source_map.insert_type(field_id.type_id(), &typ);
     }
 
     builder.finish()

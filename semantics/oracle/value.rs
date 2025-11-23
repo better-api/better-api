@@ -5,9 +5,10 @@ use better_api_syntax::ast;
 use better_api_syntax::ast::AstNode;
 use string_interner::DefaultStringInterner;
 
+use crate::StringId;
+use crate::source_map::SourceMap;
 use crate::text::{parse_string, validate_name};
 use crate::value::{ArrayBuilder, ObjectBuilder, PrimitiveValue, ValueId};
-use crate::{Element, SourceMap, StringId};
 
 use super::Oracle;
 
@@ -46,7 +47,7 @@ impl<'a> Oracle<'a> {
             }
         };
 
-        self.source_map.insert(value, Element::Value(id));
+        self.source_map.insert_value(id, value);
         id
     }
 }
@@ -165,8 +166,7 @@ fn insert_object_fields(
             }
         };
 
-        source_map.insert(&value, Element::Value(field_id.value_id()));
-        source_map.insert(&field.field, Element::ObjectField(field_id));
+        source_map.insert_value(field_id.value_id(), &value);
     }
 
     builder.finish()
@@ -195,7 +195,7 @@ pub(crate) fn insert_array_values(
             }
         };
 
-        source_map.insert(&value, Element::Value(value_id));
+        source_map.insert_value(value_id, &value);
     }
 
     builder.finish()

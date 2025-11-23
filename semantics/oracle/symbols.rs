@@ -1,9 +1,9 @@
 use better_api_diagnostic::{Label, Report, Severity};
-use better_api_syntax::ast::{self, AstNode};
+use better_api_syntax::ast::AstNode;
 use smallvec::SmallVec;
 
 use crate::typ::{Type, TypeId, Union};
-use crate::{Element, Oracle, StringId};
+use crate::{Oracle, StringId};
 
 type ResolvePath = SmallVec<[StringId; 10]>;
 
@@ -65,20 +65,6 @@ impl<'a> Oracle<'a> {
             self.report_symbol_cycles_aux(*type_id, &mut path, &mut reports);
             self.reports.extend_from_slice(&reports);
         }
-    }
-
-    /// Returns type definition AST node from the name
-    pub(crate) fn type_def_node(&self, name: StringId) -> Option<ast::TypeDefinition> {
-        // Check that name is a valid type definition and not ie. a string value.
-        if !self.symbol_table.contains_key(&name) {
-            return None;
-        }
-
-        let ptr = self.source_map.get_bck(&Element::TypeDefinition(name));
-        let node = self.node(ptr);
-        Some(ast::TypeDefinition::cast(node).expect(
-            "source map for Element::TypeDefinition should point to an ast::TypeDefinition",
-        ))
     }
 
     /// Helper function for reporting symbol cycles.
@@ -185,9 +171,7 @@ impl<'a> Oracle<'a> {
             .iter()
             .enumerate()
             .map(|(idx, id)| {
-                let def = self
-                    .type_def_node(*id)
-                    .expect("defined type should have a valid type definition");
+                let def = self.source_map.get_type_definition(*id);
                 let range = def
                     .name()
                     .expect("valid type definition should have a name")
