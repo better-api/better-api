@@ -54,7 +54,7 @@ fn parse_primitive_reference() {
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
     let id = oracle.lower_type(&typ).unwrap();
 
-    let name = oracle.strings.get("Bar").unwrap();
+    let name = oracle.strings.insert("Bar");
     assert_eq!(oracle.reports(), vec![]);
     assert_eq!(oracle.types.get(id), Type::Reference(name));
 
@@ -305,7 +305,7 @@ fn parse_simple_record() {
         // Check field names are correct
         let names: Vec<_> = fields
             .iter()
-            .map(|field| oracle.strings.resolve(field.name).unwrap())
+            .map(|field| oracle.strings.get(field.name))
             .collect();
         assert_eq!(names, vec!["foo", "bar", "baz"]);
 
@@ -553,14 +553,14 @@ fn parse_simple_union() {
 
     // Check discriminator
     let discriminator = union.disriminator.unwrap();
-    assert_eq!(oracle.strings.resolve(discriminator).unwrap(), "type");
+    assert_eq!(oracle.strings.get(discriminator), "type");
 
     let fields: Vec<_> = union.fields.collect();
 
     // Check field names are correct
     let names: Vec<_> = fields
         .iter()
-        .map(|field| oracle.strings.resolve(field.name).unwrap())
+        .map(|field| oracle.strings.get(field.name))
         .collect();
     assert_eq!(names, vec!["foo", "bar"]);
 
@@ -598,7 +598,7 @@ fn parse_empty_union() {
 
     // Check discriminator
     let discriminator = union.disriminator.unwrap();
-    assert_eq!(oracle.strings.resolve(discriminator).unwrap(), "kind");
+    assert_eq!(oracle.strings.get(discriminator), "kind");
 
     assert_eq!(union.fields.count(), 0);
 }

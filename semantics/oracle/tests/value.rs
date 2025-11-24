@@ -92,7 +92,7 @@ fn parse_primitive_string() {
 
     match oracle.values.get(id) {
         Value::String(str_id) => {
-            let resolved = oracle.strings.resolve(str_id).unwrap();
+            let resolved = oracle.strings.get(str_id);
             assert_eq!(resolved, "hello world");
         }
         other => panic!("expected string value, got {other:?}"),
@@ -118,7 +118,7 @@ fn parse_primitive_string_with_escapes() {
     assert_eq!(oracle.reports(), vec![]);
     match oracle.values.get(id) {
         Value::String(str_id) => {
-            let resolved = oracle.strings.resolve(str_id).unwrap();
+            let resolved = oracle.strings.get(str_id);
             assert_eq!(resolved, "hello\nworld\t\"\\");
         }
         other => panic!("expected string value, got {other:?}"),
@@ -303,7 +303,7 @@ fn parse_object_simple() {
 
         let names: Vec<_> = fields
             .iter()
-            .map(|field| oracle.strings.resolve(field.name).unwrap())
+            .map(|field| oracle.strings.get(field.name))
             .collect();
         assert_eq!(names, vec!["foo", "bar"]);
 
@@ -348,7 +348,7 @@ fn parse_object_with_string_keys() {
 
     let names: Vec<_> = fields
         .iter()
-        .map(|field| oracle.strings.resolve(field.name).unwrap())
+        .map(|field| oracle.strings.get(field.name))
         .collect();
     assert_eq!(names, vec!["foo-bar", "baz"]);
 
@@ -391,7 +391,7 @@ fn parse_object_missing_value() {
     let fields: Vec<_> = obj.collect();
     assert_eq!(fields.len(), 1);
 
-    let field_name = oracle.strings.resolve(fields[0].name).unwrap();
+    let field_name = oracle.strings.get(fields[0].name);
     assert_eq!(field_name, "bar");
     assert_eq!(fields[0].value, Value::Integer(20));
 
@@ -438,7 +438,7 @@ fn parse_object_invalid_field_name() {
     let fields: Vec<_> = obj.collect();
     assert_eq!(fields.len(), 1);
 
-    let field_name = oracle.strings.resolve(fields[0].name).unwrap();
+    let field_name = oracle.strings.get(fields[0].name);
     assert_eq!(field_name, "valid");
     assert_eq!(fields[0].value, Value::Integer(20));
 
@@ -489,7 +489,7 @@ fn parse_object_duplicate_keys() {
 
     let names: Vec<_> = fields
         .iter()
-        .map(|field| oracle.strings.resolve(field.name).unwrap())
+        .map(|field| oracle.strings.get(field.name))
         .collect();
     assert_eq!(names, vec!["foo", "foo", "bar"]);
 
@@ -534,7 +534,7 @@ fn parse_object_nested() {
     let fields: Vec<_> = obj.collect();
     assert_eq!(fields.len(), 1);
 
-    let field_name = oracle.strings.resolve(fields[0].name).unwrap();
+    let field_name = oracle.strings.get(fields[0].name);
     assert_eq!(field_name, "outer");
 
     oracle.source_map.get_value(fields[0].id.value_id());
@@ -548,7 +548,7 @@ fn parse_object_nested() {
     let inner_fields: Vec<_> = inner_obj.collect();
     assert_eq!(inner_fields.len(), 1);
 
-    let inner_field_name = oracle.strings.resolve(inner_fields[0].name).unwrap();
+    let inner_field_name = oracle.strings.get(inner_fields[0].name);
     assert_eq!(inner_field_name, "inner");
     assert_eq!(inner_fields[0].value, Value::Integer(42));
 
@@ -599,7 +599,7 @@ fn parse_complex_nested_structure() {
     // Check field names (ordering: users, metadata)
     let names: Vec<_> = fields
         .iter()
-        .map(|field| oracle.strings.resolve(field.name).unwrap())
+        .map(|field| oracle.strings.get(field.name))
         .collect();
     assert_eq!(names, vec!["users", "metadata"]);
 
@@ -632,7 +632,7 @@ fn parse_complex_nested_structure() {
 
     let user1_names: Vec<_> = user1_fields
         .iter()
-        .map(|field| oracle.strings.resolve(field.name).unwrap())
+        .map(|field| oracle.strings.get(field.name))
         .collect();
     assert_eq!(user1_names, vec!["name", "age"]);
 
@@ -643,7 +643,7 @@ fn parse_complex_nested_structure() {
 
     match user1_fields[0].value {
         Value::String(str_id) => {
-            assert_eq!(oracle.strings.resolve(str_id).unwrap(), "alice");
+            assert_eq!(oracle.strings.get(str_id), "alice");
         }
         ref other => panic!("expected string, got {other:?}"),
     }
@@ -659,7 +659,7 @@ fn parse_complex_nested_structure() {
 
     let user2_names: Vec<_> = user2_fields
         .iter()
-        .map(|field| oracle.strings.resolve(field.name).unwrap())
+        .map(|field| oracle.strings.get(field.name))
         .collect();
     assert_eq!(user2_names, vec!["name", "age"]);
 
@@ -670,7 +670,7 @@ fn parse_complex_nested_structure() {
 
     match user2_fields[0].value {
         Value::String(str_id) => {
-            assert_eq!(oracle.strings.resolve(str_id).unwrap(), "bob");
+            assert_eq!(oracle.strings.get(str_id), "bob");
         }
         ref other => panic!("expected string, got {other:?}"),
     }
@@ -687,7 +687,7 @@ fn parse_complex_nested_structure() {
 
     let metadata_names: Vec<_> = metadata_fields
         .iter()
-        .map(|field| oracle.strings.resolve(field.name).unwrap())
+        .map(|field| oracle.strings.get(field.name))
         .collect();
     assert_eq!(metadata_names, vec!["count", "active"]);
 

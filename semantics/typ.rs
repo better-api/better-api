@@ -15,7 +15,8 @@
 //!
 //! To retrieve a type, pass a [`TypeId`] to [`TypeArena::get`]. This returns a [`Type`].
 
-use crate::{StringId, value};
+use crate::string::StringId;
+use crate::value;
 
 /// Representation of a type.
 #[derive(Debug, Clone, PartialEq, derive_more::Display)]
@@ -748,8 +749,7 @@ impl BuilderParent for TypeArena {
 
 #[cfg(test)]
 mod test {
-    use string_interner::DefaultStringInterner;
-
+    use crate::string::StringInterner;
     use crate::typ::{PrimitiveType, Type, TypeArena, TypeFieldId, TypeId};
 
     use super::Slot;
@@ -759,14 +759,14 @@ mod test {
         let mut arena = TypeArena::new();
 
         // Insert some strings
-        let mut interner = DefaultStringInterner::default();
-        let id_str = interner.get_or_intern("id");
-        let simple_array_str = interner.get_or_intern("simple_array");
-        let values_str = interner.get_or_intern("values");
-        let metadata_str = interner.get_or_intern("metadata");
-        let unused_str = interner.get_or_intern("unused");
-        let success_str = interner.get_or_intern("success");
-        let error_str = interner.get_or_intern("error");
+        let mut interner = StringInterner::default();
+        let id_str = interner.insert("id");
+        let simple_array_str = interner.insert("simple_array");
+        let values_str = interner.insert("values");
+        let metadata_str = interner.insert("metadata");
+        let unused_str = interner.insert("unused");
+        let success_str = interner.insert("success");
+        let error_str = interner.insert("error");
 
         // Add some primitive types
         let i32_id = arena.add_primitive(PrimitiveType::I32);

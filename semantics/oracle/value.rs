@@ -1,10 +1,9 @@
 use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast;
 use better_api_syntax::ast::AstNode;
-use string_interner::DefaultStringInterner;
 
-use crate::StringId;
 use crate::source_map::SourceMap;
+use crate::string::{StringId, StringInterner};
 use crate::text::{lower_name, parse_string};
 use crate::value::{ArrayBuilder, ObjectBuilder, PrimitiveValue, ValueId};
 
@@ -62,16 +61,12 @@ impl<'a> ParsedValue<'a> {
     ///
     /// Handling most values is done in a trivial way. Strings are a special case.
     /// They are parsed with [`parse_string`] and interned.
-    fn new(
-        value: &'a ast::Value,
-        reports: &mut Vec<Report>,
-        strings: &mut DefaultStringInterner,
-    ) -> Self {
+    fn new(value: &'a ast::Value, reports: &mut Vec<Report>, strings: &mut StringInterner) -> Self {
         match value {
             ast::Value::String(string) => {
                 let token = string.string();
                 let parsed_str = parse_string(&token, reports);
-                let str_id = strings.get_or_intern(&parsed_str);
+                let str_id = strings.insert(&parsed_str);
 
                 Self::Primitive(PrimitiveValue::String(str_id))
             }
@@ -99,7 +94,7 @@ impl<'a> ParsedValue<'a> {
 fn parse_object_fields(
     object: &ast::Object,
     reports: &mut Vec<Report>,
-    strings: &mut DefaultStringInterner,
+    strings: &mut StringInterner,
 ) -> Vec<InternedField> {
     let mut fields: Vec<_> = object
         .fields()
@@ -123,7 +118,7 @@ fn insert_object_fields(
     mut builder: ObjectBuilder,
     source_map: &mut SourceMap,
     reports: &mut Vec<Report>,
-    strings: &mut DefaultStringInterner,
+    strings: &mut StringInterner,
 ) -> ValueId {
     for field in fields {
         let value = field
@@ -162,7 +157,7 @@ pub(crate) fn insert_array_values(
     mut builder: ArrayBuilder,
     source_map: &mut SourceMap,
     reports: &mut Vec<Report>,
-    strings: &mut DefaultStringInterner,
+    strings: &mut StringInterner,
 ) -> ValueId {
     for value in values {
         let value_id = match ParsedValue::new(&value, reports, strings) {
@@ -190,7 +185,7 @@ pub(crate) fn insert_array_values(
 fn check_object_fields_unique(
     fields: &[InternedField],
     reports: &mut Vec<Report>,
-    strings: &DefaultStringInterner,
+    strings: &StringInterner,
 ) {
     if fields.is_empty() {
         return;
@@ -201,9 +196,7 @@ fn check_object_fields_unique(
             continue;
         }
 
-        let name = strings
-            .resolve(fields[idx].name)
-            .expect("interned string should be present in interner");
+        let name = strings.get(fields[idx].name);
 
         let range = fields[idx + 1]
             .field

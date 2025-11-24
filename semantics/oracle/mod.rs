@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use better_api_diagnostic::Report;
 use better_api_syntax::ast;
 
-use crate::StringId;
 use crate::source_map::SourceMap;
+use crate::string::{StringId, StringInterner};
 use crate::typ::{TypeArena, TypeId};
 use crate::value::ValueArena;
 
@@ -22,7 +22,7 @@ mod tests;
 #[derive(Clone)]
 pub struct Oracle<'a> {
     // Containers for primary oracle data
-    strings: string_interner::DefaultStringInterner,
+    strings: StringInterner,
     values: ValueArena,
     types: TypeArena,
     symbol_table: HashMap<StringId, TypeId>,

@@ -2,8 +2,9 @@ use better_api_diagnostic::{Label, Report, Severity};
 use better_api_syntax::ast::AstNode;
 use smallvec::SmallVec;
 
+use crate::Oracle;
+use crate::string::StringId;
 use crate::typ::{Type, TypeId, Union};
-use crate::{Oracle, StringId};
 
 type ResolvePath = SmallVec<[StringId; 10]>;
 
@@ -147,23 +148,19 @@ impl<'a> Oracle<'a> {
 
     /// Helper method to construct a report about an invalid cycle.
     fn construt_cycle_report(&self, path: &ResolvePath) -> Report {
-        let names = path
-            .iter()
-            .map(|id| {
-                self.strings
-                    .resolve(*id)
-                    .expect("names of types should be resolvable")
-            })
-            .fold(String::new(), |mut acc, elt| {
-                if !acc.is_empty() {
-                    acc.push_str(", ");
-                }
+        let names =
+            path.iter()
+                .map(|id| self.strings.get(*id))
+                .fold(String::new(), |mut acc, elt| {
+                    if !acc.is_empty() {
+                        acc.push_str(", ");
+                    }
 
-                acc.push('`');
-                acc.push_str(elt);
-                acc.push('`');
-                acc
-            });
+                    acc.push('`');
+                    acc.push_str(elt);
+                    acc.push('`');
+                    acc
+                });
 
         let msg = format!("types {names} create an infite recursion");
 
@@ -184,10 +181,7 @@ impl<'a> Oracle<'a> {
                 if idx == 0 {
                     Label::primary(msg.clone(), range.into())
                 } else {
-                    let name = self
-                        .strings
-                        .resolve(*id)
-                        .expect("names of types should be resolvable");
+                    let name = self.strings.get(*id);
 
                     Label::secondary(format!("type `{name}` defined here"), range.into())
                 }

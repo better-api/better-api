@@ -4,16 +4,15 @@ use std::borrow::Cow;
 
 use better_api_diagnostic::{Label, Report, Span};
 use better_api_syntax::{Kind, SyntaxToken, TextRange, ast};
-use string_interner::DefaultStringInterner;
 
-use crate::StringId;
+use crate::string::{StringId, StringInterner};
 
 /// Lowers name by parsing, validating and interning it.
 ///
 /// Returns interned string id of the name if it's valid.
 pub fn lower_name(
     name: &ast::Name,
-    strings: &mut DefaultStringInterner,
+    strings: &mut StringInterner,
     reports: &mut Vec<Report>,
 ) -> Option<StringId> {
     let token = name.token();
@@ -28,7 +27,7 @@ pub fn lower_name(
         return None;
     }
 
-    let name_id = strings.get_or_intern(name_str);
+    let name_id = strings.insert(name_str);
     Some(name_id)
 }
 

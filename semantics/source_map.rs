@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use better_api_syntax::ast::AstNode;
 use better_api_syntax::{Language, SyntaxNodePtr, ast};
 
-use crate::{Element, StringId, typ::TypeId, value::ValueId};
+use crate::Element;
+use crate::string::StringId;
+use crate::typ::TypeId;
+use crate::value::ValueId;
 
 /// Maps syntax nodes to semantic elements.
 ///

@@ -1,11 +1,10 @@
 use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast;
 use better_api_syntax::ast::AstNode;
-use string_interner::DefaultStringInterner;
 
-use crate::StringId;
 use crate::oracle::value::insert_array_values;
 use crate::source_map::SourceMap;
+use crate::string::{StringId, StringInterner};
 use crate::text::lower_name;
 use crate::typ::{FieldBuilder, OptionArrayBuilder, PrimitiveType, Type, TypeId};
 use crate::value::{Value, ValueId};
@@ -32,7 +31,7 @@ enum ParsedType<'a> {
 }
 
 impl<'a> ParsedType<'a> {
-    fn new(typ: &'a ast::Type, strings: &mut DefaultStringInterner) -> Self {
+    fn new(typ: &'a ast::Type, strings: &mut StringInterner) -> Self {
         match typ {
             ast::Type::TypeOption(opt) => Self::Option(opt),
             ast::Type::TypeArray(arr) => Self::Array(arr),
@@ -42,7 +41,7 @@ impl<'a> ParsedType<'a> {
             ast::Type::TypeResponse(resp) => Self::Response(resp),
             ast::Type::TypeRef(typ_ref) => {
                 let token = typ_ref.name();
-                let str_id = strings.get_or_intern(token.text());
+                let str_id = strings.insert(token.text());
 
                 Self::Primitive(PrimitiveType::Reference(str_id))
             }
@@ -89,11 +88,7 @@ impl<'a> Oracle<'a> {
 
         // There is already a symbol with the same name, so we report an error.
         if self.symbol_table.contains_key(&name_id) {
-            let name = self
-                .strings
-                .resolve(name_id)
-                // We intern the string at the beginning of the function.
-                .expect("interned string should be resolvable");
+            let name = self.strings.get(name_id);
             let range = def
                 .name()
                 // We check name node exists at the beginning of the function.
@@ -356,10 +351,7 @@ impl<'a> Oracle<'a> {
     fn validate_response_content_type(&mut self, content_type_id: ValueId) {
         match self.values.get(content_type_id) {
             Value::String(str_id) => {
-                let _content_type = self
-                    .strings
-                    .resolve(str_id)
-                    .expect("stored string should be interned");
+                let _content_type = self.strings.get(str_id);
 
                 // TODO: Validate that header has a valid mime type and is not a random string
             }
@@ -388,7 +380,7 @@ fn lower_array_option(
     inner: &ast::Type,
     mut builder: OptionArrayBuilder,
     reports: &mut Vec<Report>,
-    strings: &mut DefaultStringInterner,
+    strings: &mut StringInterner,
     source_map: &mut SourceMap,
     outer_type_name: &str,
 ) -> Option<TypeId> {
@@ -514,7 +506,7 @@ fn insert_type_fields(
     mut builder: FieldBuilder,
     source_map: &mut SourceMap,
     reports: &mut Vec<Report>,
-    strings: &mut DefaultStringInterner,
+    strings: &mut StringInterner,
     type_field_name: &str,
 ) -> TypeId {
     for field in fields {

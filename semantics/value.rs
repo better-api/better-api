@@ -22,7 +22,7 @@
 //! Composite types are represented with [`Array`] and [`Object`]. These two types
 //! allow you to iterate through the values inside the composite type.
 
-use crate::StringId;
+use crate::string::StringId;
 
 /// Representation of a value.
 #[derive(Debug, PartialEq, derive_more::Display, Clone)]
@@ -538,8 +538,7 @@ impl BuilderParent for ValueArena {
 
 #[cfg(test)]
 mod test {
-    use string_interner::DefaultStringInterner;
-
+    use crate::string::StringInterner;
     use crate::value::{ArrayItem, ObjectFieldId, PrimitiveValue, Value, ValueArena, ValueId};
 
     use super::Slot;
@@ -549,21 +548,21 @@ mod test {
         let mut arena = ValueArena::new();
 
         // Insert some strings
-        let mut interner = DefaultStringInterner::default();
-        let hello_str = interner.get_or_intern("hello");
-        let flag_str = interner.get_or_intern("flag");
-        let container_str = interner.get_or_intern("container");
-        let numbers_str = interner.get_or_intern("numbers");
-        let deep_str = interner.get_or_intern("deep");
-        let unused_str = interner.get_or_intern("unused");
-        let value_str = interner.get_or_intern("value");
-        let label_str = interner.get_or_intern("label");
-        let done_str = interner.get_or_intern("done");
-        let nested_str = interner.get_or_intern("nested");
-        let status_str = interner.get_or_intern("status");
-        let ok_str = interner.get_or_intern("ok");
-        let count_str = interner.get_or_intern("count");
-        let active_str = interner.get_or_intern("active");
+        let mut interner = StringInterner::default();
+        let hello_str = interner.insert("hello");
+        let flag_str = interner.insert("flag");
+        let container_str = interner.insert("container");
+        let numbers_str = interner.insert("numbers");
+        let deep_str = interner.insert("deep");
+        let unused_str = interner.insert("unused");
+        let value_str = interner.insert("value");
+        let label_str = interner.insert("label");
+        let done_str = interner.insert("done");
+        let nested_str = interner.insert("nested");
+        let status_str = interner.insert("status");
+        let ok_str = interner.insert("ok");
+        let count_str = interner.insert("count");
+        let active_str = interner.insert("active");
 
         let null_id = arena.add_primitive(PrimitiveValue::Null);
         let bool_id = arena.add_primitive(PrimitiveValue::Bool(true));
