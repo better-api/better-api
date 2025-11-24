@@ -1,0 +1,29 @@
+---
+source: semantics/oracle/tests/type_def.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "name `Foo` is defined multiple times",
+        labels: [
+            Label {
+                style: Primary,
+                message: "name `Foo` is defined multiple times",
+                span: Span {
+                    start: 22,
+                    end: 25,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "name `Foo` is first defined here",
+                span: Span {
+                    start: 5,
+                    end: 8,
+                },
+            },
+        ],
+        note: None,
+    },
+]

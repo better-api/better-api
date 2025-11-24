@@ -125,7 +125,7 @@ impl<'a> Oracle<'a> {
             Type::Reference(name) => {
                 // References back to the first element in path, so we want to report it.
                 if path.first() == Some(&name) {
-                    let report = self.construt_cycle_report(path);
+                    let report = self.construct_cycle_report(path);
                     reports.push(report);
                     return;
                 }
@@ -147,7 +147,7 @@ impl<'a> Oracle<'a> {
     }
 
     /// Helper method to construct a report about an invalid cycle.
-    fn construt_cycle_report(&self, path: &ResolvePath) -> Report {
+    fn construct_cycle_report(&self, path: &ResolvePath) -> Report {
         let names =
             path.iter()
                 .map(|id| self.strings.get(*id))
@@ -171,10 +171,10 @@ impl<'a> Oracle<'a> {
                 let def = self
                     .source_map
                     .get_type_definition(*id)
-                    .expect("resolved symbol name should be a valid type definition");
+                    .expect("symbol in cycle path should have been registered in source_map during type definition parsing");
                 let range = def
                     .name()
-                    .expect("valid type definition should have a name")
+                    .expect("type definition should have a name - only named types are stored in source_map")
                     .syntax()
                     .text_range();
 

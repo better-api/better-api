@@ -1,0 +1,170 @@
+---
+source: semantics/oracle/tests/type_def.rs
+expression: oracle.reports
+---
+[
+    Report {
+        severity: Error,
+        title: "types `Bar`, `Baz`, `FooBar`, `Foo` create an infite recursion",
+        labels: [
+            Label {
+                style: Primary,
+                message: "types `Bar`, `Baz`, `FooBar`, `Foo` create an infite recursion",
+                span: Span {
+                    start: 37,
+                    end: 40,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type `Baz` defined here",
+                span: Span {
+                    start: 79,
+                    end: 82,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type `FooBar` defined here",
+                span: Span {
+                    start: 97,
+                    end: 103,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type `Foo` defined here",
+                span: Span {
+                    start: 5,
+                    end: 8,
+                },
+            },
+        ],
+        note: Some(
+            "help: type cycles have to end with an Array or Option to avoid infinite recursion",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "types `Baz`, `FooBar`, `Foo`, `Bar` create an infite recursion",
+        labels: [
+            Label {
+                style: Primary,
+                message: "types `Baz`, `FooBar`, `Foo`, `Bar` create an infite recursion",
+                span: Span {
+                    start: 79,
+                    end: 82,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type `FooBar` defined here",
+                span: Span {
+                    start: 97,
+                    end: 103,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type `Foo` defined here",
+                span: Span {
+                    start: 5,
+                    end: 8,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type `Bar` defined here",
+                span: Span {
+                    start: 37,
+                    end: 40,
+                },
+            },
+        ],
+        note: Some(
+            "help: type cycles have to end with an Array or Option to avoid infinite recursion",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "types `FooBar`, `Foo`, `Bar`, `Baz` create an infite recursion",
+        labels: [
+            Label {
+                style: Primary,
+                message: "types `FooBar`, `Foo`, `Bar`, `Baz` create an infite recursion",
+                span: Span {
+                    start: 97,
+                    end: 103,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type `Foo` defined here",
+                span: Span {
+                    start: 5,
+                    end: 8,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type `Bar` defined here",
+                span: Span {
+                    start: 37,
+                    end: 40,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type `Baz` defined here",
+                span: Span {
+                    start: 79,
+                    end: 82,
+                },
+            },
+        ],
+        note: Some(
+            "help: type cycles have to end with an Array or Option to avoid infinite recursion",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "types `Foo`, `Bar`, `Baz`, `FooBar` create an infite recursion",
+        labels: [
+            Label {
+                style: Primary,
+                message: "types `Foo`, `Bar`, `Baz`, `FooBar` create an infite recursion",
+                span: Span {
+                    start: 5,
+                    end: 8,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type `Bar` defined here",
+                span: Span {
+                    start: 37,
+                    end: 40,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type `Baz` defined here",
+                span: Span {
+                    start: 79,
+                    end: 82,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type `FooBar` defined here",
+                span: Span {
+                    start: 97,
+                    end: 103,
+                },
+            },
+        ],
+        note: Some(
+            "help: type cycles have to end with an Array or Option to avoid infinite recursion",
+        ),
+    },
+]
