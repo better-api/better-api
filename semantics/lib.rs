@@ -3,6 +3,7 @@ mod string;
 mod text;
 
 pub mod oracle;
+pub mod path;
 pub mod typ;
 pub mod value;
 
