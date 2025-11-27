@@ -46,7 +46,8 @@
 //!
 //! The implementation of [`PartialEq`] and [`Hash`] takes this fact into account.
 
-use better_api_diagnostic::Report;
+use better_api_diagnostic::{Label, Report, Span};
+use better_api_syntax::TextRange;
 
 /// A single part of the [`Path`].
 ///
@@ -80,11 +81,13 @@ impl PathPart {
     ///
     /// This function checks that string is valid and reports the possible invalid characters
     /// or path parameters.
-    pub fn new<'a>(string: &'a str, _diagnostics: &mut Vec<Report>) -> &'a PathPart {
-        // TODO: Check string is valid path part
-
-        // Safety: We checked that string is valid path part.
-        unsafe { Self::from_str_unchecked(string) }
+    pub fn new<'a>(
+        string: &'a str,
+        text_range: TextRange,
+        diagnostics: &mut Vec<Report>,
+    ) -> &'a PathPart {
+        validate_path(string, text_range, diagnostics);
+        Self::from_str(string)
     }
 
     /// Get `&str` representation
@@ -96,8 +99,9 @@ impl PathPart {
     ///
     /// Safety: Casting a string that is not a valid PathPart into one,
     /// can lead to undefined behavior.
-    unsafe fn from_str_unchecked(string: &str) -> &PathPart {
-        // Safety: PathPart is a wrapper around str, so pointer cast is safe.
+    fn from_str(string: &str) -> &PathPart {
+        // Safety: PathPart is a semantic wrapper around str,
+        // with same layout and alignment so pointer cast is safe.
         unsafe { &*(string as *const str as *const PathPart) }
     }
 }
@@ -155,9 +159,7 @@ impl PathArena {
             .resolve(slot.part_id)
             .expect("inserted path should be resolvable");
 
-        // Safety: The only way to construct PathId outside of this file is to insert
-        // a valid &PathPart into PathArena. Therefore queried data is valid.
-        let part = unsafe { PathPart::from_str_unchecked(part_str) };
+        let part = PathPart::from_str(part_str);
 
         Path {
             arena: self,
@@ -165,4 +167,115 @@ impl PathArena {
             prefix_id: slot.prefix_id,
         }
     }
+}
+
+fn validate_path(path: &str, text_range: TextRange, diagnostics: &mut Vec<Report>) {
+    let mut chars = path.char_indices().peekable();
+
+    // Check leading character
+    if !matches!(chars.peek(), Some((_, '/'))) {
+        diagnostics.push(
+            Report::error("missing leading `/` in path".to_string())
+                .add_label(Label::primary(
+                    "missing leading `/` in path".to_string(),
+                    text_range.into(),
+                ))
+                .with_note("help: path has to be absolute and start with a `/`".to_string()),
+        );
+    }
+
+    // Is current character after slash. Used to validate if parameter takes up the whole segment.
+    let mut after_slash = false;
+    while let Some((idx, ch)) = chars.next() {
+        // Check for empty segments
+        if ch == '/' && matches!(chars.peek(), Some((_, '/'))) {
+            let segment_start = Into::<usize>::into(text_range.start()) + idx;
+
+            diagnostics.push(
+                Report::error("path contains empty segments".to_string())
+                    .add_label(Label::primary(
+                        "path contains empty segments".to_string(),
+                        text_range.into(),
+                    ))
+                    .add_label(Label::secondary(
+                        "empty segment".to_string(),
+                        Span::new(segment_start, segment_start + 2), // utf8 length of '//' is 2
+                    ))
+                    .with_note("help: path must not contain empty segments `//`".to_string()),
+            );
+        }
+
+        // Check trailing `/`
+        if ch == '/' && chars.peek().is_none() {
+            diagnostics.push(
+                Report::warning("unnecessary trailing `/` in path".to_string())
+                    .add_label(Label::primary(
+                        "unnecessary trailing `/` in path".to_string(),
+                        text_range.into(),
+                    ))
+                    .with_note("help: trailing `/` is unnecessary and is ignored".to_string()),
+            );
+        }
+
+        // Validate parameters
+        if ch == '{' {
+            let end_idx = validate_path_param(&mut chars, idx, text_range, diagnostics);
+            let param_start = Into::<usize>::into(text_range.start()) + idx;
+
+            // Check parameter ends
+            if end_idx.is_none() {
+                diagnostics.push(
+                    Report::error("missing ending `}` in path parameter".to_string())
+                        .add_label(Label::primary(
+                            "missing ending `}` in path parameter".to_string(),
+                            text_range.into(),
+                        ))
+                        .add_label(Label::secondary(
+                            "path parameter starting here".to_string(),
+                            Span::new(param_start, param_start + 1),
+                        )),
+                );
+            }
+
+            // Check parameter has a valid position
+            // Parameter has invalid position if there isn't a `/` before or after it
+            let invalid_position = !after_slash || chars.peek().is_some_and(|(_, ch)| *ch != '/');
+            if let Some(end_idx) = end_idx
+                && invalid_position
+            {
+                let param_end = Into::<usize>::into(text_range.start()) + end_idx;
+
+                diagnostics.push(
+                    Report::error("invalid partial path parameter".to_string()).add_label(
+                        Label::primary(
+                            "invalid partial path parameter position".to_string(),
+                            Span::new(param_start, param_end),
+                        ),
+                    ).with_note("help: path parameter has to take up a whole path segment, not just a part of it".to_string()),
+                );
+            }
+        }
+
+        // TODO: check invalid chars (do not forget url encoding)
+
+        after_slash = ch == '/';
+    }
+}
+
+fn validate_path_param(
+    chars: &mut impl Iterator<Item = (usize, char)>,
+    start_idx: usize,
+    text_range: TextRange,
+    diagnostics: &mut Vec<Report>,
+) -> Option<usize> {
+    while let Some((idx, ch)) = chars.next() {
+        // Check if the parameter is ended
+        if ch == '}' {
+            return Some(idx + 1); // utf8 size of `}` is 1
+        }
+
+        // TODO: Implement char is identifier
+    }
+
+    None
 }
