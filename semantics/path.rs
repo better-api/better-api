@@ -46,8 +46,12 @@
 //!
 //! The implementation of [`PartialEq`] and [`Hash`] takes this fact into account.
 
+use std::iter::Peekable;
+
 use better_api_diagnostic::{Label, Report, Span};
 use better_api_syntax::TextRange;
+
+use crate::text::is_name_valid;
 
 /// A single part of the [`Path`].
 ///
@@ -169,6 +173,7 @@ impl PathArena {
     }
 }
 
+/// Checks that path is valid and reports errors
 fn validate_path(path: &str, text_range: TextRange, diagnostics: &mut Vec<Report>) {
     let mut chars = path.char_indices().peekable();
 
@@ -186,66 +191,133 @@ fn validate_path(path: &str, text_range: TextRange, diagnostics: &mut Vec<Report
 
     // Is current character after slash. Used to validate if parameter takes up the whole segment.
     let mut after_slash = false;
+    let mut all_chars_valid = true;
+    let mut all_escapes_valid = true;
     while let Some((idx, ch)) = chars.next() {
-        // Check for empty segments
-        if ch == '/' && matches!(chars.peek(), Some((_, '/'))) {
-            let segment_start = Into::<usize>::into(text_range.start()) + idx;
+        match ch {
+            '/' => {
+                // Check for empty segments
+                if chars.peek().is_some_and(|(_, ch)| *ch == '/') {
+                    let segment_start = Into::<usize>::into(text_range.start()) + idx;
 
-            diagnostics.push(
-                Report::error("path contains empty segments".to_string())
-                    .add_label(Label::primary(
-                        "path contains empty segments".to_string(),
-                        text_range.into(),
-                    ))
-                    .add_label(Label::secondary(
-                        "empty segment".to_string(),
-                        Span::new(segment_start, segment_start + 2), // utf8 length of '//' is 2
-                    ))
-                    .with_note("help: path must not contain empty segments `//`".to_string()),
-            );
-        }
+                    diagnostics.push(
+                        Report::error("path contains empty segments".to_string())
+                            .add_label(Label::primary(
+                                "path contains empty segments".to_string(),
+                                text_range.into(),
+                            ))
+                            .add_label(Label::secondary(
+                                "empty segment".to_string(),
+                                Span::new(segment_start, segment_start + 2), // utf8 length of '//' is 2
+                            ))
+                            .with_note(
+                                "help: path must not contain empty segments `//`".to_string(),
+                            ),
+                    );
+                }
 
-        // Check trailing `/`
-        if ch == '/' && chars.peek().is_none() {
-            diagnostics.push(
-                Report::warning("unnecessary trailing `/` in path".to_string())
-                    .add_label(Label::primary(
-                        "unnecessary trailing `/` in path".to_string(),
-                        text_range.into(),
-                    ))
-                    .with_note("help: trailing `/` is unnecessary and is ignored".to_string()),
-            );
-        }
-
-        // Validate parameters
-        if ch == '{' {
-            let end_idx = validate_path_param(&mut chars, idx, text_range, diagnostics);
-            let param_start = Into::<usize>::into(text_range.start()) + idx;
-
-            // Check parameter ends
-            if end_idx.is_none() {
-                diagnostics.push(
-                    Report::error("missing ending `}` in path parameter".to_string())
-                        .add_label(Label::primary(
-                            "missing ending `}` in path parameter".to_string(),
-                            text_range.into(),
-                        ))
-                        .add_label(Label::secondary(
-                            "path parameter starting here".to_string(),
-                            Span::new(param_start, param_start + 1),
-                        )),
-                );
+                // Check trailing `/`
+                if chars.peek().is_none() {
+                    diagnostics.push(
+                        Report::warning("unnecessary trailing `/` in path".to_string())
+                            .add_label(Label::primary(
+                                "unnecessary trailing `/` in path".to_string(),
+                                text_range.into(),
+                            ))
+                            .with_note(
+                                "help: trailing `/` is unnecessary and is ignored".to_string(),
+                            ),
+                    );
+                }
             }
 
-            // Check parameter has a valid position
-            // Parameter has invalid position if there isn't a `/` before or after it
-            let invalid_position = !after_slash || chars.peek().is_some_and(|(_, ch)| *ch != '/');
-            if let Some(end_idx) = end_idx
-                && invalid_position
-            {
-                let param_end = Into::<usize>::into(text_range.start()) + end_idx;
+            // Validate parameters
+            '{' => validate_path_param(path, &mut chars, after_slash, idx, text_range, diagnostics),
 
-                diagnostics.push(
+            // Check escaped By RFC 3986 valid escape is "%" HEXDIG HEXDIG
+            // where HEXDIG is 0-9 and a-f or A-F.
+            '%' => {
+                let first = chars.next();
+                let second = chars.next();
+
+                let valid = first.is_some_and(|(_, c)| c.is_ascii_hexdigit())
+                    && second.is_some_and(|(_, c)| c.is_ascii_hexdigit());
+
+                if !valid {
+                    all_escapes_valid = false;
+                }
+            }
+
+            // What is left is to check char is valid. Branches under here do that.
+            // Check that character is valid. By RFC 3986 valid absolute paths are one of:
+            // ```text
+            // ALPHA / DIGIT / "-" / "." / "_" / "~"  / ":" / "@" / "!" / "$" / "&" / "'" / "(" / ")" / "*" / "+" / "," / ";" / "="
+            // ```
+
+            // alpha numeric is valid
+            ch if ch.is_ascii_alphanumeric() => (),
+
+            // Valid special "special" chars
+            '-' | '.' | '_' | '~' | ':' | '@' | '!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+'
+            | ',' | ';' | '=' => (),
+
+            // Other chars are invalid.
+            _ => {
+                all_chars_valid = false;
+            }
+        }
+
+        after_slash = ch == '/';
+    }
+
+    if !all_chars_valid {
+        diagnostics.push(
+            Report::error("path contains invalid characters".to_string()).add_label(
+                Label::primary(
+                    "path contains invalid characters".to_string(),
+                    text_range.into(),
+                ),
+            ).with_note("help: path has to be an absolute path that can contain parameters `{param_name}`. See RFC 3986 for what valid path characters are".to_string()),
+        );
+    }
+
+    if !all_escapes_valid {
+        diagnostics.push(
+            Report::error("path contains invalid escape sequences".to_string()).add_label(
+                Label::primary(
+                    "path contains invalid escape sequences".to_string(),
+                    text_range.into(),
+                ),
+            ).with_note("help: valid escape sequence in path is `% HEXDIG HEXDIG` where `HEXDIG is hexadecimal digit.".to_string()),
+        );
+    }
+}
+
+/// Validates path parameter is valid.
+///
+/// - `path` is the string of the whole path.
+/// - `chars` is iterator over path that starts (chars.next() returns) character after beginning `{}`
+/// - `start_idx` is index of starting `{` - `&path[start_idx..(start_idx+1)]` should be `{`
+/// - `text_range` is the range of the whole path in the syntax tree
+fn validate_path_param(
+    path: &str,
+    chars: &mut Peekable<impl Iterator<Item = (usize, char)>>,
+    after_slash: bool,
+    start_idx: usize,
+    text_range: TextRange,
+    diagnostics: &mut Vec<Report>,
+) {
+    // End index is char after '}' so that `&path[start_idx..end_idx]` gives the full param
+    let end_idx = chars.find_map(|(idx, ch)| if ch == '/' { Some(idx + 1) } else { None });
+    let param_start = Into::<usize>::into(text_range.start()) + start_idx;
+
+    if let Some(end_idx) = end_idx {
+        let param_end = Into::<usize>::into(text_range.start()) + end_idx;
+
+        // Check parameter has a valid position
+        // Parameter has invalid position if there isn't a `/` before or after it
+        if !after_slash || chars.peek().is_some_and(|(_, ch)| *ch != '/') {
+            diagnostics.push(
                     Report::error("invalid partial path parameter".to_string()).add_label(
                         Label::primary(
                             "invalid partial path parameter position".to_string(),
@@ -253,29 +325,41 @@ fn validate_path(path: &str, text_range: TextRange, diagnostics: &mut Vec<Report
                         ),
                     ).with_note("help: path parameter has to take up a whole path segment, not just a part of it".to_string()),
                 );
-            }
         }
 
-        // TODO: check invalid chars (do not forget url encoding)
-
-        after_slash = ch == '/';
-    }
-}
-
-fn validate_path_param(
-    chars: &mut impl Iterator<Item = (usize, char)>,
-    start_idx: usize,
-    text_range: TextRange,
-    diagnostics: &mut Vec<Report>,
-) -> Option<usize> {
-    while let Some((idx, ch)) = chars.next() {
-        // Check if the parameter is ended
-        if ch == '}' {
-            return Some(idx + 1); // utf8 size of `}` is 1
+        // Check name of parameter is not empty and is valid
+        let param_name = &path[(start_idx + 1)..(end_idx - 1)];
+        if param_name.is_empty() {
+            diagnostics.push(
+                Report::error("invalid empty path parameter".to_string())
+                    .add_label(Label::primary(
+                        "invalid empty path parameter".to_string(),
+                        Span::new(param_start, param_end),
+                    ))
+                    .with_note("help: path parameter has to have a name".to_string()),
+            );
+        } else if !is_name_valid(param_name) {
+            diagnostics.push(
+                Report::error("invalid path parameter name".to_string())
+                    .add_label(Label::primary(
+                        "invalid path parameter name".to_string(),
+                        Span::new(param_start, param_end),
+                    ))
+                    .with_note("help: name can only contain alphanumeric characters, `_`, `-` and `.`. It also has to start with alphabetic character.".to_string()),
+            );
         }
-
-        // TODO: Implement char is identifier
+    } else {
+        // Report parameter not ending
+        diagnostics.push(
+            Report::error("missing ending `}` in path parameter".to_string())
+                .add_label(Label::primary(
+                    "missing ending `}` in path parameter".to_string(),
+                    text_range.into(),
+                ))
+                .add_label(Label::secondary(
+                    "path parameter starting here".to_string(),
+                    Span::new(param_start, param_start + 1),
+                )),
+        );
     }
-
-    None
 }
