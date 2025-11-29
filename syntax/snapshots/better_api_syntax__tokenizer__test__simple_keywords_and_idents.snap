@@ -61,7 +61,7 @@ expression: tokens
     ),
     (
         TOKEN_IDENTIFIER,
-        "this_is_Ident213-890asdf",
+        "this_is_Ident213890asdf",
     ),
     (
         TOKEN_EOL,

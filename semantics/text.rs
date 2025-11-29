@@ -31,16 +31,14 @@ pub fn lower_name(
     Some(name_id)
 }
 
-/// Returns if name is a valid string.
-pub fn is_name_valid(name: &str) -> bool {
-    name.chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
-        && name.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
-}
-
 /// Validates if given string is a valid name.
 pub fn validate_name(name: &str, range: TextRange) -> Result<(), Report> {
-    if is_name_valid(name) {
+    let is_valid = name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
+        && name.chars().next().is_some_and(|c| c.is_ascii_alphabetic());
+
+    if is_valid {
         Ok(())
     } else {
         Err(Report::error("invalid name".to_string()).add_label(Label::primary("invalid name".to_string(), range.into())).with_note(

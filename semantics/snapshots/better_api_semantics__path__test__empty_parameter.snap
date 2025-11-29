@@ -1,0 +1,23 @@
+---
+source: semantics/path.rs
+expression: diagnostics
+---
+[
+    Report {
+        severity: Error,
+        title: "empty path parameter",
+        labels: [
+            Label {
+                style: Primary,
+                message: "empty path parameter",
+                span: Span {
+                    start: 6,
+                    end: 8,
+                },
+            },
+        ],
+        note: Some(
+            "help: path parameter has to have a name",
+        ),
+    },
+]

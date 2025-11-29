@@ -69,7 +69,7 @@ impl<'s, 'd> Tokenizer<'s, 'd> {
     /// is also used for reading keywords.
     fn read_ident(&mut self) {
         while let Some(ch) = self.chars.peek()
-            && (ch.is_alphabetic() || ch.is_ascii_digit() || *ch == '_' || *ch == '-')
+            && (ch.is_ascii_alphanumeric() || *ch == '_')
         {
             // Move to next char
             self.pos += ch.len_utf8();
@@ -381,7 +381,7 @@ mod test {
                 PATCH
                 true
                 false
-                this_is_Ident213-890asdf
+                this_is_Ident213890asdf
                 i32
                 i64
                 f32

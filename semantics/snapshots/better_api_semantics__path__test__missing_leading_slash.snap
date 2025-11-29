@@ -1,0 +1,23 @@
+---
+source: semantics/path.rs
+expression: diagnostics
+---
+[
+    Report {
+        severity: Error,
+        title: "missing leading `/` in path",
+        labels: [
+            Label {
+                style: Primary,
+                message: "missing leading `/` in path",
+                span: Span {
+                    start: 0,
+                    end: 9,
+                },
+            },
+        ],
+        note: Some(
+            "help: path has to be absolute and start with a `/`",
+        ),
+    },
+]

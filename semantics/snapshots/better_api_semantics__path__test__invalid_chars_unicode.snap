@@ -1,0 +1,23 @@
+---
+source: semantics/path.rs
+expression: diagnostics
+---
+[
+    Report {
+        severity: Error,
+        title: "path contains invalid characters",
+        labels: [
+            Label {
+                style: Primary,
+                message: "path contains invalid characters",
+                span: Span {
+                    start: 0,
+                    end: 12,
+                },
+            },
+        ],
+        note: Some(
+            "help: path has to be an absolute path that can contain parameters `{param_name}`. See RFC 3986 for what valid path characters are",
+        ),
+    },
+]

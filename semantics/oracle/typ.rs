@@ -77,6 +77,8 @@ impl<'a> Oracle<'a> {
     fn lower_type_def(&mut self, def: &ast::TypeDefinition) {
         let Some(name_id) = def
             .name()
+            // TODO: no need to lower name here, since name() should be identifier which is
+            // stricter check than semantic name.
             .and_then(|n| lower_name(&n, &mut self.strings, &mut self.reports))
         else {
             return;

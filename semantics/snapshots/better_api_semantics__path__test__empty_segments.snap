@@ -1,0 +1,31 @@
+---
+source: semantics/path.rs
+expression: diagnostics
+---
+[
+    Report {
+        severity: Error,
+        title: "path contains empty segments",
+        labels: [
+            Label {
+                style: Primary,
+                message: "path contains empty segments",
+                span: Span {
+                    start: 0,
+                    end: 11,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "empty segment",
+                span: Span {
+                    start: 5,
+                    end: 7,
+                },
+            },
+        ],
+        note: Some(
+            "help: path must not contain empty segments `//`",
+        ),
+    },
+]

@@ -51,8 +51,6 @@ use std::iter::Peekable;
 use better_api_diagnostic::{Label, Report, Span};
 use better_api_syntax::TextRange;
 
-use crate::text::is_name_valid;
-
 /// A single part of the [`Path`].
 ///
 /// See [module documentation](self) for more details.
@@ -175,6 +173,11 @@ impl PathArena {
 
 /// Checks that path is valid and reports errors
 fn validate_path(path: &str, text_range: TextRange, diagnostics: &mut Vec<Report>) {
+    // Handle `/`  as a special case
+    if path == "/" {
+        return;
+    }
+
     let mut chars = path.char_indices().peekable();
 
     // Check leading character
@@ -198,7 +201,8 @@ fn validate_path(path: &str, text_range: TextRange, diagnostics: &mut Vec<Report
             '/' => {
                 // Check for empty segments
                 if chars.peek().is_some_and(|(_, ch)| *ch == '/') {
-                    let segment_start = Into::<usize>::into(text_range.start()) + idx;
+                    // +1 accounts for the starting `"` of the string containing the path.
+                    let segment_start = Into::<usize>::into(text_range.start()) + idx + 1;
 
                     diagnostics.push(
                         Report::error("path contains empty segments".to_string())
@@ -288,7 +292,7 @@ fn validate_path(path: &str, text_range: TextRange, diagnostics: &mut Vec<Report
                     "path contains invalid escape sequences".to_string(),
                     text_range.into(),
                 ),
-            ).with_note("help: valid escape sequence in path is `% HEXDIG HEXDIG` where `HEXDIG is hexadecimal digit.".to_string()),
+            ).with_note("help: valid escape sequence in path is `% HEXDIG HEXDIG` where `HEXDIG` is hexadecimal digit.".to_string()),
         );
     }
 }
@@ -308,11 +312,14 @@ fn validate_path_param(
     diagnostics: &mut Vec<Report>,
 ) {
     // End index is char after '}' so that `&path[start_idx..end_idx]` gives the full param
-    let end_idx = chars.find_map(|(idx, ch)| if ch == '/' { Some(idx + 1) } else { None });
-    let param_start = Into::<usize>::into(text_range.start()) + start_idx;
+    let end_idx = chars.find_map(|(idx, ch)| if ch == '}' { Some(idx + 1) } else { None });
+
+    // +1 accounts for the starting `"` of the string containing the path.
+    let token_start = Into::<usize>::into(text_range.start()) + 1;
+    let param_start = token_start + start_idx;
 
     if let Some(end_idx) = end_idx {
-        let param_end = Into::<usize>::into(text_range.start()) + end_idx;
+        let param_end = token_start + end_idx;
 
         // Check parameter has a valid position
         // Parameter has invalid position if there isn't a `/` before or after it
@@ -320,32 +327,32 @@ fn validate_path_param(
             diagnostics.push(
                     Report::error("invalid partial path parameter".to_string()).add_label(
                         Label::primary(
-                            "invalid partial path parameter position".to_string(),
+                            "invalid partial path parameter".to_string(),
                             Span::new(param_start, param_end),
                         ),
-                    ).with_note("help: path parameter has to take up a whole path segment, not just a part of it".to_string()),
-                );
+                ).with_note("help: path parameter has to take up a whole path segment, not just a part of it.\n      That is `/{param}` is valid and `/pre{param}after` is not".to_string()),
+            );
         }
 
         // Check name of parameter is not empty and is valid
         let param_name = &path[(start_idx + 1)..(end_idx - 1)];
         if param_name.is_empty() {
             diagnostics.push(
-                Report::error("invalid empty path parameter".to_string())
+                Report::error("empty path parameter".to_string())
                     .add_label(Label::primary(
-                        "invalid empty path parameter".to_string(),
+                        "empty path parameter".to_string(),
                         Span::new(param_start, param_end),
                     ))
                     .with_note("help: path parameter has to have a name".to_string()),
             );
-        } else if !is_name_valid(param_name) {
+        } else if !is_param_name_valid(param_name) {
             diagnostics.push(
                 Report::error("invalid path parameter name".to_string())
                     .add_label(Label::primary(
                         "invalid path parameter name".to_string(),
                         Span::new(param_start, param_end),
                     ))
-                    .with_note("help: name can only contain alphanumeric characters, `_`, `-` and `.`. It also has to start with alphabetic character.".to_string()),
+                    .with_note("help: name can only contain alphanumeric characters and `_`.  It also has to start with alphabetic character.".to_string()),
             );
         }
     } else {
@@ -358,8 +365,252 @@ fn validate_path_param(
                 ))
                 .add_label(Label::secondary(
                     "path parameter starting here".to_string(),
-                    Span::new(param_start, param_start + 1),
+                    Span::new(param_start, param_start + 1), // utf8 len of '}' is 1
                 )),
         );
+    }
+}
+
+/// Returns if parameter name is valid identifier.
+fn is_param_name_valid(name: &str) -> bool {
+    name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        && name.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+}
+
+#[cfg(test)]
+mod test {
+    use better_api_syntax::{TextRange, TextSize};
+
+    use crate::path::validate_path;
+
+    /// Helper function for constructing mock text range that belongs to a string.
+    fn text_range_for_str(s: &str) -> TextRange {
+        // In real world range contains start and end `"` of a path string, which is why range has
+        // to be +2
+        TextRange::new(TextSize::new(0), TextSize::new(s.len() as u32 + 2))
+    }
+
+    #[test]
+    fn valid_paths() {
+        let paths = ["/", "/foo", "/foo/bar", "/foo/{param_id}", "/foo/{p1}/{p2}"];
+
+        for path in &paths {
+            let mut diagnostics = vec![];
+            let range = text_range_for_str(path);
+            validate_path(path, range, &mut diagnostics);
+
+            assert!(diagnostics.is_empty());
+        }
+    }
+
+    #[test]
+    fn empty_path() {
+        let path = "";
+        let mut diagnostics = vec![];
+        let range = text_range_for_str(path);
+        validate_path(path, range, &mut diagnostics);
+
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn empty_segments() {
+        let path = "/foo//bar";
+        let mut diagnostics = vec![];
+        let range = text_range_for_str(path);
+        validate_path(path, range, &mut diagnostics);
+
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn empty_parameter() {
+        let path = "/foo/{}";
+        let mut diagnostics = vec![];
+        let range = text_range_for_str(path);
+        validate_path(path, range, &mut diagnostics);
+
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn invalid_parameter_position_start() {
+        let path = "/foo{param}";
+        let mut diagnostics = vec![];
+        let range = text_range_for_str(path);
+        validate_path(path, range, &mut diagnostics);
+
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn invalid_parameter_position_end() {
+        let path = "/{param}bar";
+        let mut diagnostics = vec![];
+        let range = text_range_for_str(path);
+        validate_path(path, range, &mut diagnostics);
+
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn invalid_trailing_slash() {
+        let path = "/foo/bar/";
+        let mut diagnostics = vec![];
+        let range = text_range_for_str(path);
+        validate_path(path, range, &mut diagnostics);
+
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn missing_leading_slash() {
+        let path = "foo/bar";
+        let mut diagnostics = vec![];
+        let range = text_range_for_str(path);
+        validate_path(path, range, &mut diagnostics);
+
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn invalid_chars_in_path() {
+        let path = "/foo/bar baz";
+        let mut diagnostics = vec![];
+        let range = text_range_for_str(path);
+        validate_path(path, range, &mut diagnostics);
+
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn invalid_chars_unicode() {
+        let path = "/foo/café";
+        let mut diagnostics = vec![];
+        let range = text_range_for_str(path);
+        validate_path(path, range, &mut diagnostics);
+
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn valid_chars_in_path() {
+        let paths = [
+            "/foo-bar",
+            "/foo.bar",
+            "/foo_bar",
+            "/foo~bar",
+            "/foo:bar",
+            "/foo@bar",
+            "/foo!bar",
+            "/foo$bar",
+            "/foo&bar",
+            "/foo'bar",
+            "/foo(bar)",
+            "/foo*bar",
+            "/foo+bar",
+            "/foo,bar",
+            "/foo;bar",
+            "/foo=bar",
+        ];
+
+        for path in &paths {
+            let mut diagnostics = vec![];
+            let range = text_range_for_str(path);
+            validate_path(path, range, &mut diagnostics);
+
+            assert!(diagnostics.is_empty(), "Path {path} should be valid");
+        }
+    }
+
+    #[test]
+    fn invalid_param_name_special_chars() {
+        let path = "/foo/{param-name}";
+        let mut diagnostics = vec![];
+        let range = text_range_for_str(path);
+        validate_path(path, range, &mut diagnostics);
+
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn invalid_param_name_starts_with_number() {
+        let path = "/foo/{1param}";
+        let mut diagnostics = vec![];
+        let range = text_range_for_str(path);
+        validate_path(path, range, &mut diagnostics);
+
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn valid_param_names() {
+        let paths = [
+            "/foo/{param}",
+            "/foo/{paramName}",
+            "/foo/{param123}",
+            "/foo/{p}",
+        ];
+
+        for path in &paths {
+            let mut diagnostics = vec![];
+            let range = text_range_for_str(path);
+            validate_path(path, range, &mut diagnostics);
+
+            assert!(diagnostics.is_empty(), "Path {path} should be valid");
+        }
+    }
+
+    #[test]
+    fn invalid_url_escape_incomplete() {
+        let path = "/foo/%2";
+        let mut diagnostics = vec![];
+        let range = text_range_for_str(path);
+        validate_path(path, range, &mut diagnostics);
+
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn invalid_url_escape_non_hex() {
+        let path = "/foo/%ZZ";
+        let mut diagnostics = vec![];
+        let range = text_range_for_str(path);
+        validate_path(path, range, &mut diagnostics);
+
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn invalid_url_escape_missing() {
+        let path = "/foo/%";
+        let mut diagnostics = vec![];
+        let range = text_range_for_str(path);
+        validate_path(path, range, &mut diagnostics);
+
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn valid_url_escapes() {
+        let paths = ["/foo/%20bar", "/foo/%2F", "/foo/%aB", "/foo/%FF"];
+
+        for path in &paths {
+            let mut diagnostics = vec![];
+            let range = text_range_for_str(path);
+            validate_path(path, range, &mut diagnostics);
+
+            assert!(diagnostics.is_empty(), "Path {path} should be valid");
+        }
+    }
+
+    #[test]
+    fn multiple_errors() {
+        let path = "foo//bar/{}/baz qux";
+        let mut diagnostics = vec![];
+        let range = text_range_for_str(path);
+        validate_path(path, range, &mut diagnostics);
+
+        insta::assert_debug_snapshot!(diagnostics);
     }
 }

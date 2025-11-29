@@ -1,0 +1,23 @@
+---
+source: semantics/path.rs
+expression: diagnostics
+---
+[
+    Report {
+        severity: Error,
+        title: "invalid partial path parameter",
+        labels: [
+            Label {
+                style: Primary,
+                message: "invalid partial path parameter",
+                span: Span {
+                    start: 2,
+                    end: 9,
+                },
+            },
+        ],
+        note: Some(
+            "help: path parameter has to take up a whole path segment, not just a part of it.\n      That is `/{param}` is valid and `/pre{param}after` is not",
+        ),
+    },
+]

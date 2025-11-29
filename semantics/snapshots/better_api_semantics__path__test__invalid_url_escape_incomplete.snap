@@ -1,0 +1,23 @@
+---
+source: semantics/path.rs
+expression: diagnostics
+---
+[
+    Report {
+        severity: Error,
+        title: "path contains invalid escape sequences",
+        labels: [
+            Label {
+                style: Primary,
+                message: "path contains invalid escape sequences",
+                span: Span {
+                    start: 0,
+                    end: 9,
+                },
+            },
+        ],
+        note: Some(
+            "help: valid escape sequence in path is `% HEXDIG HEXDIG` where `HEXDIG` is hexadecimal digit.",
+        ),
+    },
+]

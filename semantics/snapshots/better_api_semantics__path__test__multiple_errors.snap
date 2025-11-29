@@ -1,0 +1,82 @@
+---
+source: semantics/path.rs
+expression: diagnostics
+---
+[
+    Report {
+        severity: Error,
+        title: "missing leading `/` in path",
+        labels: [
+            Label {
+                style: Primary,
+                message: "missing leading `/` in path",
+                span: Span {
+                    start: 0,
+                    end: 21,
+                },
+            },
+        ],
+        note: Some(
+            "help: path has to be absolute and start with a `/`",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "path contains empty segments",
+        labels: [
+            Label {
+                style: Primary,
+                message: "path contains empty segments",
+                span: Span {
+                    start: 0,
+                    end: 21,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "empty segment",
+                span: Span {
+                    start: 4,
+                    end: 6,
+                },
+            },
+        ],
+        note: Some(
+            "help: path must not contain empty segments `//`",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "empty path parameter",
+        labels: [
+            Label {
+                style: Primary,
+                message: "empty path parameter",
+                span: Span {
+                    start: 10,
+                    end: 12,
+                },
+            },
+        ],
+        note: Some(
+            "help: path parameter has to have a name",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "path contains invalid characters",
+        labels: [
+            Label {
+                style: Primary,
+                message: "path contains invalid characters",
+                span: Span {
+                    start: 0,
+                    end: 21,
+                },
+            },
+        ],
+        note: Some(
+            "help: path has to be an absolute path that can contain parameters `{param_name}`. See RFC 3986 for what valid path characters are",
+        ),
+    },
+]

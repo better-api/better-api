@@ -1,0 +1,23 @@
+---
+source: semantics/path.rs
+expression: diagnostics
+---
+[
+    Report {
+        severity: Error,
+        title: "invalid path parameter name",
+        labels: [
+            Label {
+                style: Primary,
+                message: "invalid path parameter name",
+                span: Span {
+                    start: 6,
+                    end: 18,
+                },
+            },
+        ],
+        note: Some(
+            "help: name can only contain alphanumeric characters and `_`.  It also has to start with alphabetic character.",
+        ),
+    },
+]
