@@ -172,6 +172,19 @@ impl PathArena {
 }
 
 /// Checks that path is valid and reports errors
+///
+/// - `path` should be a path string that went through [`text::parse_string`](crate::text::parse_string).
+/// - `text_range` should be the range of the token returned by
+///   [`Path::string`](better_api_syntax::ast::Path::string).
+///
+/// NOTE: Currently known issue is, that if path contains escape chars (like `\n`, `\t`), ranges
+/// reported in the diagnostics will be off by one, because they don't take into account that one
+/// char (ie new line) is actually two chars in the user editor (ie `\n`). Since path doesn't allow
+/// any of the characters you get while escaping, this is fine for know. User will get an error
+/// about using invalid characters, which is reported with correct range because we take the range
+/// of the whole path node. When they fix this error, other potential errors are also reported
+/// correctly. Additionally error is always reported with range inside of the path, so it's not the
+/// end of the world to not handle this edge case initially.
 fn validate_path(path: &str, text_range: TextRange, diagnostics: &mut Vec<Report>) {
     // Handle `/`  as a special case
     if path == "/" {
@@ -379,9 +392,9 @@ fn is_param_name_valid(name: &str) -> bool {
 
 #[cfg(test)]
 mod test {
-    use better_api_syntax::{TextRange, TextSize};
+    use better_api_syntax::{TextRange, TextSize, parse, tokenize};
 
-    use crate::path::validate_path;
+    use crate::{path::validate_path, text::parse_string};
 
     /// Helper function for constructing mock text range that belongs to a string.
     fn text_range_for_str(s: &str) -> TextRange {
@@ -610,6 +623,29 @@ mod test {
         let mut diagnostics = vec![];
         let range = text_range_for_str(path);
         validate_path(path, range, &mut diagnostics);
+
+        insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    // This tests that our assumption in what text_range that validate_path gets from the parse is.
+    // In other words, it checks that text_range_for_str is "mocking" ranges correctly.
+    //
+    // We do that by getting a path from the real world pipeline of
+    // tokenize -> parse -> get endpoint -> get path -> parse string token -> validate_path
+    #[test]
+    fn range_interpretation() {
+        let text = indoc::indoc! {r#"
+            GET "foo/bar/{in-valid}/" {}
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let path = res.root.endpoints().next().unwrap().path().unwrap();
+        let token = path.string();
+        let path_str = parse_string(&token, &mut diagnostics);
+        validate_path(&path_str, token.text_range(), &mut diagnostics);
 
         insta::assert_debug_snapshot!(diagnostics);
     }

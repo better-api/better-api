@@ -1,0 +1,57 @@
+---
+source: semantics/path.rs
+expression: diagnostics
+---
+[
+    Report {
+        severity: Error,
+        title: "missing leading `/` in path",
+        labels: [
+            Label {
+                style: Primary,
+                message: "missing leading `/` in path",
+                span: Span {
+                    start: 4,
+                    end: 25,
+                },
+            },
+        ],
+        note: Some(
+            "help: path has to be absolute and start with a `/`",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "invalid path parameter name",
+        labels: [
+            Label {
+                style: Primary,
+                message: "invalid path parameter name",
+                span: Span {
+                    start: 13,
+                    end: 23,
+                },
+            },
+        ],
+        note: Some(
+            "help: name can only contain alphanumeric characters and `_`.  It also has to start with alphabetic character.",
+        ),
+    },
+    Report {
+        severity: Warning,
+        title: "unnecessary trailing `/` in path",
+        labels: [
+            Label {
+                style: Primary,
+                message: "unnecessary trailing `/` in path",
+                span: Span {
+                    start: 4,
+                    end: 25,
+                },
+            },
+        ],
+        note: Some(
+            "help: trailing `/` is unnecessary and is ignored",
+        ),
+    },
+]

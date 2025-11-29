@@ -116,6 +116,11 @@ impl Root {
         self.0.children().filter_map(TypeDefinition::cast)
     }
 
+    /// Get iterator through all endpoints.
+    pub fn endpoints(&self) -> impl Iterator<Item = Endpoint> {
+        self.0.children().filter_map(Endpoint::cast)
+    }
+
     /// A placeholder, just so that warning about unused `Oracle::parse_type`
     /// goes away
     /// TODO: Remove this in the future.
@@ -317,7 +322,7 @@ impl String {
             .first_token()
             .expect("parser should parse strings correctly");
 
-        debug_assert_eq!(
+        assert_eq!(
             token.kind(),
             TOKEN_STRING,
             "parser should parse strings correctly"
@@ -341,7 +346,7 @@ impl Integer {
             .first_token()
             .expect("parser should parse integers correctly");
 
-        debug_assert_eq!(
+        assert_eq!(
             token.kind(),
             TOKEN_INTEGER,
             "parser should parse integers correctly"
@@ -368,7 +373,7 @@ impl Float {
             .first_token()
             .expect("parser should parse floats correctly");
 
-        debug_assert_eq!(
+        assert_eq!(
             token.kind(),
             TOKEN_FLOAT,
             "parser should parse floats correctly"
@@ -500,7 +505,7 @@ impl TypeRef {
             .first_token()
             .expect("parser should parse type reference correctly");
 
-        debug_assert_eq!(
+        assert_eq!(
             token.kind(),
             TOKEN_IDENTIFIER,
             "parser should parse type reference correctly"
@@ -787,6 +792,13 @@ ast_node! {
     struct Endpoint;
 }
 
+impl Endpoint {
+    /// Returns endpoint path
+    pub fn path(&self) -> Option<Path> {
+        self.0.children().find_map(Path::cast)
+    }
+}
+
 ast_node! {
     #[from(NODE_ENDPOINT_METHOD)]
     /// Endpoint method
@@ -797,6 +809,24 @@ ast_node! {
     #[from(NODE_PATH)]
     /// Path of an endpoint or a route.
     struct Path;
+}
+
+impl Path {
+    /// Returns string token for the path
+    pub fn string(&self) -> StringToken {
+        let token = self
+            .0
+            .first_token()
+            .expect("parser should parse path correctly");
+
+        assert_eq!(
+            token.kind(),
+            TOKEN_STRING,
+            "parser should parse path correctly"
+        );
+
+        StringToken(token)
+    }
 }
 
 ast_node! {
