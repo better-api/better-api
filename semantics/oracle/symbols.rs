@@ -1,5 +1,4 @@
 use better_api_diagnostic::{Label, Report, Severity};
-use better_api_syntax::ast::AstNode;
 use smallvec::SmallVec;
 
 use crate::Oracle;
@@ -175,7 +174,6 @@ impl<'a> Oracle<'a> {
                 let range = def
                     .name()
                     .expect("type definition should have a name - only named types are stored in source_map")
-                    .syntax()
                     .text_range();
 
                 if idx == 0 {

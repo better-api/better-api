@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use better_api_diagnostic::{Label, Report, Span};
-use better_api_syntax::{Kind, SyntaxToken, TextRange, ast};
+use better_api_syntax::{TextRange, ast};
 
 use crate::string::{StringId, StringInterner};
 
@@ -51,16 +51,16 @@ pub fn validate_name(name: &str, range: TextRange) -> Result<(), Report> {
 ///
 /// This removes leading and trailing `"` and escapes the character. Returned
 /// `Cow<'_, str>` is the rust representation of the string itself.
-///
-/// <div class="warning">
-/// This function expect a string token. Any other token results in a unknown behavior.
-/// </div>
-pub fn parse_string<'a>(token: &'a SyntaxToken, diagnostics: &mut Vec<Report>) -> Cow<'a, str> {
-    debug_assert_eq!(token.kind(), Kind::TOKEN_STRING);
-
+pub fn parse_string<'a>(
+    token: &'a ast::StringToken,
+    diagnostics: &mut Vec<Report>,
+) -> Cow<'a, str> {
     let mut text = token.text();
 
-    debug_assert!(&text[0..1] == "\"" && &text[text.len() - 1..text.len()] == "\"");
+    assert!(
+        &text[0..1] == "\"" && &text[text.len() - 1..text.len()] == "\"",
+        "invalid string token"
+    );
     text = &text[1..text.len() - 1]; // Remove start and end `"`
 
     if !text.contains('\\') {
@@ -115,8 +115,8 @@ pub fn parse_string<'a>(token: &'a SyntaxToken, diagnostics: &mut Vec<Report>) -
 #[cfg(test)]
 mod test {
     use better_api_diagnostic::{Label, Report, Span};
-    use better_api_syntax::ast::AstNode;
-    use better_api_syntax::{Kind, Parse, SyntaxToken, TextRange, TextSize, parse, tokenize};
+    use better_api_syntax::ast::{self};
+    use better_api_syntax::{Parse, TextRange, TextSize, parse, tokenize};
 
     use crate::text::{parse_string, validate_name};
 
@@ -148,20 +148,12 @@ mod test {
     }
 
     // Auxiliary function that gets first string token in tree.
-    fn get_string_token(res: &Parse) -> SyntaxToken {
-        res.root
-            .syntax()
-            .descendants_with_tokens()
-            .find_map(|el| {
-                el.as_token().and_then(|t| {
-                    if t.kind() == Kind::TOKEN_STRING {
-                        Some(t.clone())
-                    } else {
-                        None
-                    }
-                })
-            })
-            .unwrap()
+    fn get_string_token(res: &Parse) -> ast::StringToken {
+        let val = res.root.api_names().next().unwrap().value().unwrap();
+        match val {
+            ast::Value::String(string) => string.string(),
+            _ => panic!(),
+        }
     }
 
     #[test]

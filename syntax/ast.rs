@@ -142,18 +142,65 @@ ast_node! {
     struct Name;
 }
 
+/// Thin wrapper around token that is always `TOKEN_IDENTIFIER`.
+///
+/// Useful to separate identifier token from string token.
+#[repr(transparent)]
+pub struct IdentifierToken(SyntaxToken);
+
+impl IdentifierToken {
+    /// Returns underlying token
+    pub fn token(&self) -> &SyntaxToken {
+        &self.0
+    }
+
+    /// Token's text range
+    pub fn text_range(&self) -> TextRange {
+        self.0.text_range()
+    }
+
+    /// Returns text of the token
+    pub fn text(&self) -> &str {
+        self.0.text()
+    }
+}
+
+/// Thin wrapper around token that is always `TOKEN_STRING`.
+///
+/// Useful to separate identifier token from string token.
+#[repr(transparent)]
+pub struct StringToken(SyntaxToken);
+
+impl StringToken {
+    /// Returns underlying token
+    pub fn token(&self) -> &SyntaxToken {
+        &self.0
+    }
+
+    /// Token's text range
+    pub fn text_range(&self) -> TextRange {
+        self.0.text_range()
+    }
+
+    /// Returns text of the token
+    pub fn text(&self) -> &str {
+        self.0.text()
+    }
+}
+
 /// [`Name`] can be an identifier or a string. This type provides that information
 /// so that user knows if `text::parse_string` should be called or not.
 pub enum NameToken {
-    Identifier(SyntaxToken),
-    String(SyntaxToken),
+    Identifier(IdentifierToken),
+    String(StringToken),
 }
 
 impl NameToken {
     /// Returns the text range of the underlying token.
     pub fn text_range(&self) -> TextRange {
         match self {
-            NameToken::Identifier(token) | NameToken::String(token) => token.text_range(),
+            NameToken::Identifier(token) => token.text_range(),
+            NameToken::String(token) => token.text_range(),
         }
     }
 }
@@ -167,8 +214,8 @@ impl Name {
             .expect("parser should parse name correctly");
 
         match token.kind() {
-            TOKEN_IDENTIFIER => NameToken::Identifier(token),
-            TOKEN_STRING => NameToken::String(token),
+            TOKEN_IDENTIFIER => NameToken::Identifier(IdentifierToken(token)),
+            TOKEN_STRING => NameToken::String(StringToken(token)),
             _ => unreachable!("parser should parse name correctly"),
         }
     }
@@ -264,7 +311,7 @@ ast_node! {
 
 impl String {
     /// Returns TOKEN_STRING syntax token.
-    pub fn string(&self) -> SyntaxToken {
+    pub fn string(&self) -> StringToken {
         let token = self
             .0
             .first_token()
@@ -276,7 +323,7 @@ impl String {
             "parser should parse strings correctly"
         );
 
-        token
+        StringToken(token)
     }
 }
 
@@ -425,8 +472,12 @@ ast_node! {
 
 impl TypeDefinition {
     /// Returns the name of the type
-    pub fn name(&self) -> Option<Name> {
-        self.0.children().find_map(Name::cast)
+    pub fn name(&self) -> Option<IdentifierToken> {
+        let name = self.0.children().find_map(Name::cast)?;
+        match name.token() {
+            NameToken::Identifier(ident) => Some(ident),
+            NameToken::String(_) => unreachable!("type definition name should be an identifier"),
+        }
     }
 
     /// Returns type inside of definition
@@ -443,7 +494,7 @@ ast_node! {
 
 impl TypeRef {
     /// Returns TOKEN_IDENTIFIER syntax token.
-    pub fn name(&self) -> SyntaxToken {
+    pub fn name(&self) -> IdentifierToken {
         let token = self
             .0
             .first_token()
@@ -455,7 +506,7 @@ impl TypeRef {
             "parser should parse type reference correctly"
         );
 
-        token
+        IdentifierToken(token)
     }
 }
 

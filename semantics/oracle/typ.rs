@@ -75,14 +75,10 @@ impl<'a> Oracle<'a> {
 
     /// Lowers type definition node.
     fn lower_type_def(&mut self, def: &ast::TypeDefinition) {
-        let Some(name_id) = def
-            .name()
-            // TODO: no need to lower name here, since name() should be identifier which is
-            // stricter check than semantic name.
-            .and_then(|n| lower_name(&n, &mut self.strings, &mut self.reports))
-        else {
+        let Some(name_token) = def.name() else {
             return;
         };
+        let name_id = self.strings.insert(name_token.text());
 
         let Some(type_id) = def.typ().and_then(|t| self.lower_type(&t)) else {
             return;
@@ -91,12 +87,7 @@ impl<'a> Oracle<'a> {
         // There is already a symbol with the same name, so we report an error.
         if self.symbol_table.contains_key(&name_id) {
             let name = self.strings.get(name_id);
-            let range = def
-                .name()
-                // We check name node exists at the beginning of the function.
-                .expect("name should exist here")
-                .syntax()
-                .text_range();
+            let range = name_token.text_range();
 
             // If symbol table contains the name already, we should also have a valid type def
             // node, so expects should be fine.
@@ -107,7 +98,6 @@ impl<'a> Oracle<'a> {
             let original_range = original_def
                 .name()
                 .expect("name of original type def should exist")
-                .syntax()
                 .text_range();
 
             self.reports.push(
