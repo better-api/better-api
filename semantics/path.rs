@@ -64,17 +64,34 @@ pub struct PathPart(str);
 pub struct Path<'a> {
     arena: &'a PathArena,
 
+    id: PathId,
+
     /// Tail part of the path
-    pub part: &'a PathPart,
+    part: &'a PathPart,
 
     /// Id of the prefix
-    pub prefix_id: Option<PathId>,
+    prefix_id: Option<PathId>,
 }
 
 impl<'a> Path<'a> {
-    /// Get prefix of the path.
+    /// Get prefix of the path
     pub fn prefix(&'a self) -> Option<Path<'a>> {
         self.prefix_id.map(|id| self.arena.get(id))
+    }
+
+    /// Get id of the path prefix
+    pub fn prefix_id(&self) -> Option<PathId> {
+        self.prefix_id
+    }
+
+    /// Get the tail part of the path
+    pub fn part(&'a self) -> &'a PathPart {
+        self.part
+    }
+
+    /// Get id of the path
+    pub fn id(&self) -> PathId {
+        self.id
     }
 }
 
@@ -165,6 +182,7 @@ impl PathArena {
 
         Path {
             arena: self,
+            id,
             part,
             prefix_id: slot.prefix_id,
         }
