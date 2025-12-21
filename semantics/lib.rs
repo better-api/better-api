@@ -2,6 +2,7 @@ mod source_map;
 mod string;
 mod text;
 
+pub mod endpoint;
 pub mod oracle;
 pub mod path;
 pub mod typ;
