@@ -109,7 +109,7 @@ impl<'a> Iterator for Object<'a> {
 
         let field_id = ObjectFieldId {
             object_id: self.id,
-            slot: self.current.0,
+            slot_idx: self.current.0,
         };
         let field = self.arena.get_field(field_id);
 
@@ -176,20 +176,6 @@ pub enum PrimitiveValue {
     Float(f64),
 }
 
-trait BuilderParent {
-    fn arena(&mut self) -> &mut ValueArena;
-
-    /// This method is called by a child builder if it's dropped without
-    /// being finished successfully.
-    ///
-    /// For some builders this is a noop.
-    fn drop_child(&mut self);
-
-    fn data(&mut self) -> &mut Vec<Slot> {
-        &mut self.arena().data
-    }
-}
-
 /// Helper type for adding array to arena.
 ///
 /// This type is constructed with [`ValueArena::start_array`] method.
@@ -199,7 +185,10 @@ trait BuilderParent {
 /// If builder is dropped before calling finish, added values are removed from the
 /// arena.
 pub struct ArrayBuilder<'p> {
-    parent: &'p mut dyn BuilderParent,
+    data: &'p mut Vec<Slot>,
+
+    /// Optionally clean up the data if array is not finished successfully.
+    truncate: Option<u32>,
 
     /// Index in the arena that contains Slot::Array of this array.
     start: ValueId,
@@ -208,25 +197,14 @@ pub struct ArrayBuilder<'p> {
     finished: bool,
 }
 
-impl<'p> BuilderParent for ArrayBuilder<'p> {
-    fn arena(&mut self) -> &mut ValueArena {
-        self.parent.arena()
-    }
-
-    fn drop_child(&mut self) {
-        // Nothing to do
-    }
-}
-
 impl<'p> ArrayBuilder<'p> {
-    fn new(parent: &'p mut dyn BuilderParent) -> Self {
-        let data = &mut parent.arena().data;
-
+    fn new(data: &'p mut Vec<Slot>, truncate: Option<u32>) -> Self {
         let idx = data.len();
         data.push(Slot::Array { end: ValueId(0) });
 
         Self {
-            parent,
+            data,
+            truncate,
             start: ValueId(idx as u32),
             finished: false,
         }
@@ -234,21 +212,21 @@ impl<'p> ArrayBuilder<'p> {
 
     /// Add a new primitive value to the array.
     pub fn add_primitive(&mut self, value: PrimitiveValue) -> ValueId {
-        let idx = self.data().len();
+        let idx = self.data.len();
 
-        self.data().push(value.into());
+        self.data.push(value.into());
 
         ValueId(idx as u32)
     }
 
     /// Insert an array as the next element of this array.
     pub fn start_array<'a>(&'a mut self) -> ArrayBuilder<'a> {
-        ArrayBuilder::new(self)
+        ArrayBuilder::new(self.data, None)
     }
 
     /// Insert an object as the next element of this array.
     pub fn start_object<'a>(&'a mut self) -> ObjectBuilder<'a> {
-        ObjectBuilder::new(self)
+        ObjectBuilder::new(self.data, None)
     }
 
     /// Constructs the final array.
@@ -257,10 +235,10 @@ impl<'p> ArrayBuilder<'p> {
     pub fn finish(mut self) -> ValueId {
         self.finished = true;
 
-        let idx = self.data().len();
+        let idx = self.data.len();
 
         let start = self.start.0 as usize;
-        let head = &mut self.data()[start];
+        let head = &mut self.data[start];
         match head {
             Slot::Array { end } => *end = ValueId(idx as u32),
             _ => unreachable!("invalid ArrayBuilder start"),
@@ -276,10 +254,9 @@ impl<'p> Drop for ArrayBuilder<'p> {
             return;
         }
 
-        let len = self.start.0 as usize;
-        self.data().truncate(len);
-
-        self.parent.drop_child();
+        // Truncate the builder to `truncate` parameter, or self start.
+        let len = self.truncate.unwrap_or(self.start.0);
+        self.data.truncate(len as usize);
     }
 }
 
@@ -292,95 +269,70 @@ impl<'p> Drop for ArrayBuilder<'p> {
 /// If builder is dropped before calling finish, added fields and values are removed from the
 /// arena.
 pub struct ObjectBuilder<'p> {
-    parent: &'p mut dyn BuilderParent,
+    data: &'p mut Vec<Slot>,
+
+    /// Optionally clean up the data if array is not finished successfully.
+    truncate: Option<u32>,
 
     /// Index in the arena that contains Slot::Object of this object.
     start: ValueId,
 
     /// Was finished called, used by drop implementation.
     finished: bool,
-
-    /// Index of the last inserted field.
-    ///
-    /// That is arena[last_field_idx] points to the name of the field that was last inserted.
-    /// Used for cleaning up when child builder is dropped without calling `.finish()`.
-    ///
-    /// It is enough to handle last field, because child builder has to borrow this builder as
-    /// &mut, therefore you have to either drop a child builder or call `.finish()` before creating
-    /// a new one.
-    last_field_idx: Option<u32>,
-}
-
-impl<'p> BuilderParent for ObjectBuilder<'p> {
-    fn arena(&mut self) -> &mut ValueArena {
-        self.parent.arena()
-    }
-
-    fn drop_child(&mut self) {
-        // Truncate arena length so that it ends at last inserted field.
-        if let Some(len) = self.last_field_idx {
-            self.arena().data.truncate(len as usize);
-        }
-    }
 }
 
 impl<'p> ObjectBuilder<'p> {
-    fn new(parent: &'p mut dyn BuilderParent) -> Self {
-        let data = &mut parent.arena().data;
-
+    fn new(data: &'p mut Vec<Slot>, truncate: Option<u32>) -> Self {
         let idx = data.len();
         data.push(Slot::Object { end: ValueId(0) });
 
         Self {
-            parent,
+            data,
+            truncate,
             start: ValueId(idx as u32),
             finished: false,
-            last_field_idx: None,
         }
     }
 
     /// Add a new field to the object with primitive value.
     pub fn add_primitive(&mut self, name: StringId, value: PrimitiveValue) -> ObjectFieldId {
-        let slot = self.data().len() as u32;
-        self.last_field_idx = Some(slot);
+        let slot_idx = self.data.len() as u32;
 
-        self.data().push(Slot::ObjectField(name));
-        self.data().push(value.into());
+        self.data.push(Slot::ObjectField(name));
+        self.data.push(value.into());
 
         ObjectFieldId {
             object_id: self.start,
-            slot,
+            slot_idx,
         }
     }
 
     /// Add a new field to the object with object value.
     pub fn start_object<'a>(&'a mut self, name: StringId) -> (ObjectBuilder<'a>, ObjectFieldId) {
-        let slot = self.data().len() as u32;
-        self.last_field_idx = Some(slot);
+        let slot_idx = self.data.len() as u32;
 
-        self.data().push(Slot::ObjectField(name));
+        self.data.push(Slot::ObjectField(name));
 
         let field_id = ObjectFieldId {
             object_id: self.start,
-            slot,
+            slot_idx,
         };
-        let builder = ObjectBuilder::new(self);
+        let builder = ObjectBuilder::new(self.data, Some(slot_idx));
 
         (builder, field_id)
     }
 
     /// Add a new field to the object with array value.
     pub fn start_array<'a>(&'a mut self, name: StringId) -> (ArrayBuilder<'a>, ObjectFieldId) {
-        let slot = self.data().len() as u32;
-        self.last_field_idx = Some(slot);
+        let slot_idx = self.data.len() as u32;
 
-        self.data().push(Slot::ObjectField(name));
+        self.data.push(Slot::ObjectField(name));
 
         let field_id = ObjectFieldId {
             object_id: self.start,
-            slot,
+            slot_idx,
         };
-        let builder = ArrayBuilder::new(self);
+        let builder = ArrayBuilder::new(self.data, Some(slot_idx));
 
         (builder, field_id)
     }
@@ -391,10 +343,10 @@ impl<'p> ObjectBuilder<'p> {
     pub fn finish(mut self) -> ValueId {
         self.finished = true;
 
-        let idx = self.data().len();
+        let idx = self.data.len();
 
         let start = self.start.0 as usize;
-        let head = &mut self.data()[start];
+        let head = &mut self.data[start];
         match head {
             Slot::Object { end } => *end = ValueId(idx as u32),
             _ => unreachable!("invalid ObjectBuilder start"),
@@ -410,10 +362,9 @@ impl<'p> Drop for ObjectBuilder<'p> {
             return;
         }
 
-        let len = self.start.0 as usize;
-        self.data().truncate(len);
-
-        self.parent.drop_child();
+        // Truncate the builder to `truncate` parameter, or self start.
+        let len = self.truncate.unwrap_or(self.start.0);
+        self.data.truncate(len as usize);
     }
 }
 
@@ -430,7 +381,7 @@ pub struct ObjectFieldId {
     object_id: ValueId,
 
     /// Index of the slot in the arena
-    slot: u32,
+    slot_idx: u32,
 }
 
 impl ObjectFieldId {
@@ -441,7 +392,7 @@ impl ObjectFieldId {
 
     /// Get [`ValueId`] of the field's value.
     pub fn value_id(&self) -> ValueId {
-        ValueId(self.slot + 1)
+        ValueId(self.slot_idx + 1)
     }
 }
 
@@ -491,15 +442,15 @@ impl ValueArena {
 
     /// Get [`ObjectField`] by id.
     pub fn get_field<'a>(&'a self, id: ObjectFieldId) -> ObjectField<'a> {
-        let name_slot = &self.data[id.slot as usize];
-        let value_slot = &self.data[id.slot as usize + 1];
+        let name_slot = &self.data[id.slot_idx as usize];
+        let value_slot = &self.data[id.slot_idx as usize + 1];
 
         let name = match &name_slot {
             Slot::ObjectField(name) => name,
             val => unreachable!("invalid object field in arena for id {id:?}: {val:?}"),
         };
 
-        let value = Value::from_slot(self, ValueId(id.slot + 1), value_slot);
+        let value = Value::from_slot(self, ValueId(id.slot_idx + 1), value_slot);
 
         ObjectField {
             id,
@@ -517,22 +468,12 @@ impl ValueArena {
 
     /// Insert an object into the arena.
     pub fn start_object<'a>(&'a mut self) -> ObjectBuilder<'a> {
-        ObjectBuilder::new(self)
+        ObjectBuilder::new(&mut self.data, None)
     }
 
     /// Insert an array into the arena.
     pub fn start_array<'a>(&'a mut self) -> ArrayBuilder<'a> {
-        ArrayBuilder::new(self)
-    }
-}
-
-impl BuilderParent for ValueArena {
-    fn arena(&mut self) -> &mut ValueArena {
-        self
-    }
-
-    fn drop_child(&mut self) {
-        // Nothing to do
+        ArrayBuilder::new(&mut self.data, None)
     }
 }
 
@@ -869,7 +810,7 @@ mod test {
             container_field_id,
             ObjectFieldId {
                 object_id: root_id,
-                slot: 6,
+                slot_idx: 6,
             }
         );
 
@@ -877,7 +818,7 @@ mod test {
             numbers_field_id,
             ObjectFieldId {
                 object_id: container_id,
-                slot: 8,
+                slot_idx: 8,
             }
         );
 
@@ -885,7 +826,7 @@ mod test {
             nested_field_id,
             ObjectFieldId {
                 object_id: container_id,
-                slot: 19,
+                slot_idx: 19,
             }
         );
 
@@ -893,7 +834,7 @@ mod test {
             status_field_id,
             ObjectFieldId {
                 object_id: nested_obj_id,
-                slot: 21,
+                slot_idx: 21,
             }
         );
 
@@ -901,7 +842,7 @@ mod test {
             count_field_id,
             ObjectFieldId {
                 object_id: nested_obj_id,
-                slot: 23,
+                slot_idx: 23,
             }
         );
     }

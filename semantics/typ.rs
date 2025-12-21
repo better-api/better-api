@@ -177,11 +177,11 @@ impl<'a> Iterator for TypeFieldIterator<'a> {
 
         let field_id = TypeFieldId {
             container_id: self.id,
-            slot: self.current.0,
+            slot_idx: self.current.0,
         };
         let field = self.arena.get_field(field_id);
 
-        let field_type_slot = &self.arena.data[field_id.slot as usize + 1];
+        let field_type_slot = &self.arena.data[field_id.slot_idx as usize + 1];
 
         self.current = match &field_type_slot {
             Slot::Option { end } => *end,
@@ -233,7 +233,7 @@ pub struct TypeFieldId {
     container_id: TypeId,
 
     /// Index of the slot in the arena
-    slot: u32,
+    slot_idx: u32,
 }
 
 impl TypeFieldId {
@@ -244,7 +244,7 @@ impl TypeFieldId {
 
     /// Get [`TypeId`] of the field's type.
     pub fn type_id(&self) -> TypeId {
-        TypeId(self.slot + 1)
+        TypeId(self.slot_idx + 1)
     }
 }
 
@@ -331,20 +331,6 @@ impl From<PrimitiveType> for Slot {
     }
 }
 
-trait BuilderParent {
-    fn arena(&mut self) -> &mut TypeArena;
-
-    /// This method is called by a child builder if it's dropped without
-    /// being finished successfully.
-    ///
-    /// For some builders this is a noop.
-    fn drop_child(&mut self);
-
-    fn data(&mut self) -> &mut Vec<Slot> {
-        &mut self.arena().data
-    }
-}
-
 /// Helper type for adding records and unions to arena.
 ///
 /// Constructed via [`TypeArena::start_record`] or [`TypeArena::start_union`].
@@ -352,23 +338,13 @@ trait BuilderParent {
 ///
 /// Dropping the builder without finishing rolls back any changes.
 pub struct FieldBuilder<'p> {
-    arena: &'p mut TypeArena,
+    data: &'p mut Vec<Slot>,
 
     /// Index in the arena that contains Slot::Record or Slot::Union.
     start: TypeId,
 
     /// Was finished called, used by drop implementation.
     finished: bool,
-
-    /// Index of the last inserted field.
-    ///
-    /// That is arena[last_field_idx] points to the name of the field that was last inserted.
-    /// Used for cleaning up when child builder is dropped without calling `.finish()`.
-    ///
-    /// It is enough to handle last field, because child builder has to borrow this builder as
-    /// &mut, therefore you have to either drop a child builder or call `.finish()` before creating
-    /// a new one.
-    last_field_idx: Option<u32>,
 }
 
 impl<'p> FieldBuilder<'p> {
@@ -377,10 +353,9 @@ impl<'p> FieldBuilder<'p> {
         arena.data.push(Slot::Record { end: TypeId(0) });
 
         Self {
-            arena,
+            data: &mut arena.data,
             start: TypeId(idx as u32),
             finished: false,
-            last_field_idx: None,
         }
     }
 
@@ -392,15 +367,10 @@ impl<'p> FieldBuilder<'p> {
         });
 
         Self {
-            arena,
+            data: &mut arena.data,
             start: TypeId(idx as u32),
             finished: false,
-            last_field_idx: None,
         }
-    }
-
-    fn data(&mut self) -> &mut Vec<Slot> {
-        &mut self.arena.data
     }
 
     /// Add a new field with a primitive type.
@@ -412,15 +382,14 @@ impl<'p> FieldBuilder<'p> {
         typ: PrimitiveType,
         default: Option<value::ValueId>,
     ) -> TypeFieldId {
-        let slot = self.data().len() as u32;
-        self.last_field_idx = Some(self.data().len() as u32);
+        let slot_idx = self.data.len() as u32;
 
-        self.data().push(Slot::TypeField { name, default });
-        self.data().push(typ.into());
+        self.data.push(Slot::TypeField { name, default });
+        self.data.push(typ.into());
 
         TypeFieldId {
             container_id: self.start,
-            slot,
+            slot_idx,
         }
     }
 
@@ -434,16 +403,15 @@ impl<'p> FieldBuilder<'p> {
         name: StringId,
         default: Option<value::ValueId>,
     ) -> (OptionArrayBuilder<'a>, TypeFieldId) {
-        let slot = self.data().len() as u32;
-        self.last_field_idx = Some(self.data().len() as u32);
+        let slot_idx = self.data.len() as u32;
 
-        self.data().push(Slot::TypeField { name, default });
+        self.data.push(Slot::TypeField { name, default });
 
         let field_id = TypeFieldId {
             container_id: self.start,
-            slot,
+            slot_idx,
         };
-        let builder = OptionArrayBuilder::new_array(self);
+        let builder = OptionArrayBuilder::new_array(self.data, Some(slot_idx));
 
         (builder, field_id)
     }
@@ -458,16 +426,15 @@ impl<'p> FieldBuilder<'p> {
         name: StringId,
         default: Option<value::ValueId>,
     ) -> (OptionArrayBuilder<'a>, TypeFieldId) {
-        let slot = self.data().len() as u32;
-        self.last_field_idx = Some(self.data().len() as u32);
+        let slot_idx = self.data.len() as u32;
 
-        self.data().push(Slot::TypeField { name, default });
+        self.data.push(Slot::TypeField { name, default });
 
         let field_id = TypeFieldId {
             container_id: self.start,
-            slot,
+            slot_idx,
         };
-        let builder = OptionArrayBuilder::new_option(self);
+        let builder = OptionArrayBuilder::new_option(self.data, Some(slot_idx));
 
         (builder, field_id)
     }
@@ -478,10 +445,10 @@ impl<'p> FieldBuilder<'p> {
     pub fn finish(mut self) -> TypeId {
         self.finished = true;
 
-        let idx = TypeId(self.data().len() as u32);
+        let idx = TypeId(self.data.len() as u32);
 
         let start = self.start.0 as usize;
-        let head = &mut self.data()[start];
+        let head = &mut self.data[start];
         match head {
             Slot::Record { end } => *end = idx,
             Slot::Union { end, .. } => *end = idx,
@@ -499,20 +466,7 @@ impl<'a> Drop for FieldBuilder<'a> {
         }
 
         let len = self.start.0 as usize;
-        self.data().truncate(len);
-    }
-}
-
-impl<'a> BuilderParent for FieldBuilder<'a> {
-    fn arena(&mut self) -> &mut TypeArena {
-        self.arena
-    }
-
-    fn drop_child(&mut self) {
-        // Truncate arena length so that it ends at last inserted field.
-        if let Some(len) = self.last_field_idx {
-            self.arena().data.truncate(len as usize);
-        }
+        self.data.truncate(len);
     }
 }
 
@@ -525,7 +479,10 @@ impl<'a> BuilderParent for FieldBuilder<'a> {
 ///
 /// If builder is dropped before calling finish, added types are removed from the arena.
 pub struct OptionArrayBuilder<'p> {
-    parent: &'p mut dyn BuilderParent,
+    data: &'p mut Vec<Slot>,
+
+    /// Optionally clean up the data if array is not finished successfully.
+    truncate: Option<u32>,
 
     /// Index in the arena that contains the first Slot::Array or Slot::Option.
     start: TypeId,
@@ -544,23 +501,25 @@ pub struct OptionArray {
 }
 
 impl<'p> OptionArrayBuilder<'p> {
-    fn new_array(parent: &'p mut dyn BuilderParent) -> Self {
-        let idx = parent.data().len();
-        parent.data().push(Slot::Array { end: TypeId(0) });
+    fn new_array(data: &'p mut Vec<Slot>, truncate: Option<u32>) -> Self {
+        let idx = data.len();
+        data.push(Slot::Array { end: TypeId(0) });
 
         Self {
-            parent,
+            data,
+            truncate,
             start: TypeId(idx as u32),
             finished: false,
         }
     }
 
-    fn new_option(parent: &'p mut dyn BuilderParent) -> Self {
-        let idx = parent.data().len();
-        parent.data().push(Slot::Option { end: TypeId(0) });
+    fn new_option(data: &'p mut Vec<Slot>, truncate: Option<u32>) -> Self {
+        let idx = data.len();
+        data.push(Slot::Option { end: TypeId(0) });
 
         Self {
-            parent,
+            data,
+            truncate,
             start: TypeId(idx as u32),
             finished: false,
         }
@@ -571,8 +530,8 @@ impl<'p> OptionArrayBuilder<'p> {
     /// Returns id of the array type that was started. If the builder
     /// is not finished, the returned id is invalid.
     pub fn start_array(&mut self) -> TypeId {
-        let idx = self.parent.data().len();
-        self.parent.data().push(Slot::Array { end: TypeId(0) });
+        let idx = self.data.len();
+        self.data.push(Slot::Array { end: TypeId(0) });
         TypeId(idx as u32)
     }
 
@@ -581,8 +540,8 @@ impl<'p> OptionArrayBuilder<'p> {
     /// Returns id of the option type that was started. If the builder
     /// is not finished, the returned id is invalid.
     pub fn start_option(&mut self) -> TypeId {
-        let idx = self.parent.data().len();
-        self.parent.data().push(Slot::Option { end: TypeId(0) });
+        let idx = self.data.len();
+        self.data.push(Slot::Option { end: TypeId(0) });
         TypeId(idx as u32)
     }
 
@@ -591,11 +550,11 @@ impl<'p> OptionArrayBuilder<'p> {
         self.finished = true;
 
         let start = self.start.0 as usize;
-        let len = self.parent.data().len();
+        let len = self.data.len();
         let end_id = TypeId(len as u32 + 1);
 
         // Update the in between types
-        for slot in &mut self.parent.data()[start..len] {
+        for slot in &mut self.data[start..len] {
             match slot {
                 Slot::Option { end } => *end = end_id,
                 Slot::Array { end } => *end = end_id,
@@ -603,7 +562,7 @@ impl<'p> OptionArrayBuilder<'p> {
             }
         }
 
-        self.parent.data().push(typ.into());
+        self.data.push(typ.into());
 
         OptionArray {
             primitive_id: TypeId(len as u32),
@@ -618,10 +577,9 @@ impl<'p> Drop for OptionArrayBuilder<'p> {
             return;
         }
 
-        let len = self.start.0 as usize;
-        self.parent.data().truncate(len);
-
-        self.parent.drop_child();
+        // Truncate the builder to `truncate` parameter, or self start.
+        let len = self.truncate.unwrap_or(self.start.0);
+        self.data.truncate(len as usize);
     }
 }
 
@@ -645,15 +603,15 @@ impl TypeArena {
 
     /// Get [`TypeField`] by id.
     pub fn get_field<'a>(&'a self, id: TypeFieldId) -> TypeField<'a> {
-        let field_slot = &self.data[id.slot as usize];
-        let typ_slot = &self.data[id.slot as usize + 1];
+        let field_slot = &self.data[id.slot_idx as usize];
+        let typ_slot = &self.data[id.slot_idx as usize + 1];
 
         let (name, default) = match &field_slot {
             Slot::TypeField { name, default } => (*name, *default),
             val => unreachable!("invalid type field in arena for id {id:?}: {val:?}"),
         };
 
-        let typ = Type::from_slot(self, TypeId(id.slot + 1), typ_slot);
+        let typ = Type::from_slot(self, TypeId(id.slot_idx + 1), typ_slot);
 
         TypeField {
             id,
@@ -726,24 +684,14 @@ impl TypeArena {
     ///
     /// Returns a [`OptionArrayBuilder`] that allows building a nested array.
     pub fn start_array<'a>(&'a mut self) -> OptionArrayBuilder<'a> {
-        OptionArrayBuilder::new_array(self)
+        OptionArrayBuilder::new_array(&mut self.data, None)
     }
 
     /// Add option to the arena.
     ///
     /// Returns a [`OptionArrayBuilder`] that allows building a nested option.
     pub fn start_option<'a>(&'a mut self) -> OptionArrayBuilder<'a> {
-        OptionArrayBuilder::new_option(self)
-    }
-}
-
-impl BuilderParent for TypeArena {
-    fn arena(&mut self) -> &mut TypeArena {
-        self
-    }
-
-    fn drop_child(&mut self) {
-        // Nothing to do
+        OptionArrayBuilder::new_option(&mut self.data, None)
     }
 }
 
@@ -992,7 +940,7 @@ mod test {
             simple_array_field_id,
             TypeFieldId {
                 container_id: root_id,
-                slot: 6,
+                slot_idx: 6,
             }
         );
 
@@ -1000,7 +948,7 @@ mod test {
             values_field_id,
             TypeFieldId {
                 container_id: root_id,
-                slot: 9,
+                slot_idx: 9,
             }
         );
 
@@ -1008,7 +956,7 @@ mod test {
             metadata_field_id,
             TypeFieldId {
                 container_id: root_id,
-                slot: 15,
+                slot_idx: 15,
             }
         );
     }
