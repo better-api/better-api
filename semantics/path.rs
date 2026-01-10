@@ -47,6 +47,7 @@
 //! The implementation of [`PartialEq`] and [`Hash`] takes this fact into account.
 
 use std::iter::Peekable;
+use std::{cmp::Ordering, str::Chars};
 
 use better_api_diagnostic::{Label, Report, Span};
 use better_api_syntax::TextRange;
@@ -130,6 +131,82 @@ impl AsRef<str> for PathPart {
         self.as_str()
     }
 }
+
+impl Ord for PathPart {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let mut left = self.0.chars().peekable();
+        let mut right = other.0.chars().peekable();
+
+        loop {
+            match (left.next(), right.next()) {
+                (None, None) => return Ordering::Equal,
+                (Some(l), None) => {
+                    // Trailing slash is unnecessary and ignored
+                    return if l == '/' && left.peek().is_none() {
+                        Ordering::Equal
+                    } else {
+                        Ordering::Greater
+                    };
+                }
+                (None, Some(r)) => {
+                    // Trailing slash is unnecessary and ignored
+                    return if r == '/' && right.peek().is_none() {
+                        Ordering::Equal
+                    } else {
+                        Ordering::Less
+                    };
+                }
+                (Some(l), Some(r)) => {
+                    let is_left_param = if l == '{' {
+                        skip_param(&mut left);
+                        true
+                    } else {
+                        false
+                    };
+
+                    let is_right_param = if r == '{' {
+                        skip_param(&mut right);
+                        true
+                    } else {
+                        false
+                    };
+
+                    match (is_left_param, is_right_param) {
+                        (true, true) => continue,
+                        (true, false) => return Ordering::Greater,
+                        (false, true) => return Ordering::Less,
+                        (false, false) => match l.cmp(&r) {
+                            Ordering::Equal => continue,
+                            ord => return ord,
+                        },
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn skip_param(chars: &mut Peekable<Chars>) {
+    for c in chars {
+        if c == '}' {
+            break;
+        }
+    }
+}
+
+impl PartialOrd for PathPart {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for PathPart {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for PathPart {}
 
 /// Id of a path stored in the [`PathArena`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -414,6 +491,8 @@ mod test {
 
     use crate::{path::validate_path, text::parse_string};
 
+    use super::PathPart;
+
     /// Helper function for constructing mock text range that belongs to a string.
     fn text_range_for_str(s: &str) -> TextRange {
         // In real world range contains start and end `"` of a path string, which is why range has
@@ -432,6 +511,54 @@ mod test {
 
             assert!(diagnostics.is_empty());
         }
+    }
+
+    #[test]
+    fn path_part_ordering_basic() {
+        let left = PathPart::from_str("/a");
+        let right = PathPart::from_str("/b");
+        assert!(left < right);
+        assert!(right > left);
+        assert_eq!(PathPart::from_str("/a"), PathPart::from_str("/a"));
+        assert_eq!(PathPart::from_str(""), PathPart::from_str(""));
+        assert_eq!(PathPart::from_str("a"), PathPart::from_str("a"));
+    }
+
+    #[test]
+    fn path_part_ordering_params_equal() {
+        assert_eq!(PathPart::from_str("/{id}"), PathPart::from_str("/{name}"));
+        assert_eq!(
+            PathPart::from_str("/foo/{id}"),
+            PathPart::from_str("/foo/{name}")
+        );
+    }
+
+    #[test]
+    fn path_part_ordering_param_vs_literal() {
+        assert!(PathPart::from_str("/{id}") > PathPart::from_str("/a"));
+        assert!(PathPart::from_str("/foo/{id}") > PathPart::from_str("/foo/bar"));
+    }
+
+    #[test]
+    fn path_part_ordering_empty_and_slash() {
+        assert_eq!(PathPart::from_str(""), PathPart::from_str(""));
+        assert_eq!(PathPart::from_str(""), PathPart::from_str("/"));
+        assert!(PathPart::from_str("/") < PathPart::from_str("/a"));
+    }
+
+    #[test]
+    fn path_part_ordering_trailing_slash_ignored() {
+        assert_eq!(PathPart::from_str("/foo"), PathPart::from_str("/foo/"));
+        assert_eq!(
+            PathPart::from_str("/foo/bar"),
+            PathPart::from_str("/foo/bar/")
+        );
+    }
+
+    #[test]
+    fn path_part_ordering_param_offset() {
+        assert!(PathPart::from_str("/{foo}") > PathPart::from_str("/a{foo}"));
+        assert_eq!(PathPart::from_str("/a{foo}"), PathPart::from_str("/a{bar}"));
     }
 
     #[test]
