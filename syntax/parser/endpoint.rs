@@ -73,12 +73,14 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.advance();
         self.skip_whitespace();
 
+        // Parse optional endpoint url
         match self.peek() {
             Some(TOKEN_STRING) => {
                 self.builder.start_node(NODE_PATH.into());
                 self.advance();
                 self.builder.finish_node();
             }
+            Some(TOKEN_CURLY_LEFT) => (), // Do nothing
 
             Some(kind) => {
                 let span = self.parse_error(|token| token == TOKEN_CURLY_LEFT);

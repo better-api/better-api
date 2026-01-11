@@ -5,21 +5,6 @@ expression: res.reports
 [
     Report {
         severity: Error,
-        title: "expected route path, found `{`",
-        labels: [
-            Label {
-                style: Primary,
-                message: "expected route path",
-                span: Span {
-                    start: 28,
-                    end: 29,
-                },
-            },
-        ],
-        note: None,
-    },
-    Report {
-        severity: Error,
         title: "expected new line, found an identifier",
         labels: [
             Label {
