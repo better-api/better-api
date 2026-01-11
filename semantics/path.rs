@@ -55,9 +55,11 @@ use better_api_syntax::TextRange;
 /// A single part of the [`Path`].
 ///
 /// See [module documentation](self) for more details.
-#[derive(Debug)]
-#[repr(transparent)]
-pub struct PathPart(str);
+#[derive(Debug, Clone, Copy)]
+pub enum PathPart<'a> {
+    Empty,
+    Segment(&'a str),
+}
 
 /// Represents path inside a URL.
 ///
@@ -68,7 +70,7 @@ pub struct Path<'a> {
     id: PathId,
 
     /// Tail part of the path
-    part: &'a PathPart,
+    part: PathPart<'a>,
 
     /// Id of the prefix
     prefix_id: Option<PathId>,
@@ -86,7 +88,7 @@ impl<'a> Path<'a> {
     }
 
     /// Get the tail part of the path
-    pub fn part(&'a self) -> &'a PathPart {
+    pub fn part(&'a self) -> PathPart<'a> {
         self.part
     }
 
@@ -96,46 +98,42 @@ impl<'a> Path<'a> {
     }
 }
 
-impl PathPart {
+impl<'a> PathPart<'a> {
     /// Parses string into path part.
     ///
     /// This function checks that string is valid and reports the possible invalid characters
     /// or path parameters.
-    pub fn new<'a>(
-        string: &'a str,
-        text_range: TextRange,
-        diagnostics: &mut Vec<Report>,
-    ) -> &'a PathPart {
+    pub fn new(string: &'a str, text_range: TextRange, diagnostics: &mut Vec<Report>) -> Self {
+        if string.is_empty() || string == "/" {
+            diagnostics.push(
+                Report::warning("unecessary empty path specified".to_string())
+                    .add_label(Label::primary(
+                        "unecessary empty path specified".to_string(),
+                        text_range.into(),
+                    ))
+                    .with_note(
+                        "help: path should be omited instead of specifying an empty path"
+                            .to_string(),
+                    ),
+            );
+            return Self::Empty;
+        }
+
         validate_path(string, text_range, diagnostics);
-        Self::from_str(string)
-    }
-
-    /// Get `&str` representation
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
-    /// Cast &str to PathPart, without checking if it's valid
-    ///
-    /// Safety: Casting a string that is not a valid PathPart into one,
-    /// can lead to undefined behavior.
-    fn from_str(string: &str) -> &PathPart {
-        // Safety: PathPart is a semantic wrapper around str,
-        // with same layout and alignment so pointer cast is safe.
-        unsafe { &*(string as *const str as *const PathPart) }
+        Self::Segment(string)
     }
 }
 
-impl AsRef<str> for PathPart {
-    fn as_ref(&self) -> &str {
-        self.as_str()
-    }
-}
-
-impl Ord for PathPart {
+impl Ord for PathPart<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
-        let mut left = self.0.chars().peekable();
-        let mut right = other.0.chars().peekable();
+        let (mut left, mut right) = match (self, other) {
+            (PathPart::Empty, PathPart::Empty) => return Ordering::Equal,
+            (PathPart::Empty, PathPart::Segment(_)) => return Ordering::Less,
+            (PathPart::Segment(_), PathPart::Empty) => return Ordering::Greater,
+            (PathPart::Segment(l), PathPart::Segment(r)) => {
+                (l.chars().peekable(), r.chars().peekable())
+            }
+        };
 
         loop {
             match (left.next(), right.next()) {
@@ -194,19 +192,19 @@ fn skip_param(chars: &mut Peekable<Chars>) {
     }
 }
 
-impl PartialOrd for PathPart {
+impl PartialOrd for PathPart<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl PartialEq for PathPart {
+impl PartialEq for PathPart<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.cmp(other) == Ordering::Equal
     }
 }
 
-impl Eq for PathPart {}
+impl Eq for PathPart<'_> {}
 
 /// Id of a path stored in the [`PathArena`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -216,7 +214,8 @@ pub struct PathId(u32);
 #[derive(Debug, Clone, PartialEq)]
 struct Slot {
     /// Id of the interned part string.
-    part_id: string_interner::DefaultSymbol,
+    /// None represents PathPart::Empty.
+    part_id: Option<string_interner::DefaultSymbol>,
 
     /// Id of the prefix already stored in the arena.
     prefix_id: Option<PathId>,
@@ -238,8 +237,11 @@ impl PathArena {
     ///
     /// Returns the id of the path with inserted part as it's tail.
     /// This id can be used as a `prefix_id` in further insertions.
-    pub fn insert(&mut self, prefix_id: Option<PathId>, part: &PathPart) -> PathId {
-        let part_id = self.strings.get_or_intern(part);
+    pub fn insert(&mut self, prefix_id: Option<PathId>, part: PathPart) -> PathId {
+        let part_id = match part {
+            PathPart::Empty => None,
+            PathPart::Segment(s) => Some(self.strings.get_or_intern(s)),
+        };
         let path_id = self.data.len();
         self.data.push(Slot { part_id, prefix_id });
 
@@ -250,12 +252,14 @@ impl PathArena {
     pub fn get<'a>(&'a self, id: PathId) -> Path<'a> {
         let slot = &self.data[id.0 as usize];
 
-        let part_str = self
-            .strings
-            .resolve(slot.part_id)
-            .expect("inserted path should be resolvable");
-
-        let part = PathPart::from_str(part_str);
+        let part = match slot.part_id {
+            None => PathPart::Empty,
+            Some(s) => PathPart::Segment(
+                self.strings
+                    .resolve(s)
+                    .expect("inserted path should be resolvable"),
+            ),
+        };
 
         Path {
             arena: self,
@@ -266,7 +270,8 @@ impl PathArena {
     }
 }
 
-/// Checks that path is valid and reports errors
+/// Helper function that checks that non empty path is valid and reports errors.
+/// The function should not be called on empty paths.
 ///
 /// - `path` should be a path string that went through [`text::parse_string`](crate::text::parse_string).
 /// - `text_range` should be the range of the token returned by
@@ -281,10 +286,10 @@ impl PathArena {
 /// correctly. Additionally error is always reported with range inside of the path, so it's not the
 /// end of the world to not handle this edge case initially.
 fn validate_path(path: &str, text_range: TextRange, diagnostics: &mut Vec<Report>) {
-    // Handle `/`  as a special case
-    if path == "/" {
-        return;
-    }
+    assert!(
+        !path.is_empty() && path != "/",
+        "validate_path should not be called on an empty path"
+    );
 
     let mut chars = path.char_indices().peekable();
 
@@ -502,7 +507,7 @@ mod test {
 
     #[test]
     fn valid_paths() {
-        let paths = ["/", "/foo", "/foo/bar", "/foo/{param_id}", "/foo/{p1}/{p2}"];
+        let paths = ["/foo", "/foo/bar", "/foo/{param_id}", "/foo/{p1}/{p2}"];
 
         for path in &paths {
             let mut diagnostics = vec![];
@@ -515,60 +520,64 @@ mod test {
 
     #[test]
     fn path_part_ordering_basic() {
-        let left = PathPart::from_str("/a");
-        let right = PathPart::from_str("/b");
+        let left = PathPart::Segment("/a");
+        let right = PathPart::Segment("/b");
         assert!(left < right);
         assert!(right > left);
-        assert_eq!(PathPart::from_str("/a"), PathPart::from_str("/a"));
-        assert_eq!(PathPart::from_str(""), PathPart::from_str(""));
-        assert_eq!(PathPart::from_str("a"), PathPart::from_str("a"));
+        assert_eq!(PathPart::Segment("/a"), PathPart::Segment("/a"));
+        assert_eq!(PathPart::Empty, PathPart::Empty);
+        assert_eq!(PathPart::Segment("a"), PathPart::Segment("a"));
+    }
+
+    #[test]
+    fn path_part_new_basic() {
+        let mut diagnostics = vec![];
+        let range = text_range_for_str("/foo");
+        let part = PathPart::new("/foo", range, &mut diagnostics);
+        assert!(matches!(part, PathPart::Segment("/foo")));
+        assert!(diagnostics.is_empty());
+
+        let mut diagnostics = vec![];
+        let range = text_range_for_str("");
+        let part = PathPart::new("", range, &mut diagnostics);
+        assert!(matches!(part, PathPart::Empty));
+        insta::assert_debug_snapshot!(diagnostics);
+
+        let mut diagnostics = vec![];
+        let range = text_range_for_str("/");
+        let part = PathPart::new("/", range, &mut diagnostics);
+        assert!(matches!(part, PathPart::Empty));
+        insta::assert_debug_snapshot!(diagnostics);
     }
 
     #[test]
     fn path_part_ordering_params_equal() {
-        assert_eq!(PathPart::from_str("/{id}"), PathPart::from_str("/{name}"));
+        assert_eq!(PathPart::Segment("/{id}"), PathPart::Segment("/{name}"));
         assert_eq!(
-            PathPart::from_str("/foo/{id}"),
-            PathPart::from_str("/foo/{name}")
+            PathPart::Segment("/foo/{id}"),
+            PathPart::Segment("/foo/{name}")
         );
     }
 
     #[test]
     fn path_part_ordering_param_vs_literal() {
-        assert!(PathPart::from_str("/{id}") > PathPart::from_str("/a"));
-        assert!(PathPart::from_str("/foo/{id}") > PathPart::from_str("/foo/bar"));
-    }
-
-    #[test]
-    fn path_part_ordering_empty_and_slash() {
-        assert_eq!(PathPart::from_str(""), PathPart::from_str(""));
-        assert_eq!(PathPart::from_str(""), PathPart::from_str("/"));
-        assert!(PathPart::from_str("/") < PathPart::from_str("/a"));
+        assert!(PathPart::Segment("/{id}") > PathPart::Segment("/a"));
+        assert!(PathPart::Segment("/foo/{id}") > PathPart::Segment("/foo/bar"));
     }
 
     #[test]
     fn path_part_ordering_trailing_slash_ignored() {
-        assert_eq!(PathPart::from_str("/foo"), PathPart::from_str("/foo/"));
+        assert_eq!(PathPart::Segment("/foo"), PathPart::Segment("/foo/"));
         assert_eq!(
-            PathPart::from_str("/foo/bar"),
-            PathPart::from_str("/foo/bar/")
+            PathPart::Segment("/foo/bar"),
+            PathPart::Segment("/foo/bar/")
         );
     }
 
     #[test]
     fn path_part_ordering_param_offset() {
-        assert!(PathPart::from_str("/{foo}") > PathPart::from_str("/a{foo}"));
-        assert_eq!(PathPart::from_str("/a{foo}"), PathPart::from_str("/a{bar}"));
-    }
-
-    #[test]
-    fn empty_path() {
-        let path = "";
-        let mut diagnostics = vec![];
-        let range = text_range_for_str(path);
-        validate_path(path, range, &mut diagnostics);
-
-        insta::assert_debug_snapshot!(diagnostics);
+        assert!(PathPart::Segment("/{foo}") > PathPart::Segment("/a{foo}"));
+        assert_eq!(PathPart::Segment("/a{foo}"), PathPart::Segment("/a{bar}"));
     }
 
     #[test]

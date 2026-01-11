@@ -64,7 +64,9 @@ pub struct EndpointBuilder<'p> {
 
 impl<'p> EndpointBuilder<'p> {
     fn new(parent: Parent<'p>, path: Option<&PathPart>, fields: EndpointFields) -> Self {
-        let path_id = path.map(|p| parent.paths.insert(parent.path_id, p));
+        // TODO: Implement correctly
+        // let path_id = path.map(|p| parent.paths.insert(parent.path_id, p));
+        let path_id = None;
 
         let idx = parent.data.len();
         parent.data.push(Slot::Endpoint {
@@ -125,7 +127,9 @@ pub struct RouteBuilder<'p> {
 
 impl<'p> RouteBuilder<'p> {
     fn new(parent: Parent<'p>, path: Option<&PathPart>) -> Self {
-        let path_id = path.map(|p| parent.paths.insert(parent.path_id, p));
+        // TODO: Implement correctly
+        // let path_id = path.map(|p| parent.paths.insert(parent.path_id, p));
+        let path_id = None;
 
         let idx = parent.data.len();
         parent.data.push(Slot::Route {

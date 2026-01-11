@@ -1,0 +1,23 @@
+---
+source: semantics/path.rs
+expression: diagnostics
+---
+[
+    Report {
+        severity: Warning,
+        title: "unecessary empty path specified",
+        labels: [
+            Label {
+                style: Primary,
+                message: "unecessary empty path specified",
+                span: Span {
+                    start: 0,
+                    end: 2,
+                },
+            },
+        ],
+        note: Some(
+            "help: path should be omited instead of specifying an empty path",
+        ),
+    },
+]
