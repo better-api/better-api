@@ -1,3 +1,8 @@
+// TODO:
+// - [ ] Implement getters and iterators
+// - [ ] Add comments
+// - [ ] Add tests
+
 use crate::{
     path::{Path, PathArena, PathId, PathPart},
     string::StringId,

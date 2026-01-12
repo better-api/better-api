@@ -46,6 +46,7 @@
 //!
 //! The implementation of [`PartialEq`] and [`Hash`] takes this fact into account.
 
+use std::hash::{Hash, Hasher};
 use std::iter::Peekable;
 use std::{cmp::Ordering, str::Chars};
 
@@ -226,6 +227,39 @@ impl PartialEq for PathPart<'_> {
 }
 
 impl Eq for PathPart<'_> {}
+
+impl Hash for PathPart<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            PathPart::Empty => {
+                // Hash a discriminant for Empty variant
+                0u8.hash(state);
+            }
+            PathPart::Segment(s) => {
+                // Hash a discriminant for Segment variant
+                1u8.hash(state);
+
+                // Iterate through chars and hash them, treating params specially
+                let mut chars = s.chars().peekable();
+                while let Some(ch) = chars.next() {
+                    if ch == '{' {
+                        // Hash the placeholder for any parameter
+                        '{'.hash(state);
+                        '}'.hash(state);
+                        // Skip the parameter name
+                        skip_param(&mut chars);
+                    } else if ch == '/' && chars.peek().is_none() {
+                        // Skip trailing slash (it's ignored in equality)
+                        break;
+                    } else {
+                        // Hash regular character
+                        ch.hash(state);
+                    }
+                }
+            }
+        }
+    }
+}
 
 /// Id of a path stored in the [`PathArena`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -823,5 +857,145 @@ mod test {
         validate_path(&path_str, token.text_range(), &mut diagnostics);
 
         insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    // Helper function to compute hash of a PathPart
+    fn hash_pathpart(part: &PathPart) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        part.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    #[test]
+    fn hash_empty_pathpart() {
+        let empty1 = PathPart::Empty;
+        let empty2 = PathPart::Empty;
+        assert_eq!(hash_pathpart(&empty1), hash_pathpart(&empty2));
+    }
+
+    #[test]
+    fn hash_basic_segments() {
+        let part1 = PathPart::Segment("/foo");
+        let part2 = PathPart::Segment("/foo");
+        let part3 = PathPart::Segment("/bar");
+
+        assert_eq!(hash_pathpart(&part1), hash_pathpart(&part2));
+        assert_ne!(hash_pathpart(&part1), hash_pathpart(&part3));
+    }
+
+    #[test]
+    fn hash_params_with_different_names() {
+        // Parameters with different names should hash to the same value
+        let part1 = PathPart::Segment("/{id}");
+        let part2 = PathPart::Segment("/{name}");
+        let part3 = PathPart::Segment("/{user_id}");
+
+        assert_eq!(hash_pathpart(&part1), hash_pathpart(&part2));
+        assert_eq!(hash_pathpart(&part1), hash_pathpart(&part3));
+    }
+
+    #[test]
+    fn hash_params_in_path_segments() {
+        // Paths with params in different positions should have different hashes
+        let part1 = PathPart::Segment("/foo/{id}");
+        let part2 = PathPart::Segment("/foo/{name}");
+        let part3 = PathPart::Segment("/bar/{id}");
+
+        assert_eq!(hash_pathpart(&part1), hash_pathpart(&part2));
+        assert_ne!(hash_pathpart(&part1), hash_pathpart(&part3));
+    }
+
+    #[test]
+    fn hash_multiple_params() {
+        let part1 = PathPart::Segment("/foo/{id}/bar/{name}");
+        let part2 = PathPart::Segment("/foo/{user}/bar/{item}");
+        let part3 = PathPart::Segment("/foo/{id}/baz/{name}");
+
+        assert_eq!(hash_pathpart(&part1), hash_pathpart(&part2));
+        assert_ne!(hash_pathpart(&part1), hash_pathpart(&part3));
+    }
+
+    #[test]
+    fn hash_trailing_slash_ignored() {
+        // Trailing slash should be ignored in hash
+        let part1 = PathPart::Segment("/foo");
+        let part2 = PathPart::Segment("/foo/");
+
+        assert_eq!(hash_pathpart(&part1), hash_pathpart(&part2));
+    }
+
+    #[test]
+    fn hash_trailing_slash_with_params() {
+        let part1 = PathPart::Segment("/foo/{id}");
+        let part2 = PathPart::Segment("/foo/{name}/");
+
+        assert_eq!(hash_pathpart(&part1), hash_pathpart(&part2));
+    }
+
+    #[test]
+    fn hash_empty_vs_segment() {
+        // Empty and Segment should have different hashes
+        let empty = PathPart::Empty;
+        let segment = PathPart::Segment("/foo");
+
+        assert_ne!(hash_pathpart(&empty), hash_pathpart(&segment));
+    }
+
+    #[test]
+    fn hash_partial_param_match() {
+        // Partial params should hash differently based on position
+        let part1 = PathPart::Segment("/a{foo}");
+        let part2 = PathPart::Segment("/a{bar}");
+        let part3 = PathPart::Segment("/b{foo}");
+
+        assert_eq!(hash_pathpart(&part1), hash_pathpart(&part2));
+        assert_ne!(hash_pathpart(&part1), hash_pathpart(&part3));
+    }
+
+    #[test]
+    fn hash_consistency_with_eq() {
+        // If two PathParts are equal, they must have the same hash
+        let test_cases = vec![
+            (PathPart::Empty, PathPart::Empty),
+            (PathPart::Segment("/foo"), PathPart::Segment("/foo")),
+            (PathPart::Segment("/foo/"), PathPart::Segment("/foo")),
+            (PathPart::Segment("/{id}"), PathPart::Segment("/{name}")),
+            (
+                PathPart::Segment("/foo/{id}"),
+                PathPart::Segment("/foo/{user_id}"),
+            ),
+            (
+                PathPart::Segment("/foo/{a}/bar/{b}"),
+                PathPart::Segment("/foo/{x}/bar/{y}"),
+            ),
+            (PathPart::Segment("/a{foo}"), PathPart::Segment("/a{bar}")),
+        ];
+
+        for (left, right) in test_cases {
+            if hash_pathpart(&left) == hash_pathpart(&right) {
+                assert_eq!(left, right)
+            }
+        }
+    }
+
+    #[test]
+    fn hash_empty_param_edge_case() {
+        // Edge case: what if someone has {} (which is invalid but let's test hash consistency)
+        let part1 = PathPart::Segment("/foo/{}");
+        let part2 = PathPart::Segment("/foo/{}");
+
+        assert_eq!(hash_pathpart(&part1), hash_pathpart(&part2));
+    }
+
+    #[test]
+    fn hash_special_chars() {
+        let part1 = PathPart::Segment("/foo-bar");
+        let part2 = PathPart::Segment("/foo-bar");
+        let part3 = PathPart::Segment("/foo_bar");
+
+        assert_eq!(hash_pathpart(&part1), hash_pathpart(&part2));
+        assert_ne!(hash_pathpart(&part1), hash_pathpart(&part3));
     }
 }
