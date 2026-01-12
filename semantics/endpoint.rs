@@ -1,15 +1,20 @@
 use crate::{
     path::{Path, PathArena, PathId, PathPart},
+    string::StringId,
     typ::TypeId,
 };
 
 pub struct Route<'a> {
-    pub path: Option<Path<'a>>,
+    pub path: Path<'a>,
 }
 
 impl<'a> Route<'a> {
     pub fn endpoints(&self) {
         todo!("implement endpoint iterator")
+    }
+
+    pub fn routes(&self) {
+        todo!("implement routes iterator")
     }
 
     pub fn responses(&self) {
@@ -19,17 +24,24 @@ impl<'a> Route<'a> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct EndpointFields {
-    // TODO: define them correctly
-    pub name: u32,
-    pub method: u32,
-    pub query: u32,
-    pub headers: u32,
-    pub accept: u32,
-    pub request_body: u32,
+    pub method: http::Method,
+
+    pub name: Option<StringId>,
+
+    pub path: Option<TypeId>,
+    pub query: Option<TypeId>,
+    pub headers: Option<TypeId>,
+
+    // TODO: Accept should actually be an array of mime types.
+    // Where exactly this validation happens (during construction or late) is yet to be decided.
+    // It is also yet to be decided how to validate mime type is correct. This probably boils
+    // down to using a library, but I haven't looked into it yet.
+    pub accept: Option<StringId>,
+    pub request_body: Option<TypeId>,
 }
 
 pub struct Endpoint<'a> {
-    pub path: Option<Path<'a>>,
+    pub path: Path<'a>,
     pub fields: EndpointFields,
 }
 
@@ -37,6 +49,18 @@ impl<'a> Endpoint<'a> {
     pub fn responses(&self) {
         todo!("implement responses iterator")
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ResponseStatus {
+    Default,
+    Code(http::StatusCode),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Response {
+    pub status: Option<ResponseStatus>,
+    pub type_id: Option<TypeId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -49,6 +73,7 @@ struct Parent<'p> {
     data: &'p mut Vec<Slot>,
     paths: &'p mut PathArena,
 
+    /// Path ID of the parent's path
     path_id: Option<PathId>,
 }
 
@@ -63,10 +88,8 @@ pub struct EndpointBuilder<'p> {
 }
 
 impl<'p> EndpointBuilder<'p> {
-    fn new(parent: Parent<'p>, path: Option<&PathPart>, fields: EndpointFields) -> Self {
-        // TODO: Implement correctly
-        // let path_id = path.map(|p| parent.paths.insert(parent.path_id, p));
-        let path_id = None;
+    fn new(parent: Parent<'p>, path: PathPart, fields: EndpointFields) -> Self {
+        let path_id = parent.paths.insert(parent.path_id, path);
 
         let idx = parent.data.len();
         parent.data.push(Slot::Endpoint {
@@ -83,8 +106,8 @@ impl<'p> EndpointBuilder<'p> {
         }
     }
 
-    pub fn add_response(&mut self, status: Option<u32>, type_id: Option<TypeId>) {
-        self.parent.data.push(Slot::Response { status, type_id })
+    pub fn add_response(&mut self, resp: Response) {
+        self.parent.data.push(Slot::Response(resp))
     }
 
     pub fn finish(mut self) -> EndpointId {
@@ -116,7 +139,7 @@ impl<'p> Drop for EndpointBuilder<'p> {
 pub struct RouteBuilder<'p> {
     parent: Parent<'p>,
 
-    path_id: Option<PathId>,
+    path_id: PathId,
 
     start: RouteId,
 
@@ -126,10 +149,8 @@ pub struct RouteBuilder<'p> {
 }
 
 impl<'p> RouteBuilder<'p> {
-    fn new(parent: Parent<'p>, path: Option<&PathPart>) -> Self {
-        // TODO: Implement correctly
-        // let path_id = path.map(|p| parent.paths.insert(parent.path_id, p));
-        let path_id = None;
+    fn new(parent: Parent<'p>, path: PathPart) -> Self {
+        let path_id = parent.paths.insert(parent.path_id, path);
 
         let idx = parent.data.len();
         parent.data.push(Slot::Route {
@@ -146,19 +167,19 @@ impl<'p> RouteBuilder<'p> {
         }
     }
 
-    pub fn add_response(&mut self, status: Option<u32>, type_id: Option<TypeId>) {
-        self.parent.data.push(Slot::Response { status, type_id })
+    pub fn add_response(&mut self, resp: Response) {
+        self.parent.data.push(Slot::Response(resp))
     }
 
     pub fn add_endpoint<'a>(
         &'a mut self,
-        path: Option<&PathPart>,
+        path: PathPart,
         fields: EndpointFields,
     ) -> EndpointBuilder<'a> {
         let parent = Parent {
             data: self.parent.data,
             paths: self.parent.paths,
-            path_id: self.path_id,
+            path_id: Some(self.path_id),
         };
 
         EndpointBuilder::new(parent, path, fields)
@@ -193,21 +214,16 @@ impl<'p> Drop for RouteBuilder<'p> {
 #[derive(Clone, Debug, PartialEq)]
 enum Slot {
     Route {
-        path: Option<PathId>,
+        path: PathId,
         end: u32,
     },
     Endpoint {
-        path: Option<PathId>,
+        path: PathId,
         fields: EndpointFields,
         end: u32,
     },
 
-    Response {
-        // TODO: This u32 is not enough, we need to also represent default
-        // ALso we need to validate this. TBD if we do it here, or later on
-        status: Option<u32>,
-        type_id: Option<TypeId>,
-    },
+    Response(Response),
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -231,13 +247,13 @@ impl EndpointArena {
 
     pub fn add_endpoint<'a>(
         &'a mut self,
-        path: Option<&PathPart>,
+        path: PathPart,
         fields: EndpointFields,
     ) -> EndpointBuilder<'a> {
         EndpointBuilder::new(self.parent(), path, fields)
     }
 
-    pub fn add_route<'a>(&'a mut self, path: Option<&PathPart>) -> RouteBuilder<'a> {
+    pub fn add_route<'a>(&'a mut self, path: PathPart) -> RouteBuilder<'a> {
         RouteBuilder::new(self.parent(), path)
     }
 }

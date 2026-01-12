@@ -11,11 +11,13 @@ version.workspace = true
 path = "lib.rs"
 
 [dependencies]
+derive_more.workspace = true
+smallvec.workspace = true
+
 better-api-syntax = { path = "../syntax" }
 better-api-diagnostic = { path = "../diagnostic" }
 string-interner = "0.19"
-derive_more.workspace = true
-smallvec.workspace = true
+http = "1.4"
 
 [dev-dependencies]
 insta.workspace = true
