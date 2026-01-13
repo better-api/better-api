@@ -49,6 +49,8 @@
 use std::iter::Peekable;
 use std::{cmp::Ordering, str::Chars};
 
+use smallvec::SmallVec;
+
 use better_api_diagnostic::{Label, Report, Span};
 use better_api_syntax::TextRange;
 
@@ -78,7 +80,7 @@ pub struct Path<'a> {
 
 impl<'a> Path<'a> {
     /// Get prefix of the path
-    pub fn prefix(&'a self) -> Option<Path<'a>> {
+    pub fn prefix(&self) -> Option<Path<'a>> {
         self.prefix_id.map(|id| self.arena.get(id))
     }
 
@@ -95,6 +97,25 @@ impl<'a> Path<'a> {
     /// Get id of the path
     pub fn id(&self) -> PathId {
         self.id
+    }
+
+    /// Get array of segments in the path
+    pub fn segments(&self) -> SmallVec<[&'a str; 3]> {
+        let mut res = SmallVec::new();
+        self.collect_segments(&mut res);
+
+        res
+    }
+
+    /// Helper function for collecting segments into small vector
+    fn collect_segments(&self, segments: &mut SmallVec<[&'a str; 3]>) {
+        if let Some(prefix) = self.prefix() {
+            prefix.collect_segments(segments);
+        }
+
+        if let PathPart::Segment(seg) = self.part {
+            segments.push(seg);
+        }
     }
 }
 
