@@ -199,20 +199,8 @@ impl Hash for PathPart<'_> {
                 // Hash a discriminant for Segment variant
                 1u8.hash(state);
 
-                // Iterate through chars and hash them, treating params specially
                 let mut chars = s.chars().peekable();
-                while let Some(ch) = chars.next() {
-                    if ch == '{' {
-                        // Hash the placeholder for any parameter
-                        '{'.hash(state);
-                        '}'.hash(state);
-
-                        // Skip the parameter name
-                        skip_param(&mut chars);
-                    } else {
-                        ch.hash(state);
-                    }
-                }
+                hash_segment(&mut chars, state);
             }
         }
     }
@@ -292,6 +280,16 @@ impl PartialEq for Path<'_> {
 
 impl Eq for Path<'_> {}
 
+impl Hash for Path<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let segments = self.segments();
+        for segment in segments {
+            let mut chars = segment.chars().peekable();
+            hash_segment(&mut chars, state);
+        }
+    }
+}
+
 fn skip_param(chars: &mut Peekable<Chars>) {
     for c in chars {
         if c == '}' {
@@ -335,6 +333,21 @@ fn compare_segments(left: &mut Peekable<Chars>, right: &mut Peekable<Chars>) -> 
                     },
                 }
             }
+        }
+    }
+}
+
+fn hash_segment(segment: &mut Peekable<Chars>, state: &mut impl Hasher) {
+    while let Some(ch) = segment.next() {
+        if ch == '{' {
+            // Hash the placeholder for any parameter
+            '{'.hash(state);
+            '}'.hash(state);
+
+            // Skip the parameter name
+            skip_param(segment);
+        } else {
+            ch.hash(state);
         }
     }
 }
