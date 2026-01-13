@@ -1,5 +1,5 @@
 ---
-source: semantics/path.rs
+source: semantics/path/test/part.rs
 expression: diagnostics
 ---
 [
@@ -11,8 +11,8 @@ expression: diagnostics
                 style: Primary,
                 message: "invalid partial path parameter",
                 span: Span {
-                    start: 5,
-                    end: 12,
+                    start: 2,
+                    end: 9,
                 },
             },
         ],

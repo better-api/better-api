@@ -1,5 +1,5 @@
 ---
-source: semantics/path.rs
+source: semantics/path/test/part.rs
 expression: diagnostics
 ---
 [

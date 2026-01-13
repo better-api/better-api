@@ -1,5 +1,5 @@
 ---
-source: semantics/path.rs
+source: semantics/path/test/part.rs
 expression: diagnostics
 ---
 [
@@ -12,7 +12,7 @@ expression: diagnostics
                 message: "missing leading `/` in path",
                 span: Span {
                     start: 0,
-                    end: 2,
+                    end: 9,
                 },
             },
         ],

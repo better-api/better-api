@@ -1,23 +1,23 @@
 ---
-source: semantics/path.rs
+source: semantics/path/test/part.rs
 expression: diagnostics
 ---
 [
     Report {
         severity: Warning,
-        title: "unecessary empty path specified",
+        title: "unnecessary trailing `/` in path",
         labels: [
             Label {
                 style: Primary,
-                message: "unecessary empty path specified",
+                message: "unnecessary trailing `/` in path",
                 span: Span {
                     start: 0,
-                    end: 3,
+                    end: 11,
                 },
             },
         ],
         note: Some(
-            "help: path should be omited instead of specifying an empty path",
+            "help: trailing `/` is unnecessary and is ignored",
         ),
     },
 ]
