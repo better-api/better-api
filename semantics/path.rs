@@ -125,7 +125,11 @@ impl<'a> PathPart<'a> {
     ///
     /// This function checks that string is valid and reports the possible invalid characters
     /// or path parameters.
+    ///
+    /// The function also handles correct construction of empty parts ('' and '/'), and
+    /// ignoring the trailing slash.
     pub fn new(string: &'a str, text_range: TextRange, diagnostics: &mut Vec<Report>) -> Self {
+        // Handle empty paths
         if string.is_empty() || string == "/" {
             diagnostics.push(
                 Report::warning("unecessary empty path specified".to_string())
@@ -142,7 +146,13 @@ impl<'a> PathPart<'a> {
         }
 
         validate_path(string, text_range, diagnostics);
-        Self::Segment(string)
+
+        // Ignore trailing slash
+        if string.ends_with('/') {
+            Self::Segment(&string[0..string.len() - 1])
+        } else {
+            Self::Segment(string)
+        }
     }
 }
 
@@ -160,22 +170,8 @@ impl Ord for PathPart<'_> {
         loop {
             match (left.next(), right.next()) {
                 (None, None) => return Ordering::Equal,
-                (Some(l), None) => {
-                    // Trailing slash is unnecessary and ignored
-                    return if l == '/' && left.peek().is_none() {
-                        Ordering::Equal
-                    } else {
-                        Ordering::Greater
-                    };
-                }
-                (None, Some(r)) => {
-                    // Trailing slash is unnecessary and ignored
-                    return if r == '/' && right.peek().is_none() {
-                        Ordering::Equal
-                    } else {
-                        Ordering::Less
-                    };
-                }
+                (Some(_), None) => return Ordering::Greater,
+                (None, Some(_)) => return Ordering::Less,
                 (Some(l), Some(r)) => {
                     let is_left_param = if l == '{' {
                         skip_param(&mut left);
@@ -246,13 +242,10 @@ impl Hash for PathPart<'_> {
                         // Hash the placeholder for any parameter
                         '{'.hash(state);
                         '}'.hash(state);
+
                         // Skip the parameter name
                         skip_param(&mut chars);
-                    } else if ch == '/' && chars.peek().is_none() {
-                        // Skip trailing slash (it's ignored in equality)
-                        break;
                     } else {
-                        // Hash regular character
                         ch.hash(state);
                     }
                 }
@@ -547,6 +540,7 @@ fn is_param_name_valid(name: &str) -> bool {
 
 #[cfg(test)]
 mod test {
+    use better_api_diagnostic::Severity;
     use better_api_syntax::{TextRange, TextSize, parse, tokenize};
 
     use crate::{path::validate_path, text::parse_string};
@@ -606,6 +600,54 @@ mod test {
     }
 
     #[test]
+    fn path_part_new_trailing_slash() {
+        // Test that trailing slash is stripped
+        let mut diagnostics = vec![];
+        let range = text_range_for_str("/foo/");
+        let part = PathPart::new("/foo/", range, &mut diagnostics);
+        assert!(matches!(part, PathPart::Segment("/foo")));
+        // validate_path generates a warning about trailing slash
+        assert!(
+            diagnostics
+                .first()
+                .is_some_and(|diag| diag.severity == Severity::Warning)
+        );
+
+        let mut diagnostics = vec![];
+        let range = text_range_for_str("/foo/bar/");
+        let part = PathPart::new("/foo/bar/", range, &mut diagnostics);
+        assert!(matches!(part, PathPart::Segment("/foo/bar")));
+        // validate_path generates a warning about trailing slash
+        assert!(
+            diagnostics
+                .first()
+                .is_some_and(|diag| diag.severity == Severity::Warning)
+        );
+
+        let mut diagnostics = vec![];
+        let range = text_range_for_str("/foo/{id}/");
+        let part = PathPart::new("/foo/{id}/", range, &mut diagnostics);
+        assert!(matches!(part, PathPart::Segment("/foo/{id}")));
+        // validate_path generates a warning about trailing slash
+        assert!(
+            diagnostics
+                .first()
+                .is_some_and(|diag| diag.severity == Severity::Warning)
+        );
+
+        let mut diagnostics = vec![];
+        let range = text_range_for_str("/{param}/");
+        let part = PathPart::new("/{param}/", range, &mut diagnostics);
+        assert!(matches!(part, PathPart::Segment("/{param}")));
+        // validate_path generates a warning about trailing slash
+        assert!(
+            diagnostics
+                .first()
+                .is_some_and(|diag| diag.severity == Severity::Warning)
+        );
+    }
+
+    #[test]
     fn path_part_ordering_params_equal() {
         assert_eq!(PathPart::Segment("/{id}"), PathPart::Segment("/{name}"));
         assert_eq!(
@@ -618,15 +660,6 @@ mod test {
     fn path_part_ordering_param_vs_literal() {
         assert!(PathPart::Segment("/{id}") > PathPart::Segment("/a"));
         assert!(PathPart::Segment("/foo/{id}") > PathPart::Segment("/foo/bar"));
-    }
-
-    #[test]
-    fn path_part_ordering_trailing_slash_ignored() {
-        assert_eq!(PathPart::Segment("/foo"), PathPart::Segment("/foo/"));
-        assert_eq!(
-            PathPart::Segment("/foo/bar"),
-            PathPart::Segment("/foo/bar/")
-        );
     }
 
     #[test]
@@ -918,23 +951,6 @@ mod test {
     }
 
     #[test]
-    fn hash_trailing_slash_ignored() {
-        // Trailing slash should be ignored in hash
-        let part1 = PathPart::Segment("/foo");
-        let part2 = PathPart::Segment("/foo/");
-
-        assert_eq!(hash_pathpart(&part1), hash_pathpart(&part2));
-    }
-
-    #[test]
-    fn hash_trailing_slash_with_params() {
-        let part1 = PathPart::Segment("/foo/{id}");
-        let part2 = PathPart::Segment("/foo/{name}/");
-
-        assert_eq!(hash_pathpart(&part1), hash_pathpart(&part2));
-    }
-
-    #[test]
     fn hash_empty_vs_segment() {
         // Empty and Segment should have different hashes
         let empty = PathPart::Empty;
@@ -960,7 +976,6 @@ mod test {
         let test_cases = vec![
             (PathPart::Empty, PathPart::Empty),
             (PathPart::Segment("/foo"), PathPart::Segment("/foo")),
-            (PathPart::Segment("/foo/"), PathPart::Segment("/foo")),
             (PathPart::Segment("/{id}"), PathPart::Segment("/{name}")),
             (
                 PathPart::Segment("/foo/{id}"),
