@@ -9,9 +9,16 @@
 //! Endpoints are created with [`EndpointArena::add_endpoint`] and route groups
 //! with [`EndpointArena::add_route`]. Builders let us append responses without
 //! extra allocations while preserving a compact arena layout.
+//!
+//! ## Getting Endpoints and Routes
+//!
+//! To retrieve route or endpoint by id, use [`EndpointArena::get_route`] or
+//! [`EndpointArena::get_endpoint`]. [`Route`] and [`Endpoint`] contain methods
+//! for iterating through children (inner routes, endpoints and responses).
+//! See documentation for individual types for more info on available methods.
 
 // TODO:
-// - [ ] getters, iterators
+// - [ ] iterators
 // - [ ] tests
 
 use crate::path::{Path, PathArena, PathId, PathPart};
@@ -19,10 +26,17 @@ use crate::string::StringId;
 use crate::typ::TypeId;
 
 /// Route group representation returned by the [`EndpointArena`].
-#[derive(Debug, Clone, PartialEq)]
+#[derive(derive_more::Debug, Clone, PartialEq)]
 pub struct Route<'a> {
     /// Route path at this level of the hierarchy.
     pub path: Path<'a>,
+
+    /// Arena that holds the route, used to iterate through responses, endpoints and routes
+    #[debug(skip)]
+    arena: &'a EndpointArena,
+    /// End index of the route in the arena, used to know where to stop
+    /// child iteration.
+    end: u32,
 }
 
 impl<'a> Route<'a> {
@@ -69,11 +83,19 @@ pub struct EndpointFields {
 }
 
 /// Endpoint representation returned by the [`EndpointArena`].
+#[derive(derive_more::Debug, Clone, PartialEq)]
 pub struct Endpoint<'a> {
     /// Path of the endpoint.
     pub path: Path<'a>,
     /// Endpoint fields.
-    pub fields: EndpointFields,
+    pub fields: &'a EndpointFields,
+
+    /// Arena that holds the endpoint, used to iterate through responses
+    #[debug(skip)]
+    arena: &'a EndpointArena,
+    /// End index of the endpoint in the arena, used to know where to stop
+    /// response iteration.
+    end: u32,
 }
 
 impl<'a> Endpoint<'a> {
@@ -127,8 +149,6 @@ pub struct EndpointBuilder<'p> {
 
     start: EndpointId,
 
-    end: u32,
-
     finished: bool,
 }
 
@@ -146,7 +166,6 @@ impl<'p> EndpointBuilder<'p> {
         Self {
             parent,
             start: EndpointId(idx as u32),
-            end: 0,
             finished: false,
         }
     }
@@ -191,11 +210,11 @@ impl<'p> Drop for EndpointBuilder<'p> {
 pub struct RouteBuilder<'p> {
     parent: Parent<'p>,
 
+    /// Path id of the whole route of this path. Used as
+    /// prefix of children routes.
     path_id: PathId,
 
     start: RouteId,
-
-    end: u32,
 
     finished: bool,
 }
@@ -214,7 +233,6 @@ impl<'p> RouteBuilder<'p> {
             parent,
             path_id,
             start: RouteId(idx as u32),
-            end: 0,
             finished: false,
         }
     }
@@ -278,11 +296,17 @@ impl<'p> Drop for RouteBuilder<'p> {
 enum Slot {
     Route {
         path: PathId,
+
+        // Id after the last child of the route.
+        // Used for knowing when to stop iteration
         end: u32,
     },
     Endpoint {
         path: PathId,
         fields: EndpointFields,
+
+        // Id after the last response of the endpoint.
+        // Used for knowing when to stop iteration
         end: u32,
     },
 
@@ -322,5 +346,38 @@ impl EndpointArena {
     /// Start building a route at the root.
     pub fn add_route<'a>(&'a mut self, path: PathPart) -> RouteBuilder<'a> {
         RouteBuilder::new(self.parent(), path)
+    }
+
+    /// Get [`Endpoint`] by id.
+    pub fn get_endpoint<'a>(&'a self, id: EndpointId) -> Endpoint<'a> {
+        match &self.data[id.0 as usize] {
+            Slot::Endpoint { path, fields, end } => {
+                let path = self.paths.get(*path);
+
+                Endpoint {
+                    arena: self,
+                    path,
+                    fields,
+                    end: *end,
+                }
+            }
+            _ => unreachable!("slot at endpoint id should contain an endpoint"),
+        }
+    }
+
+    /// Get [`Route`] by id.
+    pub fn get_route<'a>(&'a self, id: RouteId) -> Route<'a> {
+        match &self.data[id.0 as usize] {
+            Slot::Route { path, end } => {
+                let path = self.paths.get(*path);
+
+                Route {
+                    path,
+                    arena: self,
+                    end: *end,
+                }
+            }
+            _ => unreachable!("slot at route id should contain a route"),
+        }
     }
 }
