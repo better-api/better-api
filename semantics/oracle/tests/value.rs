@@ -253,7 +253,7 @@ fn parse_object_empty() {
     assert_eq!(oracle.reports(), vec![]);
     match oracle.values.get(id) {
         Value::Object(obj) => {
-            assert_eq!(obj.count(), 0);
+            assert_eq!(obj.fields().count(), 0);
         }
         other => panic!("expected object value, got {other:?}"),
     }
@@ -295,7 +295,7 @@ fn parse_object_simple() {
         };
         oracle.source_map.get_value(id);
 
-        let fields: Vec<_> = obj.collect();
+        let fields: Vec<_> = obj.fields().collect();
         assert_eq!(fields.len(), 2);
 
         let names: Vec<_> = fields
@@ -340,7 +340,7 @@ fn parse_object_with_string_keys() {
     };
     oracle.source_map.get_value(id);
 
-    let fields: Vec<_> = obj.collect();
+    let fields: Vec<_> = obj.fields().collect();
     assert_eq!(fields.len(), 2);
 
     let names: Vec<_> = fields
@@ -385,7 +385,7 @@ fn parse_object_missing_value() {
     };
     oracle.source_map.get_value(id);
 
-    let fields: Vec<_> = obj.collect();
+    let fields: Vec<_> = obj.fields().collect();
     assert_eq!(fields.len(), 1);
 
     let field_name = oracle.strings.get(fields[0].name);
@@ -432,7 +432,7 @@ fn parse_object_invalid_field_name() {
     };
     oracle.source_map.get_value(id);
 
-    let fields: Vec<_> = obj.collect();
+    let fields: Vec<_> = obj.fields().collect();
     assert_eq!(fields.len(), 1);
 
     let field_name = oracle.strings.get(fields[0].name);
@@ -481,7 +481,7 @@ fn parse_object_duplicate_keys() {
     };
     oracle.source_map.get_value(id);
 
-    let fields: Vec<_> = obj.collect();
+    let fields: Vec<_> = obj.fields().collect();
     assert_eq!(fields.len(), 3);
 
     let names: Vec<_> = fields
@@ -528,7 +528,7 @@ fn parse_object_nested() {
     };
     oracle.source_map.get_value(id);
 
-    let fields: Vec<_> = obj.collect();
+    let fields: Vec<_> = obj.fields().collect();
     assert_eq!(fields.len(), 1);
 
     let field_name = oracle.strings.get(fields[0].name);
@@ -542,7 +542,7 @@ fn parse_object_nested() {
         other => panic!("expected nested object, got {other:?}"),
     };
 
-    let inner_fields: Vec<_> = inner_obj.collect();
+    let inner_fields: Vec<_> = inner_obj.fields().collect();
     assert_eq!(inner_fields.len(), 1);
 
     let inner_field_name = oracle.strings.get(inner_fields[0].name);
@@ -590,7 +590,7 @@ fn parse_complex_nested_structure() {
     // Test element is in map. If it isn't get_bck panics.
     oracle.source_map.get_value(id);
 
-    let fields: Vec<_> = obj.collect();
+    let fields: Vec<_> = obj.fields().collect();
     assert_eq!(fields.len(), 2);
 
     // Check field names (ordering: users, metadata)
@@ -624,7 +624,7 @@ fn parse_complex_nested_structure() {
         Value::Object(obj) => obj.clone(),
         other => panic!("expected user object, got {other:?}"),
     };
-    let user1_fields: Vec<_> = user1_obj.collect();
+    let user1_fields: Vec<_> = user1_obj.fields().collect();
     assert_eq!(user1_fields.len(), 2);
 
     let user1_names: Vec<_> = user1_fields
@@ -651,7 +651,7 @@ fn parse_complex_nested_structure() {
         Value::Object(obj) => obj.clone(),
         other => panic!("expected user object, got {other:?}"),
     };
-    let user2_fields: Vec<_> = user2_obj.collect();
+    let user2_fields: Vec<_> = user2_obj.fields().collect();
     assert_eq!(user2_fields.len(), 2);
 
     let user2_names: Vec<_> = user2_fields
@@ -679,7 +679,7 @@ fn parse_complex_nested_structure() {
         other => panic!("expected metadata object, got {other:?}"),
     };
 
-    let metadata_fields: Vec<_> = metadata_obj.collect();
+    let metadata_fields: Vec<_> = metadata_obj.fields().collect();
     assert_eq!(metadata_fields.len(), 2);
 
     let metadata_names: Vec<_> = metadata_fields

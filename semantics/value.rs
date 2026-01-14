@@ -60,9 +60,12 @@ impl<'a> Value<'a> {
         match slot {
             Slot::Primitive(val) => (*val).into(),
             Slot::Object { end } => Value::Object(Object {
-                arena,
-                current: ValueId(id.0 + 1),
-                end: *end,
+                fields: ObjectFields {
+                    arena,
+                    current: ValueId(id.0 + 1),
+                    end: *end,
+                    object_id: id,
+                },
                 id,
             }),
             Slot::Array { end } => Value::Array(Array {
@@ -86,20 +89,34 @@ pub struct ObjectField<'a> {
 }
 
 /// Object value returned by the [`ValueArena`].
-///
-/// It's an iterator where each item is an [`ObjectField`].
-#[derive(derive_more::Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Object<'a> {
+    // Id of the object
+    pub id: ValueId,
+
+    /// Iterator over fields.
+    fields: ObjectFields<'a>,
+}
+
+impl<'a> Object<'a> {
+    /// Return iterator over [object fields](ObjectField).
+    pub fn fields(&self) -> ObjectFields<'a> {
+        self.fields.clone()
+    }
+}
+
+/// Iterator over object fields.
+#[derive(derive_more::Debug, Clone)]
+pub struct ObjectFields<'a> {
     #[debug(skip)]
     arena: &'a ValueArena,
     current: ValueId,
     end: ValueId,
 
-    // Id of the object
-    id: ValueId,
+    object_id: ValueId,
 }
 
-impl<'a> Iterator for Object<'a> {
+impl<'a> Iterator for ObjectFields<'a> {
     type Item = ObjectField<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -108,13 +125,13 @@ impl<'a> Iterator for Object<'a> {
         }
 
         let field_id = ObjectFieldId {
-            object_id: self.id,
+            object_id: self.object_id,
             slot_idx: self.current.0,
         };
         let field = self.arena.get_field(field_id);
 
         self.current = match field.value {
-            Value::Object(Object { end, .. }) => end,
+            Value::Object(Object { ref fields, .. }) => fields.end,
             Value::Array(Array { end, .. }) => end,
             _ => ValueId(self.current.0 + 2),
         };
@@ -157,7 +174,7 @@ impl<'a> Iterator for Array<'a> {
         let value = Value::from_slot(self.arena, id, item);
 
         self.current = match value {
-            Value::Object(Object { end, .. }) => end,
+            Value::Object(Object { ref fields, .. }) => fields.end,
             Value::Array(Array { end, .. }) => end,
             _ => ValueId(self.current.0 + 1),
         };
@@ -613,24 +630,27 @@ mod test {
 
         // Check that getters for nested values work by checking that root
         // object is exactly how it should be
-        let mut root_object = match arena.get(root_id) {
+        let root_object = match arena.get(root_id) {
             Value::Object(object) => object,
             other => panic!("expected object at root_id, got {other:?}"),
         };
+        let mut root_object_fields = root_object.fields();
 
-        let flag_field = root_object.next().expect("flag field");
+        let flag_field = root_object_fields.next().expect("flag field");
         assert_eq!(flag_field.name, flag_str);
         assert!(matches!(flag_field.value, Value::Integer(7)));
 
-        let container_field = root_object.next().expect("container field");
+        let container_field = root_object_fields.next().expect("container field");
         assert_eq!(container_field.name, container_str);
-        let mut container_object = match container_field.value {
+        let container_object = match container_field.value {
             Value::Object(object) => object,
             other => panic!("expected object for container field, got {other:?}"),
         };
-        assert!(root_object.next().is_none());
+        assert!(root_object_fields.next().is_none());
 
-        let numbers_field = container_object.next().expect("numbers field");
+        let mut container_object_fields = container_object.fields();
+
+        let numbers_field = container_object_fields.next().expect("numbers field");
         assert_eq!(numbers_field.name, numbers_str);
         let mut numbers_array = match numbers_field.value {
             Value::Array(array) => array,
@@ -671,55 +691,58 @@ mod test {
 
         let third_numbers_item = numbers_array.next().expect("third array item");
         assert_eq!(third_numbers_item.id, ValueId(14));
-        let mut array_object = match third_numbers_item.value {
+        let array_object = match third_numbers_item.value {
             Value::Object(object) => object,
             other => panic!("expected nested object, got {other:?}"),
         };
 
-        let value_field = array_object.next().expect("value field");
+        let mut array_object_fields = array_object.fields();
+
+        let value_field = array_object_fields.next().expect("value field");
         assert_eq!(value_field.name, value_str);
         assert!(matches!(value_field.value, Value::Float(2.5)));
 
-        let label_field = array_object.next().expect("label field");
+        let label_field = array_object_fields.next().expect("label field");
         assert_eq!(label_field.name, label_str);
         assert!(matches!(label_field.value, Value::String(id) if id == done_str));
-        assert!(array_object.next().is_none());
+        assert!(array_object_fields.next().is_none());
 
         assert!(numbers_array.next().is_none());
 
         // End of number array, continue with next field in container
 
-        let nested_field = container_object.next().expect("nested field");
+        let nested_field = container_object_fields.next().expect("nested field");
         assert_eq!(nested_field.name, nested_str);
-        let mut nested_object = match nested_field.value {
+        let nested_object = match nested_field.value {
             Value::Object(object) => object,
             other => panic!("expected object for nested field, got {other:?}"),
         };
 
         // Check nested object
+        let mut nested_object_fields = nested_object.fields();
 
-        let status_field = nested_object.next().expect("status field");
+        let status_field = nested_object_fields.next().expect("status field");
         assert_eq!(status_field.name, status_str);
         assert!(matches!(status_field.value, Value::String(id) if id == ok_str));
 
-        let count_field = nested_object.next().expect("count field");
+        let count_field = nested_object_fields.next().expect("count field");
         assert_eq!(count_field.name, count_str);
         assert!(matches!(count_field.value, Value::Integer(2)));
-        assert!(nested_object.next().is_none());
+        assert!(nested_object_fields.next().is_none());
 
         // End of nested object, continue with active field
 
-        let active_field = container_object.next().expect("active field");
+        let active_field = container_object_fields.next().expect("active field");
         assert_eq!(active_field.name, active_str);
         assert!(matches!(active_field.value, Value::Bool(false)));
-        assert!(container_object.next().is_none());
+        assert!(container_object_fields.next().is_none());
 
         // Check getting container directly by id
         let container_get = match arena.get(container_id) {
             Value::Object(object) => object,
             other => panic!("expected object at inner_id, got {other:?}"),
         };
-        let inner_field_names: Vec<_> = container_get.map(|f| f.name).collect();
+        let inner_field_names: Vec<_> = container_get.fields().map(|f| f.name).collect();
         assert_eq!(inner_field_names, vec![numbers_str, nested_str, active_str]);
 
         // Check getting numbers array directly by id
@@ -759,51 +782,65 @@ mod test {
 
         let array_from_get = numbers_from_get.next().expect("numbers via get third");
         assert_eq!(array_from_get.id, ValueId(14));
-        let mut object_from_get_iter = match array_from_get.value {
+        let object_from_get_iter = match array_from_get.value {
             Value::Object(object) => object,
             other => panic!("expected nested object via get, got {other:?}"),
         };
-        let value_field_get = object_from_get_iter
+        let mut object_from_get_iter_fields = object_from_get_iter.fields();
+
+        let value_field_get = object_from_get_iter_fields
             .next()
             .expect("nested object via get value field");
         assert_eq!(value_field_get.name, value_str);
         assert!(matches!(value_field_get.value, Value::Float(2.5)));
 
-        let label_field_get = object_from_get_iter
+        let label_field_get = object_from_get_iter_fields
             .next()
             .expect("nested object via get label field");
         assert_eq!(label_field_get.name, label_str);
         assert!(matches!(label_field_get.value, Value::String(id) if id == done_str));
-        assert!(object_from_get_iter.next().is_none());
+        assert!(object_from_get_iter_fields.next().is_none());
         assert!(numbers_from_get.next().is_none());
 
         // Check getting deeply nested object directly by id
-        let mut array_obj_from_get = match arena.get(array_obj_id) {
+        let array_obj_from_get = match arena.get(array_obj_id) {
             Value::Object(object) => object,
             other => panic!("expected object at array_obj_id, got {other:?}"),
         };
-        let value_field_direct = array_obj_from_get.next().expect("value field via get");
+
+        let mut array_obj_from_get_fields = array_obj_from_get.fields();
+
+        let value_field_direct = array_obj_from_get_fields
+            .next()
+            .expect("value field via get");
         assert_eq!(value_field_direct.name, value_str);
         assert!(matches!(value_field_direct.value, Value::Float(2.5)));
-        let label_field_direct = array_obj_from_get.next().expect("label field via get");
+        let label_field_direct = array_obj_from_get_fields
+            .next()
+            .expect("label field via get");
         assert_eq!(label_field_direct.name, label_str);
         assert!(matches!(label_field_direct.value, Value::String(id) if id == done_str));
-        assert!(array_obj_from_get.next().is_none());
+        assert!(array_obj_from_get_fields.next().is_none());
 
         // Check getting nested object directly by id
-        let mut nested_from_get = match arena.get(nested_obj_id) {
+        let nested_from_get = match arena.get(nested_obj_id) {
             Value::Object(object) => object,
             other => panic!("expected object at nested_obj_id, got {other:?}"),
         };
+        let mut nested_from_get_fields = nested_from_get.fields();
+
         assert!(matches!(
-            nested_from_get.next().expect("nested via get status").value,
+            nested_from_get_fields.next().expect("nested via get status").value,
             Value::String(id) if id == ok_str
         ));
         assert!(matches!(
-            nested_from_get.next().expect("nested via get count").value,
+            nested_from_get_fields
+                .next()
+                .expect("nested via get count")
+                .value,
             Value::Integer(2)
         ));
-        assert!(nested_from_get.next().is_none());
+        assert!(nested_from_get_fields.next().is_none());
 
         // Check field ids
         assert_eq!(
