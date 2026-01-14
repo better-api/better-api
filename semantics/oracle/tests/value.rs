@@ -21,7 +21,7 @@ fn parse_primitive_integer() {
     let id = oracle.lower_value(&value);
 
     assert_eq!(oracle.reports(), vec![]);
-    assert_eq!(oracle.values.get(id), Value::Integer(10));
+    assert!(matches!(oracle.values.get(id), Value::Integer(10)));
     oracle.source_map.get_value(id);
 }
 
@@ -41,7 +41,7 @@ fn parse_primitive_float() {
     let id = oracle.lower_value(&value);
 
     assert_eq!(oracle.reports(), vec![]);
-    assert_eq!(oracle.values.get(id), Value::Float(4.20));
+    assert!(matches!(oracle.values.get(id), Value::Float(4.20)));
     oracle.source_map.get_value(id);
 }
 
@@ -62,12 +62,12 @@ fn parse_primitive_bool() {
 
     let value1 = api_names.next().unwrap().value().unwrap();
     let id1 = oracle.lower_value(&value1);
-    assert_eq!(oracle.values.get(id1), Value::Bool(true));
+    assert!(matches!(oracle.values.get(id1), Value::Bool(true)));
     oracle.source_map.get_value(id1);
 
     let value2 = api_names.next().unwrap().value().unwrap();
     let id2 = oracle.lower_value(&value2);
-    assert_eq!(oracle.values.get(id2), Value::Bool(false));
+    assert!(matches!(oracle.values.get(id2), Value::Bool(false)));
     oracle.source_map.get_value(id2);
 
     assert_eq!(oracle.reports(), vec![]);
@@ -149,13 +149,11 @@ fn parse_array() {
     };
 
     let item_ids: Vec<_> = array.map(|it| it.id).collect();
-    assert_eq!(
-        item_ids
-            .iter()
-            .map(|&id| oracle.values.get(id))
-            .collect::<Vec<_>>(),
-        vec![Value::Integer(1), Value::Integer(2), Value::Integer(3),]
-    );
+    let values: Vec<_> = item_ids.iter().map(|&id| oracle.values.get(id)).collect();
+    assert_eq!(values.len(), 3);
+    assert!(matches!(values[0], Value::Integer(1)));
+    assert!(matches!(values[1], Value::Integer(2)));
+    assert!(matches!(values[2], Value::Integer(3)));
 
     // Verify array and all items are in source map
     oracle.source_map.get_value(id);
@@ -213,8 +211,8 @@ fn parse_nested_array() {
 
     let outer_items: Vec<_> = outer.map(|it| (it.id, it.value)).collect();
     assert_eq!(outer_items.len(), 3);
-    assert_eq!(outer_items[0].1, Value::Integer(1));
-    assert_eq!(outer_items[2].1, Value::Integer(4));
+    assert!(matches!(outer_items[0].1, Value::Integer(1)));
+    assert!(matches!(outer_items[2].1, Value::Integer(4)));
 
     // Verify all outer items are in source map
     for (item_id, _) in &outer_items {
@@ -227,10 +225,9 @@ fn parse_nested_array() {
     };
 
     let inner_items: Vec<_> = inner.map(|it| (it.id, it.value)).collect();
-    assert_eq!(
-        inner_items.iter().map(|(_, v)| v).collect::<Vec<_>>(),
-        vec![&Value::Integer(2), &Value::Integer(3)]
-    );
+    assert_eq!(inner_items.len(), 2);
+    assert!(matches!(inner_items[0].1, Value::Integer(2)));
+    assert!(matches!(inner_items[1].1, Value::Integer(3)));
 
     // Verify all inner items are in source map
     for (item_id, _) in &inner_items {
@@ -313,7 +310,7 @@ fn parse_object_simple() {
         }
 
         let values: Vec<_> = fields.into_iter().map(|field| field.value).collect();
-        assert_eq!(values[0], Value::Integer(10));
+        assert!(matches!(values[0], Value::Integer(10)));
         assert!(matches!(values[1], Value::String(_)));
     }
 }
@@ -358,8 +355,8 @@ fn parse_object_with_string_keys() {
     }
 
     let values: Vec<_> = fields.into_iter().map(|field| field.value).collect();
-    assert_eq!(values[0], Value::Integer(10));
-    assert_eq!(values[1], Value::Integer(20));
+    assert!(matches!(values[0], Value::Integer(10)));
+    assert!(matches!(values[1], Value::Integer(20)));
 }
 
 #[test]
@@ -393,7 +390,7 @@ fn parse_object_missing_value() {
 
     let field_name = oracle.strings.get(fields[0].name);
     assert_eq!(field_name, "bar");
-    assert_eq!(fields[0].value, Value::Integer(20));
+    assert!(matches!(fields[0].value, Value::Integer(20)));
 
     oracle.source_map.get_value(fields[0].id.value_id());
 }
@@ -440,7 +437,7 @@ fn parse_object_invalid_field_name() {
 
     let field_name = oracle.strings.get(fields[0].name);
     assert_eq!(field_name, "valid");
-    assert_eq!(fields[0].value, Value::Integer(20));
+    assert!(matches!(fields[0].value, Value::Integer(20)));
 
     oracle.source_map.get_value(fields[0].id.value_id());
 }
@@ -499,9 +496,9 @@ fn parse_object_duplicate_keys() {
     }
 
     let values: Vec<_> = fields.into_iter().map(|field| field.value).collect();
-    assert_eq!(values[0], Value::Integer(10));
-    assert_eq!(values[1], Value::Integer(10));
-    assert_eq!(values[2], Value::Integer(20));
+    assert!(matches!(values[0], Value::Integer(10)));
+    assert!(matches!(values[1], Value::Integer(10)));
+    assert!(matches!(values[2], Value::Integer(20)));
 }
 
 #[test]
@@ -550,7 +547,7 @@ fn parse_object_nested() {
 
     let inner_field_name = oracle.strings.get(inner_fields[0].name);
     assert_eq!(inner_field_name, "inner");
-    assert_eq!(inner_fields[0].value, Value::Integer(42));
+    assert!(matches!(inner_fields[0].value, Value::Integer(42)));
 
     oracle.source_map.get_value(inner_fields[0].id.value_id());
 }
@@ -647,7 +644,7 @@ fn parse_complex_nested_structure() {
         }
         ref other => panic!("expected string, got {other:?}"),
     }
-    assert_eq!(user1_fields[1].value, Value::Integer(30));
+    assert!(matches!(user1_fields[1].value, Value::Integer(30)));
 
     // Second user
     let user2_obj = match &users[1].1 {
@@ -674,7 +671,7 @@ fn parse_complex_nested_structure() {
         }
         ref other => panic!("expected string, got {other:?}"),
     }
-    assert_eq!(user2_fields[1].value, Value::Integer(25));
+    assert!(matches!(user2_fields[1].value, Value::Integer(25)));
 
     // Check metadata object
     let metadata_obj = match &fields[1].value {
@@ -696,6 +693,6 @@ fn parse_complex_nested_structure() {
         oracle.source_map.get_value(field.id.value_id());
     }
 
-    assert_eq!(metadata_fields[0].value, Value::Integer(2));
-    assert_eq!(metadata_fields[1].value, Value::Bool(true));
+    assert!(matches!(metadata_fields[0].value, Value::Integer(2)));
+    assert!(matches!(metadata_fields[1].value, Value::Bool(true)));
 }

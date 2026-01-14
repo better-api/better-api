@@ -25,7 +25,7 @@
 use crate::string::StringId;
 
 /// Representation of a value.
-#[derive(Debug, PartialEq, derive_more::Display, Clone)]
+#[derive(Debug, derive_more::Display, Clone)]
 pub enum Value<'a> {
     #[display("`null`")]
     Null,
@@ -78,7 +78,7 @@ impl<'a> Value<'a> {
 }
 
 /// A field inside of the object.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct ObjectField<'a> {
     pub id: ObjectFieldId,
     pub name: StringId,
@@ -88,7 +88,7 @@ pub struct ObjectField<'a> {
 /// Object value returned by the [`ValueArena`].
 ///
 /// It's an iterator where each item is an [`ObjectField`].
-#[derive(derive_more::Debug, PartialEq, Clone)]
+#[derive(derive_more::Debug, Clone)]
 pub struct Object<'a> {
     #[debug(skip)]
     arena: &'a ValueArena,
@@ -126,7 +126,7 @@ impl<'a> Iterator for Object<'a> {
 /// Array value returned by the [`ValueArena`].
 ///
 /// It's an iterator where each item is an [`ArrayItem`].
-#[derive(derive_more::Debug, PartialEq, Clone)]
+#[derive(derive_more::Debug, Clone)]
 pub struct Array<'a> {
     #[debug(skip)]
     arena: &'a ValueArena,
@@ -135,7 +135,7 @@ pub struct Array<'a> {
 }
 
 /// Item returned by an [`Array`] iterator.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct ArrayItem<'a> {
     /// Id of the item, used for [`ValueArena::get`]
     pub id: ValueId,
@@ -607,9 +607,9 @@ mod test {
         }
 
         // Check primitive value getting works
-        assert_eq!(arena.get(null_id), Value::Null);
-        assert_eq!(arena.get(bool_id), Value::Bool(true));
-        assert_eq!(arena.get(string_id), Value::String(hello_str));
+        assert!(matches!(arena.get(null_id), Value::Null));
+        assert!(matches!(arena.get(bool_id), Value::Bool(true)));
+        assert!(matches!(arena.get(string_id), Value::String(id) if id == hello_str));
 
         // Check that getters for nested values work by checking that root
         // object is exactly how it should be
@@ -620,7 +620,7 @@ mod test {
 
         let flag_field = root_object.next().expect("flag field");
         assert_eq!(flag_field.name, flag_str);
-        assert_eq!(flag_field.value, Value::Integer(7));
+        assert!(matches!(flag_field.value, Value::Integer(7)));
 
         let container_field = root_object.next().expect("container field");
         assert_eq!(container_field.name, container_str);
@@ -639,13 +639,13 @@ mod test {
 
         // Check the numbers array
         let first_numbers_item = numbers_array.next().expect("first array item");
-        assert_eq!(
+        assert!(matches!(
             first_numbers_item,
             ArrayItem {
                 id: ValueId(10),
                 value: Value::Integer(1)
             }
-        );
+        ));
 
         let second_numbers_item = numbers_array.next().expect("second array item");
         assert_eq!(second_numbers_item.id, ValueId(11));
@@ -653,20 +653,20 @@ mod test {
             Value::Array(array) => array,
             other => panic!("expected nested array, got {other:?}"),
         };
-        assert_eq!(
+        assert!(matches!(
             deep_array.next().expect("deep array first item"),
             ArrayItem {
                 id: ValueId(12),
-                value: Value::String(deep_str)
-            }
-        );
-        assert_eq!(
+                value: Value::String(id)
+            } if id == deep_str
+        ));
+        assert!(matches!(
             deep_array.next().expect("deep array second item"),
             ArrayItem {
                 id: ValueId(13),
                 value: Value::Integer(99)
             }
-        );
+        ));
         assert!(deep_array.next().is_none());
 
         let third_numbers_item = numbers_array.next().expect("third array item");
@@ -678,11 +678,11 @@ mod test {
 
         let value_field = array_object.next().expect("value field");
         assert_eq!(value_field.name, value_str);
-        assert_eq!(value_field.value, Value::Float(2.5));
+        assert!(matches!(value_field.value, Value::Float(2.5)));
 
         let label_field = array_object.next().expect("label field");
         assert_eq!(label_field.name, label_str);
-        assert_eq!(label_field.value, Value::String(done_str));
+        assert!(matches!(label_field.value, Value::String(id) if id == done_str));
         assert!(array_object.next().is_none());
 
         assert!(numbers_array.next().is_none());
@@ -700,18 +700,18 @@ mod test {
 
         let status_field = nested_object.next().expect("status field");
         assert_eq!(status_field.name, status_str);
-        assert_eq!(status_field.value, Value::String(ok_str));
+        assert!(matches!(status_field.value, Value::String(id) if id == ok_str));
 
         let count_field = nested_object.next().expect("count field");
         assert_eq!(count_field.name, count_str);
-        assert_eq!(count_field.value, Value::Integer(2));
+        assert!(matches!(count_field.value, Value::Integer(2)));
         assert!(nested_object.next().is_none());
 
         // End of nested object, continue with active field
 
         let active_field = container_object.next().expect("active field");
         assert_eq!(active_field.name, active_str);
-        assert_eq!(active_field.value, Value::Bool(false));
+        assert!(matches!(active_field.value, Value::Bool(false)));
         assert!(container_object.next().is_none());
 
         // Check getting container directly by id
@@ -727,13 +727,13 @@ mod test {
             Value::Array(array) => array,
             other => panic!("expected array at numbers_id, got {other:?}"),
         };
-        assert_eq!(
+        assert!(matches!(
             numbers_from_get.next().expect("numbers via get first"),
             ArrayItem {
                 id: ValueId(10),
                 value: Value::Integer(1)
             }
-        );
+        ));
 
         let deep_from_get = numbers_from_get.next().expect("numbers via get second");
         assert_eq!(deep_from_get.id, ValueId(11));
@@ -741,20 +741,20 @@ mod test {
             Value::Array(array) => array,
             other => panic!("expected nested array via get, got {other:?}"),
         };
-        assert_eq!(
+        assert!(matches!(
             deep_from_get_iter.next().expect("deep via get first"),
             ArrayItem {
                 id: ValueId(12),
-                value: Value::String(deep_str)
-            }
-        );
-        assert_eq!(
+                value: Value::String(id)
+            } if id == deep_str
+        ));
+        assert!(matches!(
             deep_from_get_iter.next().expect("deep via get second"),
             ArrayItem {
                 id: ValueId(13),
                 value: Value::Integer(99)
             }
-        );
+        ));
         assert!(deep_from_get_iter.next().is_none());
 
         let array_from_get = numbers_from_get.next().expect("numbers via get third");
@@ -767,13 +767,13 @@ mod test {
             .next()
             .expect("nested object via get value field");
         assert_eq!(value_field_get.name, value_str);
-        assert_eq!(value_field_get.value, Value::Float(2.5));
+        assert!(matches!(value_field_get.value, Value::Float(2.5)));
 
         let label_field_get = object_from_get_iter
             .next()
             .expect("nested object via get label field");
         assert_eq!(label_field_get.name, label_str);
-        assert_eq!(label_field_get.value, Value::String(done_str));
+        assert!(matches!(label_field_get.value, Value::String(id) if id == done_str));
         assert!(object_from_get_iter.next().is_none());
         assert!(numbers_from_get.next().is_none());
 
@@ -784,10 +784,10 @@ mod test {
         };
         let value_field_direct = array_obj_from_get.next().expect("value field via get");
         assert_eq!(value_field_direct.name, value_str);
-        assert_eq!(value_field_direct.value, Value::Float(2.5));
+        assert!(matches!(value_field_direct.value, Value::Float(2.5)));
         let label_field_direct = array_obj_from_get.next().expect("label field via get");
         assert_eq!(label_field_direct.name, label_str);
-        assert_eq!(label_field_direct.value, Value::String(done_str));
+        assert!(matches!(label_field_direct.value, Value::String(id) if id == done_str));
         assert!(array_obj_from_get.next().is_none());
 
         // Check getting nested object directly by id
@@ -795,14 +795,14 @@ mod test {
             Value::Object(object) => object,
             other => panic!("expected object at nested_obj_id, got {other:?}"),
         };
-        assert_eq!(
+        assert!(matches!(
             nested_from_get.next().expect("nested via get status").value,
-            Value::String(ok_str)
-        );
-        assert_eq!(
+            Value::String(id) if id == ok_str
+        ));
+        assert!(matches!(
             nested_from_get.next().expect("nested via get count").value,
             Value::Integer(2)
-        );
+        ));
         assert!(nested_from_get.next().is_none());
 
         // Check field ids

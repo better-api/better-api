@@ -314,7 +314,10 @@ fn parse_simple_record() {
             .iter()
             .map(|field| field.default.map(|id| oracle.values.get(id)))
             .collect();
-        assert_eq!(defaults, vec![None, None, Some(Value::Integer(69420))]);
+        assert_eq!(defaults.len(), 3);
+        assert!(defaults[0].is_none());
+        assert!(defaults[1].is_none());
+        assert!(matches!(defaults[2], Some(Value::Integer(69420))));
 
         // Check default values are in source map
         for default_id in fields.iter().filter_map(|field| field.default) {
@@ -432,10 +435,10 @@ fn parse_simple_enum() {
 
     let member_vals: Vec<_> = members.iter().map(|m| m.value.clone()).collect();
 
-    assert_eq!(
-        member_vals,
-        vec![Value::Integer(1), Value::Integer(2), Value::Integer(3)]
-    );
+    assert_eq!(member_vals.len(), 3);
+    assert!(matches!(member_vals[0], Value::Integer(1)));
+    assert!(matches!(member_vals[1], Value::Integer(2)));
+    assert!(matches!(member_vals[2], Value::Integer(3)));
 
     // Check enum members are in source map
     for member in members {
