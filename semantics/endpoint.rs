@@ -1,76 +1,111 @@
+//! Defines semantic representation of endpoints and route groups.
+//!
+//! The main data structure is an [`EndpointArena`] that holds the semantic
+//! endpoints and routes. Endpoints and routes are referenced with [`EndpointId`]
+//! and [`RouteId`].
+//!
+//! ## Building An Arena
+//!
+//! Endpoints are created with [`EndpointArena::add_endpoint`] and route groups
+//! with [`EndpointArena::add_route`]. Builders let us append responses without
+//! extra allocations while preserving a compact arena layout.
+
 // TODO:
-// - [ ] Implement getters and iterators
-// - [ ] Add comments
-// - [ ] Add tests
+// - [ ] getters, iterators
+// - [ ] tests
 
-use crate::{
-    path::{Path, PathArena, PathId, PathPart},
-    string::StringId,
-    typ::TypeId,
-};
+use crate::path::{Path, PathArena, PathId, PathPart};
+use crate::string::StringId;
+use crate::typ::TypeId;
 
+/// Route group representation returned by the [`EndpointArena`].
+#[derive(Debug, Clone, PartialEq)]
 pub struct Route<'a> {
+    /// Route path at this level of the hierarchy.
     pub path: Path<'a>,
 }
 
 impl<'a> Route<'a> {
+    /// Returns an iterator over endpoints in this route group.
     pub fn endpoints(&self) {
         todo!("implement endpoint iterator")
     }
 
+    /// Returns an iterator over routes in this route group.
     pub fn routes(&self) {
         todo!("implement routes iterator")
     }
 
+    /// Returns an iterator over responses defined for this route group.
     pub fn responses(&self) {
         todo!("implement responses iterator")
     }
 }
 
+/// Core fields used to describe an endpoint.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EndpointFields {
+    /// HTTP method used by the endpoint.
     pub method: http::Method,
 
+    /// Name assigned to the endpoint.
     pub name: Option<StringId>,
 
+    /// Path parameter type.
     pub path: Option<TypeId>,
+    /// Query parameter type.
     pub query: Option<TypeId>,
+    /// Headers type.
     pub headers: Option<TypeId>,
 
     // TODO: Accept should actually be an array of mime types.
     // Where exactly this validation happens (during construction or late) is yet to be decided.
     // It is also yet to be decided how to validate mime type is correct. This probably boils
     // down to using a library, but I haven't looked into it yet.
+    /// Request `Content-Type` MIME types that are allowed.
     pub accept: Option<StringId>,
+    /// Request body type.
     pub request_body: Option<TypeId>,
 }
 
+/// Endpoint representation returned by the [`EndpointArena`].
 pub struct Endpoint<'a> {
+    /// Path of the endpoint.
     pub path: Path<'a>,
+    /// Endpoint fields.
     pub fields: EndpointFields,
 }
 
 impl<'a> Endpoint<'a> {
+    /// Returns an iterator over responses for this endpoint.
     pub fn responses(&self) {
         todo!("implement responses iterator")
     }
 }
 
+/// Status definition for a response.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ResponseStatus {
+    /// Default response for a route or endpoint.
     Default,
+    /// Response for a specific HTTP status code.
     Code(http::StatusCode),
 }
 
+/// Response definition
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Response {
+    /// Status code of the response.
     pub status: Option<ResponseStatus>,
+    /// Response body type.
     pub type_id: Option<TypeId>,
 }
 
+/// Id of an endpoint stored in the [`EndpointArena`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct EndpointId(u32);
 
+/// Id of a route stored in the [`EndpointArena`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RouteId(u32);
 
@@ -82,6 +117,11 @@ struct Parent<'p> {
     path_id: Option<PathId>,
 }
 
+/// Helper type for adding responses to an endpoint.
+///
+/// Constructed via [`EndpointArena::add_endpoint`] or [`RouteBuilder::add_endpoint`].
+/// Call [`finish`](EndpointBuilder::finish) once all responses are added.
+/// Dropping the builder without finishing rolls back any changes.
 pub struct EndpointBuilder<'p> {
     parent: Parent<'p>,
 
@@ -111,10 +151,12 @@ impl<'p> EndpointBuilder<'p> {
         }
     }
 
+    /// Add a response to this endpoint.
     pub fn add_response(&mut self, resp: Response) {
         self.parent.data.push(Slot::Response(resp))
     }
 
+    /// Finalize the endpoint and return its [`EndpointId`].
     pub fn finish(mut self) -> EndpointId {
         self.finished = true;
 
@@ -141,6 +183,11 @@ impl<'p> Drop for EndpointBuilder<'p> {
     }
 }
 
+/// Helper type for adding endpoints and responses to a route.
+///
+/// Constructed via [`EndpointArena::add_route`] or [`RouteBuilder::add_route`]. Call
+/// [`finish`](RouteBuilder::finish) once all nested entries are added.
+/// Dropping the builder without finishing rolls back any changes.
 pub struct RouteBuilder<'p> {
     parent: Parent<'p>,
 
@@ -172,24 +219,35 @@ impl<'p> RouteBuilder<'p> {
         }
     }
 
+    /// Returns self as Parent
+    fn as_parent<'a>(&'a mut self) -> Parent<'a> {
+        Parent {
+            data: self.parent.data,
+            paths: self.parent.paths,
+            path_id: Some(self.path_id),
+        }
+    }
+
+    /// Add a response to this route.
     pub fn add_response(&mut self, resp: Response) {
         self.parent.data.push(Slot::Response(resp))
     }
 
+    /// Start building an endpoint under this route.
     pub fn add_endpoint<'a>(
         &'a mut self,
         path: PathPart,
         fields: EndpointFields,
     ) -> EndpointBuilder<'a> {
-        let parent = Parent {
-            data: self.parent.data,
-            paths: self.parent.paths,
-            path_id: Some(self.path_id),
-        };
-
-        EndpointBuilder::new(parent, path, fields)
+        EndpointBuilder::new(self.as_parent(), path, fields)
     }
 
+    /// Starts building a nested route group under this route.
+    pub fn add_route<'a>(&'a mut self, path: PathPart) -> RouteBuilder<'a> {
+        RouteBuilder::new(self.as_parent(), path)
+    }
+
+    /// Finalize the route and return its [`RouteId`].
     pub fn finish(mut self) -> RouteId {
         self.finished = true;
 
@@ -231,6 +289,7 @@ enum Slot {
     Response(Response),
 }
 
+/// Arena that holds semantic endpoints and routes.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct EndpointArena {
     data: Vec<Slot>,
@@ -238,6 +297,7 @@ pub struct EndpointArena {
 }
 
 impl EndpointArena {
+    /// Create a new endpoint arena.
     pub fn new() -> Self {
         Self::default()
     }
@@ -250,6 +310,7 @@ impl EndpointArena {
         }
     }
 
+    /// Start building an endpoint at the root.
     pub fn add_endpoint<'a>(
         &'a mut self,
         path: PathPart,
@@ -258,6 +319,7 @@ impl EndpointArena {
         EndpointBuilder::new(self.parent(), path, fields)
     }
 
+    /// Start building a route at the root.
     pub fn add_route<'a>(&'a mut self, path: PathPart) -> RouteBuilder<'a> {
         RouteBuilder::new(self.parent(), path)
     }

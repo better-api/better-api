@@ -70,7 +70,9 @@ pub enum PathPart<'a> {
 /// Represents path inside a URL.
 ///
 /// See [module documentation](self) for more details.
+#[derive(derive_more::Debug, Clone)]
 pub struct Path<'a> {
+    #[debug(skip)]
     arena: &'a PathArena,
 
     id: PathId,
