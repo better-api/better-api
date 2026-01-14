@@ -429,7 +429,7 @@ fn parse_simple_enum() {
 
     // Check enum members
     let members: Vec<_> = match oracle.values.get(enum_type.values) {
-        Value::Array(arr) => arr.collect(),
+        Value::Array(arr) => arr.items().collect(),
         _ => panic!(),
     };
 
@@ -475,7 +475,7 @@ fn parse_empty_enum() {
         _ => panic!(),
     };
 
-    assert_eq!(members.count(), 0);
+    assert_eq!(members.items().count(), 0);
 }
 
 #[test]
@@ -517,7 +517,7 @@ fn parse_invalid_enum() {
     );
 
     let members: Vec<_> = match oracle.values.get(enum_type.values) {
-        Value::Array(arr) => arr.collect(),
+        Value::Array(arr) => arr.items().collect(),
         _ => panic!(),
     };
 

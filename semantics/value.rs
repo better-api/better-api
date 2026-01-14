@@ -69,9 +69,12 @@ impl<'a> Value<'a> {
                 id,
             }),
             Slot::Array { end } => Value::Array(Array {
-                arena,
-                current: ValueId(id.0 + 1),
-                end: *end,
+                items: ArrayItems {
+                    arena,
+                    current: ValueId(id.0 + 1),
+                    end: *end,
+                },
+                id,
             }),
             Slot::ObjectField(_) => {
                 unreachable!("invalid conversion of Slot::ObjectField to Value")
@@ -99,7 +102,7 @@ pub struct Object<'a> {
 }
 
 impl<'a> Object<'a> {
-    /// Return iterator over [object fields](ObjectField).
+    /// Returns iterator over [object fields](ObjectField).
     pub fn fields(&self) -> ObjectFields<'a> {
         self.fields.clone()
     }
@@ -132,23 +135,12 @@ impl<'a> Iterator for ObjectFields<'a> {
 
         self.current = match field.value {
             Value::Object(Object { ref fields, .. }) => fields.end,
-            Value::Array(Array { end, .. }) => end,
+            Value::Array(Array { ref items, .. }) => items.end,
             _ => ValueId(self.current.0 + 2),
         };
 
         Some(field)
     }
-}
-
-/// Array value returned by the [`ValueArena`].
-///
-/// It's an iterator where each item is an [`ArrayItem`].
-#[derive(derive_more::Debug, Clone)]
-pub struct Array<'a> {
-    #[debug(skip)]
-    arena: &'a ValueArena,
-    current: ValueId,
-    end: ValueId,
 }
 
 /// Item returned by an [`Array`] iterator.
@@ -161,7 +153,32 @@ pub struct ArrayItem<'a> {
     pub value: Value<'a>,
 }
 
-impl<'a> Iterator for Array<'a> {
+/// Array value returned by the [`ValueArena`].
+#[derive(Debug, Clone)]
+pub struct Array<'a> {
+    // Id of the array
+    pub id: ValueId,
+
+    items: ArrayItems<'a>,
+}
+
+impl<'a> Array<'a> {
+    /// Returns iterator over [array items](ArrayItem)
+    pub fn items(&self) -> ArrayItems<'a> {
+        self.items.clone()
+    }
+}
+
+/// Iterator over array items.
+#[derive(derive_more::Debug, Clone)]
+pub struct ArrayItems<'a> {
+    #[debug(skip)]
+    arena: &'a ValueArena,
+    current: ValueId,
+    end: ValueId,
+}
+
+impl<'a> Iterator for ArrayItems<'a> {
     type Item = ArrayItem<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -175,7 +192,7 @@ impl<'a> Iterator for Array<'a> {
 
         self.current = match value {
             Value::Object(Object { ref fields, .. }) => fields.end,
-            Value::Array(Array { end, .. }) => end,
+            Value::Array(Array { ref items, .. }) => items.end,
             _ => ValueId(self.current.0 + 1),
         };
 
@@ -652,13 +669,14 @@ mod test {
 
         let numbers_field = container_object_fields.next().expect("numbers field");
         assert_eq!(numbers_field.name, numbers_str);
-        let mut numbers_array = match numbers_field.value {
+        let numbers_array = match numbers_field.value {
             Value::Array(array) => array,
             other => panic!("expected array for numbers field, got {other:?}"),
         };
 
         // Check the numbers array
-        let first_numbers_item = numbers_array.next().expect("first array item");
+        let mut numbers_array_items = numbers_array.items();
+        let first_numbers_item = numbers_array_items.next().expect("first array item");
         assert!(matches!(
             first_numbers_item,
             ArrayItem {
@@ -667,29 +685,30 @@ mod test {
             }
         ));
 
-        let second_numbers_item = numbers_array.next().expect("second array item");
+        let second_numbers_item = numbers_array_items.next().expect("second array item");
         assert_eq!(second_numbers_item.id, ValueId(11));
-        let mut deep_array = match second_numbers_item.value {
+        let deep_array = match second_numbers_item.value {
             Value::Array(array) => array,
             other => panic!("expected nested array, got {other:?}"),
         };
+        let mut deep_array_items = deep_array.items();
         assert!(matches!(
-            deep_array.next().expect("deep array first item"),
+            deep_array_items.next().expect("deep array first item"),
             ArrayItem {
                 id: ValueId(12),
                 value: Value::String(id)
             } if id == deep_str
         ));
         assert!(matches!(
-            deep_array.next().expect("deep array second item"),
+            deep_array_items.next().expect("deep array second item"),
             ArrayItem {
                 id: ValueId(13),
                 value: Value::Integer(99)
             }
         ));
-        assert!(deep_array.next().is_none());
+        assert!(deep_array_items.next().is_none());
 
-        let third_numbers_item = numbers_array.next().expect("third array item");
+        let third_numbers_item = numbers_array_items.next().expect("third array item");
         assert_eq!(third_numbers_item.id, ValueId(14));
         let array_object = match third_numbers_item.value {
             Value::Object(object) => object,
@@ -707,7 +726,7 @@ mod test {
         assert!(matches!(label_field.value, Value::String(id) if id == done_str));
         assert!(array_object_fields.next().is_none());
 
-        assert!(numbers_array.next().is_none());
+        assert!(numbers_array_items.next().is_none());
 
         // End of number array, continue with next field in container
 
@@ -746,22 +765,28 @@ mod test {
         assert_eq!(inner_field_names, vec![numbers_str, nested_str, active_str]);
 
         // Check getting numbers array directly by id
-        let mut numbers_from_get = match arena.get(numbers_id) {
+        let numbers_from_get = match arena.get(numbers_id) {
             Value::Array(array) => array,
             other => panic!("expected array at numbers_id, got {other:?}"),
         };
+
+        let mut numbers_from_get_items = numbers_from_get.items();
         assert!(matches!(
-            numbers_from_get.next().expect("numbers via get first"),
+            numbers_from_get_items
+                .next()
+                .expect("numbers via get first"),
             ArrayItem {
                 id: ValueId(10),
                 value: Value::Integer(1)
             }
         ));
 
-        let deep_from_get = numbers_from_get.next().expect("numbers via get second");
+        let deep_from_get = numbers_from_get_items
+            .next()
+            .expect("numbers via get second");
         assert_eq!(deep_from_get.id, ValueId(11));
         let mut deep_from_get_iter = match deep_from_get.value {
-            Value::Array(array) => array,
+            Value::Array(array) => array.items(),
             other => panic!("expected nested array via get, got {other:?}"),
         };
         assert!(matches!(
@@ -780,7 +805,9 @@ mod test {
         ));
         assert!(deep_from_get_iter.next().is_none());
 
-        let array_from_get = numbers_from_get.next().expect("numbers via get third");
+        let array_from_get = numbers_from_get_items
+            .next()
+            .expect("numbers via get third");
         assert_eq!(array_from_get.id, ValueId(14));
         let object_from_get_iter = match array_from_get.value {
             Value::Object(object) => object,
@@ -800,7 +827,7 @@ mod test {
         assert_eq!(label_field_get.name, label_str);
         assert!(matches!(label_field_get.value, Value::String(id) if id == done_str));
         assert!(object_from_get_iter_fields.next().is_none());
-        assert!(numbers_from_get.next().is_none());
+        assert!(numbers_from_get_items.next().is_none());
 
         // Check getting deeply nested object directly by id
         let array_obj_from_get = match arena.get(array_obj_id) {

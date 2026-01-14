@@ -148,7 +148,7 @@ fn parse_array() {
         other => panic!("expected array value, got {other:?}"),
     };
 
-    let item_ids: Vec<_> = array.map(|it| it.id).collect();
+    let item_ids: Vec<_> = array.items().map(|it| it.id).collect();
     let values: Vec<_> = item_ids.iter().map(|&id| oracle.values.get(id)).collect();
     assert_eq!(values.len(), 3);
     assert!(matches!(values[0], Value::Integer(1)));
@@ -179,7 +179,7 @@ fn parse_empty_array() {
 
     assert_eq!(oracle.reports(), vec![]);
     match oracle.values.get(id) {
-        Value::Array(arr) => assert_eq!(arr.count(), 0),
+        Value::Array(arr) => assert_eq!(arr.items().count(), 0),
         other => panic!("expected array value, got {other:?}"),
     }
 
@@ -209,7 +209,7 @@ fn parse_nested_array() {
     };
     oracle.source_map.get_value(id);
 
-    let outer_items: Vec<_> = outer.map(|it| (it.id, it.value)).collect();
+    let outer_items: Vec<_> = outer.items().map(|it| (it.id, it.value)).collect();
     assert_eq!(outer_items.len(), 3);
     assert!(matches!(outer_items[0].1, Value::Integer(1)));
     assert!(matches!(outer_items[2].1, Value::Integer(4)));
@@ -224,7 +224,7 @@ fn parse_nested_array() {
         other => panic!("expected array value, got {other:?}"),
     };
 
-    let inner_items: Vec<_> = inner.map(|it| (it.id, it.value)).collect();
+    let inner_items: Vec<_> = inner.items().map(|it| (it.id, it.value)).collect();
     assert_eq!(inner_items.len(), 2);
     assert!(matches!(inner_items[0].1, Value::Integer(2)));
     assert!(matches!(inner_items[1].1, Value::Integer(3)));
@@ -611,7 +611,7 @@ fn parse_complex_nested_structure() {
         other => panic!("expected users array, got {other:?}"),
     };
 
-    let users: Vec<_> = users_arr.map(|it| (it.id, it.value)).collect();
+    let users: Vec<_> = users_arr.items().map(|it| (it.id, it.value)).collect();
     assert_eq!(users.len(), 2);
 
     // Verify array elements are in source map
