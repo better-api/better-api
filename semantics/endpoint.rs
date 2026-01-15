@@ -18,16 +18,18 @@
 //! See documentation for individual types for more info on available methods.
 
 // TODO:
-// - [ ] iterators
 // - [ ] tests
 
 use crate::path::{Path, PathArena, PathId, PathPart};
 use crate::string::StringId;
 use crate::typ::TypeId;
+use crate::value::ValueId;
 
 /// Route group representation returned by the [`EndpointArena`].
-#[derive(derive_more::Debug, Clone, PartialEq)]
+#[derive(derive_more::Debug, Clone)]
 pub struct Route<'a> {
+    /// Id of the route
+    pub id: RouteId,
     /// Route path at this level of the hierarchy.
     pub path: Path<'a>,
 
@@ -41,23 +43,35 @@ pub struct Route<'a> {
 
 impl<'a> Route<'a> {
     /// Returns an iterator over endpoints in this route group.
-    pub fn endpoints(&self) {
-        todo!("implement endpoint iterator")
+    pub fn endpoints(&self) -> EndpointIterator<'a> {
+        EndpointIterator {
+            arena: self.arena,
+            current: self.id.0 + 1,
+            end: self.end,
+        }
     }
 
     /// Returns an iterator over routes in this route group.
-    pub fn routes(&self) {
-        todo!("implement routes iterator")
+    pub fn routes(&self) -> RouteIterator<'a> {
+        RouteIterator {
+            arena: self.arena,
+            current: self.id.0 + 1,
+            end: self.end,
+        }
     }
 
     /// Returns an iterator over responses defined for this route group.
-    pub fn responses(&self) {
-        todo!("implement responses iterator")
+    pub fn responses(&self) -> ResponseIterator<'a> {
+        ResponseIterator {
+            arena: self.arena,
+            current: self.id.0 + 1,
+            end: self.end,
+        }
     }
 }
 
 /// Core fields used to describe an endpoint.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct EndpointFields {
     /// HTTP method used by the endpoint.
     pub method: http::Method,
@@ -72,19 +86,21 @@ pub struct EndpointFields {
     /// Headers type.
     pub headers: Option<TypeId>,
 
-    // TODO: Accept should actually be an array of mime types.
+    // TODO: Accept should be an array of mime types.
     // Where exactly this validation happens (during construction or late) is yet to be decided.
     // It is also yet to be decided how to validate mime type is correct. This probably boils
     // down to using a library, but I haven't looked into it yet.
     /// Request `Content-Type` MIME types that are allowed.
-    pub accept: Option<StringId>,
+    pub accept: Option<ValueId>,
     /// Request body type.
     pub request_body: Option<TypeId>,
 }
 
 /// Endpoint representation returned by the [`EndpointArena`].
-#[derive(derive_more::Debug, Clone, PartialEq)]
+#[derive(derive_more::Debug, Clone)]
 pub struct Endpoint<'a> {
+    /// Id of the endpoint
+    pub id: EndpointId,
     /// Path of the endpoint.
     pub path: Path<'a>,
     /// Endpoint fields.
@@ -100,8 +116,95 @@ pub struct Endpoint<'a> {
 
 impl<'a> Endpoint<'a> {
     /// Returns an iterator over responses for this endpoint.
-    pub fn responses(&self) {
-        todo!("implement responses iterator")
+    pub fn responses(&self) -> ResponseIterator<'a> {
+        ResponseIterator {
+            arena: self.arena,
+            current: self.id.0 + 1,
+            end: self.end,
+        }
+    }
+}
+
+/// Iterator over endpoints inside a [`Route`].
+pub struct EndpointIterator<'a> {
+    arena: &'a EndpointArena,
+
+    current: u32,
+    end: u32,
+}
+
+impl<'a> Iterator for EndpointIterator<'a> {
+    type Item = Endpoint<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.current < self.end {
+            match &self.arena.data[self.current as usize] {
+                Slot::Route { end, .. } => self.current = *end,
+                Slot::Response(_) => self.current += 1,
+                Slot::Endpoint { end, .. } => {
+                    let id = EndpointId(self.current);
+                    self.current = *end;
+                    return Some(self.arena.get_endpoint(id));
+                }
+            }
+        }
+
+        None
+    }
+}
+
+/// Iterator over routes inside a [`Route`]
+pub struct RouteIterator<'a> {
+    arena: &'a EndpointArena,
+
+    current: u32,
+    end: u32,
+}
+
+impl<'a> Iterator for RouteIterator<'a> {
+    type Item = Route<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.current < self.end {
+            match &self.arena.data[self.current as usize] {
+                Slot::Response(_) => self.current += 1,
+                Slot::Endpoint { end, .. } => self.current = *end,
+                Slot::Route { end, .. } => {
+                    let id = RouteId(self.current);
+                    self.current = *end;
+                    return Some(self.arena.get_route(id));
+                }
+            }
+        }
+
+        None
+    }
+}
+
+/// Iterator over responses inside a [`Route`] or [`Endpoint`]
+pub struct ResponseIterator<'a> {
+    arena: &'a EndpointArena,
+
+    current: u32,
+    end: u32,
+}
+
+impl<'a> Iterator for ResponseIterator<'a> {
+    type Item = Response;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.current < self.end {
+            match &self.arena.data[self.current as usize] {
+                Slot::Endpoint { end, .. } => self.current = *end,
+                Slot::Route { end, .. } => self.current = *end,
+                Slot::Response(resp) => {
+                    self.current += 1;
+                    return Some(*resp);
+                }
+            }
+        }
+
+        None
     }
 }
 
@@ -115,8 +218,10 @@ pub enum ResponseStatus {
 }
 
 /// Response definition
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 pub struct Response {
+    /// Id of the response
+    pub id: ResponseId,
     /// Status code of the response.
     pub status: Option<ResponseStatus>,
     /// Response body type.
@@ -130,6 +235,10 @@ pub struct EndpointId(u32);
 /// Id of a route stored in the [`EndpointArena`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RouteId(u32);
+
+/// Id of a response stored in the [`EndpointArena`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ResponseId(u32);
 
 struct Parent<'p> {
     data: &'p mut Vec<Slot>,
@@ -292,21 +401,21 @@ impl<'p> Drop for RouteBuilder<'p> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 enum Slot {
     Route {
         path: PathId,
 
-        // Id after the last child of the route.
-        // Used for knowing when to stop iteration
+        /// Id after the last child of the route.
+        /// Used for knowing when to stop iteration
         end: u32,
     },
     Endpoint {
         path: PathId,
         fields: EndpointFields,
 
-        // Id after the last response of the endpoint.
-        // Used for knowing when to stop iteration
+        /// Id after the last response of the endpoint.
+        /// Used for knowing when to stop iteration
         end: u32,
     },
 
@@ -314,7 +423,7 @@ enum Slot {
 }
 
 /// Arena that holds semantic endpoints and routes.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default)]
 pub struct EndpointArena {
     data: Vec<Slot>,
     paths: PathArena,
@@ -355,6 +464,7 @@ impl EndpointArena {
                 let path = self.paths.get(*path);
 
                 Endpoint {
+                    id,
                     arena: self,
                     path,
                     fields,
@@ -372,12 +482,21 @@ impl EndpointArena {
                 let path = self.paths.get(*path);
 
                 Route {
+                    id,
                     path,
                     arena: self,
                     end: *end,
                 }
             }
             _ => unreachable!("slot at route id should contain a route"),
+        }
+    }
+
+    /// Get [`Response`] by id.
+    pub fn get_response(&self, id: ResponseId) -> Response {
+        match &self.data[id.0 as usize] {
+            Slot::Response(resp) => *resp,
+            _ => unreachable!("slot at response id should contain a response"),
         }
     }
 }

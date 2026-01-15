@@ -250,6 +250,9 @@ pub struct Enum<'a> {
 pub struct Response<'a> {
     pub body: Option<Reference<'a>>,
     pub headers: Option<Reference<'a>>,
+
+    // TODO: Content type should be array of mime types, or single mime type.
+    // See comment in semantics/endpoint.rs, where this is discussed.
     pub content_type: Option<value::ValueId>,
 }
 
