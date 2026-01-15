@@ -19,7 +19,7 @@ use crate::string::StringId;
 use crate::value;
 
 /// Representation of a type.
-#[derive(Debug, Clone, PartialEq, derive_more::Display)]
+#[derive(Debug, Clone, derive_more::Display)]
 pub enum Type<'a> {
     #[display("`i32`")]
     I32,
@@ -48,7 +48,7 @@ pub enum Type<'a> {
     #[display("`array`")]
     Array(Reference<'a>),
     #[display("`record`")]
-    Record(TypeFieldIterator<'a>),
+    Record(Record<'a>),
     #[display("`union`")]
     Union(Union<'a>),
     #[display("`enum`")]
@@ -106,13 +106,17 @@ impl<'a> Type<'a> {
                 content_type: *content_type,
             }),
 
-            Slot::Record { end } => Type::Record(TypeFieldIterator {
-                arena,
-                current: TypeId(id.0 + 1),
-                end: *end,
+            Slot::Record { end } => Type::Record(Record {
                 id,
+                fields: TypeFieldIterator {
+                    arena,
+                    current: TypeId(id.0 + 1),
+                    end: *end,
+                    id,
+                },
             }),
             Slot::Union { discriminator, end } => Type::Union(Union {
+                id,
                 disriminator: *discriminator,
                 fields: TypeFieldIterator {
                     arena,
@@ -127,7 +131,7 @@ impl<'a> Type<'a> {
 }
 
 /// Reference to a type stored in the [`TypeArena`].
-#[derive(derive_more::Debug, PartialEq, Clone)]
+#[derive(derive_more::Debug, Clone)]
 pub struct Reference<'a> {
     /// Id of the type in the arena.
     pub id: TypeId,
@@ -156,7 +160,7 @@ pub struct TypeField<'a> {
 /// Iterator returned for composite types.
 ///
 /// Each item is a [`TypeField`].
-#[derive(derive_more::Debug, Clone, PartialEq)]
+#[derive(derive_more::Debug, Clone)]
 pub struct TypeFieldIterator<'a> {
     #[debug(skip)]
     arena: &'a TypeArena,
@@ -194,27 +198,55 @@ impl<'a> Iterator for TypeFieldIterator<'a> {
     }
 }
 
+/// Semantic representation of a record.
+///
+/// Fields are exposed through [`Record::fields`].
+#[derive(Debug, Clone)]
+pub struct Record<'a> {
+    // Id of the record
+    pub id: TypeId,
+
+    fields: TypeFieldIterator<'a>,
+}
+
+impl<'a> Record<'a> {
+    /// Returns iterator over [record fields](TypeField)
+    pub fn fields(&self) -> TypeFieldIterator<'a> {
+        self.fields.clone()
+    }
+}
+
 /// Semantic representation of a tagged union.
 ///
-/// Fields are exposed through a [`TypeFieldIterator`].
-#[derive(Debug, Clone, PartialEq)]
+/// Fields are exposed through [`Union::fields`].
+#[derive(Debug, Clone)]
 pub struct Union<'a> {
+    // Id of the union
+    pub id: TypeId,
     pub disriminator: Option<StringId>,
-    pub fields: TypeFieldIterator<'a>,
+
+    fields: TypeFieldIterator<'a>,
+}
+
+impl<'a> Union<'a> {
+    /// Returns iterator over [union fields](TypeField)
+    pub fn fields(&self) -> TypeFieldIterator<'a> {
+        self.fields.clone()
+    }
 }
 
 /// Semantic representation of an enum.
 ///
 /// Optional `typ` describes the type of enum values, while `values` points to
 /// an array in the [`value::ValueArena`].
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Enum<'a> {
     pub typ: Option<Reference<'a>>,
     pub values: value::ValueId,
 }
 
 /// Semantic information about a response type.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Response<'a> {
     pub body: Option<Reference<'a>>,
     pub headers: Option<Reference<'a>>,
@@ -818,42 +850,44 @@ mod test {
             Slot::Primitive(PrimitiveType::String),
         ];
 
-        assert_eq!(arena.data.len(), expected_slots.len());
+        assert!(arena.data.len() == expected_slots.len());
         for (idx, expected) in expected_slots.iter().enumerate() {
-            assert_eq!(&arena.data[idx], expected, "slot mismatch at index {idx}");
+            assert!(&arena.data[idx] == expected, "slot mismatch at index {idx}");
         }
 
         // Test getting primitive types
-        assert_eq!(arena.get(i32_id), Type::I32);
-        assert_eq!(arena.get(string_id), Type::String);
-        assert_eq!(arena.get(bool_id), Type::Bool);
+        assert!(matches!(arena.get(i32_id), Type::I32));
+        assert!(matches!(arena.get(string_id), Type::String));
+        assert!(matches!(arena.get(bool_id), Type::Bool));
 
         // Test getting the root record
         let root_type = arena.get(root_id);
-        let mut root_fields = match root_type {
-            Type::Record(fields) => fields,
+        let root_record = match root_type {
+            Type::Record(record) => record,
             other => panic!("expected record at root_id, got {other:?}"),
         };
 
+        let mut root_record_fields = root_record.fields();
+
         // Check id field
-        let id_field = root_fields.next().expect("id field");
-        assert_eq!(id_field.name, id_str);
-        assert_eq!(id_field.typ, Type::I64);
-        assert_eq!(id_field.default, None);
+        let id_field = root_record_fields.next().expect("id field");
+        assert!(id_field.name == id_str);
+        assert!(matches!(id_field.typ, Type::I64));
+        assert!(id_field.default.is_none());
 
         // Check simple_array field
-        let simple_array_field = root_fields.next().expect("simple_array field");
-        assert_eq!(simple_array_field.name, simple_array_str);
+        let simple_array_field = root_record_fields.next().expect("simple_array field");
+        assert!(simple_array_field.name == simple_array_str);
         match simple_array_field.typ {
             Type::Array(ref inner) => {
-                assert_eq!(inner.typ(), Type::F32);
+                assert!(matches!(inner.typ(), Type::F32));
             }
             other => panic!("expected array type, got {other:?}"),
         }
 
         // Check values field with nested arrays
-        let values_field = root_fields.next().expect("values field");
-        assert_eq!(values_field.name, values_str);
+        let values_field = root_record_fields.next().expect("values field");
+        assert!(values_field.name == values_str);
 
         // Navigate through [[[string?]]]
         let level1 = match values_field.typ {
@@ -876,31 +910,31 @@ mod test {
             other => panic!("expected option, got {other:?}"),
         };
 
-        assert_eq!(option_inner, Type::String);
+        assert!(matches!(option_inner, Type::String));
 
         // Check metadata field
-        let metadata_field = root_fields.next().expect("metadata field");
-        assert_eq!(metadata_field.name, metadata_str);
+        let metadata_field = root_record_fields.next().expect("metadata field");
+        assert!(metadata_field.name == metadata_str);
 
-        assert!(root_fields.next().is_none());
+        assert!(root_record_fields.next().is_none());
 
         // Test getting the union directly
         let union_type = arena.get(union_id);
         let mut union_fields = match union_type {
             Type::Union(u) => {
-                assert_eq!(u.disriminator, None);
+                assert!(u.disriminator.is_none());
                 u.fields
             }
             other => panic!("expected union at union_id, got {other:?}"),
         };
 
         let success_field = union_fields.next().expect("success field");
-        assert_eq!(success_field.name, success_str);
-        assert_eq!(success_field.typ, Type::Bool);
+        assert!(success_field.name == success_str);
+        assert!(matches!(success_field.typ, Type::Bool));
 
         let error_field = union_fields.next().expect("error field");
-        assert_eq!(error_field.name, error_str);
-        assert_eq!(error_field.typ, Type::String);
+        assert!(error_field.name == error_str);
+        assert!(matches!(error_field.typ, Type::String));
 
         assert!(union_fields.next().is_none());
 
@@ -917,7 +951,7 @@ mod test {
                                 let level3 = inner3.typ();
                                 match level3 {
                                     Type::Option(ref inner4) => {
-                                        assert_eq!(inner4.typ(), Type::String);
+                                        assert!(matches!(inner4.typ(), Type::String));
                                     }
                                     other => {
                                         panic!("expected option at deepest level, got {other:?}")
@@ -933,31 +967,31 @@ mod test {
             other => panic!("expected array at values_id, got {other:?}"),
         }
 
-        assert_eq!(values_id.primitive_id, TypeId(14));
+        assert!(values_id.primitive_id == TypeId(14));
 
         // Check field ids
-        assert_eq!(
-            simple_array_field_id,
-            TypeFieldId {
-                container_id: root_id,
-                slot_idx: 6,
-            }
+        assert!(
+            simple_array_field_id
+                == TypeFieldId {
+                    container_id: root_id,
+                    slot_idx: 6,
+                }
         );
 
-        assert_eq!(
-            values_field_id,
-            TypeFieldId {
-                container_id: root_id,
-                slot_idx: 9,
-            }
+        assert!(
+            values_field_id
+                == TypeFieldId {
+                    container_id: root_id,
+                    slot_idx: 9,
+                }
         );
 
-        assert_eq!(
-            metadata_field_id,
-            TypeFieldId {
-                container_id: root_id,
-                slot_idx: 15,
-            }
+        assert!(
+            metadata_field_id
+                == TypeFieldId {
+                    container_id: root_id,
+                    slot_idx: 15,
+                }
         );
     }
 }

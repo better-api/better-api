@@ -3,12 +3,12 @@ use smallvec::SmallVec;
 
 use crate::Oracle;
 use crate::string::StringId;
-use crate::typ::{Type, TypeId, Union};
+use crate::typ::{Type, TypeId};
 
 type ResolvePath = SmallVec<[StringId; 10]>;
 
 /// Result of symbol resolution
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub(crate) enum ResolvedSymbol<'a> {
     /// Symbol with name inside this type is not in the symbols table.
     ///
@@ -105,8 +105,13 @@ impl<'a> Oracle<'a> {
             // Also more interesting values are valid Foo, but useless, ie `[[[], []], []]`
             Type::Option(_) | Type::Array(_) => (),
 
-            Type::Record(fields) | Type::Union(Union { fields, .. }) => {
-                for field in fields {
+            Type::Record(record) => {
+                for field in record.fields() {
+                    self.report_symbol_cycles_aux(field.id.type_id(), path, reports);
+                }
+            }
+            Type::Union(union) => {
+                for field in union.fields() {
                     self.report_symbol_cycles_aux(field.id.type_id(), path, reports);
                 }
             }

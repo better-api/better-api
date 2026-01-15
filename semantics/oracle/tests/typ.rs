@@ -33,7 +33,22 @@ fn parse_primitives() {
         let id = oracle.lower_type(&typ).unwrap();
 
         assert_eq!(oracle.reports(), vec![]);
-        assert_eq!(oracle.types.get(id), expected);
+
+        let actual = oracle.types.get(id);
+        match expected {
+            Type::I32 => assert!(matches!(actual, Type::I32)),
+            Type::I64 => assert!(matches!(actual, Type::I64)),
+            Type::U32 => assert!(matches!(actual, Type::U32)),
+            Type::U64 => assert!(matches!(actual, Type::U64)),
+            Type::F32 => assert!(matches!(actual, Type::F32)),
+            Type::F64 => assert!(matches!(actual, Type::F64)),
+            Type::Date => assert!(matches!(actual, Type::Date)),
+            Type::Timestamp => assert!(matches!(actual, Type::Timestamp)),
+            Type::Bool => assert!(matches!(actual, Type::Bool)),
+            Type::String => assert!(matches!(actual, Type::String)),
+            Type::File => assert!(matches!(actual, Type::File)),
+            other => panic!("unexpected primitive type: {other:?}"),
+        }
 
         oracle.source_map.get_type(id);
     }
@@ -56,7 +71,12 @@ fn parse_primitive_reference() {
 
     let name = oracle.strings.insert("Bar");
     assert_eq!(oracle.reports(), vec![]);
-    assert_eq!(oracle.types.get(id), Type::Reference(name));
+
+    let actual = oracle.types.get(id);
+    match actual {
+        Type::Reference(actual_name) => assert!(actual_name == name),
+        other => panic!("expected reference type, got {other:?}"),
+    }
 
     oracle.source_map.get_type(id);
 }
@@ -82,7 +102,7 @@ fn parse_simple_array() {
         Type::Array(arr) => arr,
         _ => panic!(),
     };
-    assert_eq!(arr.typ(), Type::I32);
+    assert!(matches!(arr.typ(), Type::I32));
 
     oracle.source_map.get_type(id);
     oracle.source_map.get_type(arr.id);
@@ -113,7 +133,7 @@ fn parse_nested_array() {
         Type::Array(arr) => arr,
         _ => panic!(),
     };
-    assert_eq!(arr_inner.typ(), Type::I32);
+    assert!(matches!(arr_inner.typ(), Type::I32));
 
     oracle.source_map.get_type(id);
     oracle.source_map.get_type(arr.id);
@@ -186,7 +206,7 @@ fn parse_simple_option() {
         Type::Option(opt) => opt,
         _ => panic!(),
     };
-    assert_eq!(opt.typ(), Type::I32);
+    assert!(matches!(opt.typ(), Type::I32));
 
     oracle.source_map.get_type(id);
     oracle.source_map.get_type(opt.id);
@@ -215,7 +235,7 @@ fn parse_nested_option() {
         Type::Option(opt) => opt,
         _ => panic!(),
     };
-    assert_eq!(opt.typ(), Type::I32);
+    assert!(matches!(opt.typ(), Type::I32));
 
     oracle.source_map.get_type(id);
     oracle.source_map.get_type(opt.id);
@@ -300,7 +320,7 @@ fn parse_simple_record() {
         };
         oracle.source_map.get_type(id);
 
-        let fields: Vec<_> = rec.collect();
+        let fields: Vec<_> = rec.fields().collect();
 
         // Check field names are correct
         let names: Vec<_> = fields
@@ -354,7 +374,7 @@ fn parse_empty_record() {
     };
     oracle.source_map.get_type(id);
 
-    assert_eq!(rec.count(), 0);
+    assert_eq!(rec.fields().count(), 0);
 }
 
 #[test]
@@ -389,7 +409,7 @@ fn parse_invalid_record() {
     };
     oracle.source_map.get_type(id);
 
-    assert_eq!(rec.count(), 0);
+    assert_eq!(rec.fields().count(), 0);
 }
 
 #[test]
@@ -422,7 +442,7 @@ fn parse_simple_enum() {
 
     // Check enum type is i32
     let enum_type_inner = enum_type.typ.unwrap();
-    assert_eq!(enum_type_inner.typ(), Type::I32);
+    assert!(matches!(enum_type_inner.typ(), Type::I32));
 
     // Check enum type is inside of source map
     oracle.source_map.get_type(enum_type_inner.id);
@@ -558,7 +578,7 @@ fn parse_simple_union() {
     let discriminator = union.disriminator.unwrap();
     assert_eq!(oracle.strings.get(discriminator), "type");
 
-    let fields: Vec<_> = union.fields.collect();
+    let fields: Vec<_> = union.fields().collect();
 
     // Check field names are correct
     let names: Vec<_> = fields
@@ -603,7 +623,7 @@ fn parse_empty_union() {
     let discriminator = union.disriminator.unwrap();
     assert_eq!(oracle.strings.get(discriminator), "kind");
 
-    assert_eq!(union.fields.count(), 0);
+    assert_eq!(union.fields().count(), 0);
 }
 
 #[test]
@@ -642,5 +662,5 @@ fn parse_invalid_union() {
     // Check discriminator
     assert!(union.disriminator.is_none());
 
-    assert_eq!(union.fields.count(), 0);
+    assert_eq!(union.fields().count(), 0);
 }
