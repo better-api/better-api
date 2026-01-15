@@ -195,9 +195,8 @@ impl<'a> Iterator for ResponseIterator<'a> {
                 Slot::Endpoint { end, .. } => self.current = *end,
                 Slot::Route { end, .. } => self.current = *end,
                 Slot::Response(resp) => {
-                    let id = ResponseId(self.current);
                     self.current += 1;
-                    return Some(Response { id, data: *resp });
+                    return Some(*resp);
                 }
             }
         }
@@ -375,13 +374,19 @@ impl<'p> RouteBuilder<'p> {
         &'a mut self,
         path: PathPart,
         fields: EndpointFields,
-    ) -> EndpointBuilder<'a> {
-        EndpointBuilder::new(self.as_parent(), path, fields)
+    ) -> (EndpointBuilder<'a>, EndpointId) {
+        let id = EndpointId(self.parent.data.len() as u32);
+        let builder = EndpointBuilder::new(self.as_parent(), path, fields);
+
+        (builder, id)
     }
 
     /// Starts building a nested route group under this route.
-    pub fn add_route<'a>(&'a mut self, path: PathPart) -> RouteBuilder<'a> {
-        RouteBuilder::new(self.as_parent(), path)
+    pub fn add_route<'a>(&'a mut self, path: PathPart) -> (RouteBuilder<'a>, RouteId) {
+        let id = RouteId(self.parent.data.len() as u32);
+        let builder = RouteBuilder::new(self.as_parent(), path);
+
+        (builder, id)
     }
 
     /// Finalize the route and return its [`RouteId`].
@@ -458,13 +463,19 @@ impl EndpointArena {
         &'a mut self,
         path: PathPart,
         fields: EndpointFields,
-    ) -> EndpointBuilder<'a> {
-        EndpointBuilder::new(self.parent(), path, fields)
+    ) -> (EndpointBuilder<'a>, EndpointId) {
+        let id = EndpointId(self.data.len() as u32);
+        let builder = EndpointBuilder::new(self.parent(), path, fields);
+
+        (builder, id)
     }
 
     /// Start building a route at the root.
-    pub fn add_route<'a>(&'a mut self, path: PathPart) -> RouteBuilder<'a> {
-        RouteBuilder::new(self.parent(), path)
+    pub fn add_route<'a>(&'a mut self, path: PathPart) -> (RouteBuilder<'a>, RouteId) {
+        let id = RouteId(self.data.len() as u32);
+        let builder = RouteBuilder::new(self.parent(), path);
+
+        (builder, id)
     }
 
     /// Get [`Endpoint`] by id.
@@ -505,7 +516,7 @@ impl EndpointArena {
     /// Get [`Response`] by id.
     pub fn get_response(&self, id: ResponseId) -> Response {
         match &self.data[id.0 as usize] {
-            Slot::Response(resp) => Response { id, data: *resp },
+            Slot::Response(resp) => *resp,
             _ => unreachable!("slot at response id should contain a response"),
         }
     }
@@ -513,13 +524,13 @@ impl EndpointArena {
 
 #[cfg(test)]
 mod test {
-    use super::{EndpointArena, EndpointFields, ResponseStatus};
-
-    use crate::endpoint::ResponseData;
+    use super::{
+        EndpointArena, EndpointBuilder, EndpointFields, Response, ResponseId, ResponseStatus,
+        RouteBuilder,
+    };
     use crate::path::PathPart;
     use crate::string::StringInterner;
     use crate::typ::{PrimitiveType, TypeArena};
-
     use http::{Method, StatusCode};
 
     #[test]
@@ -537,57 +548,21 @@ mod test {
 
         let mut arena = EndpointArena::new();
 
-        // route {
-        //   on default: bool
-        //
-        //   on 404:
-        //
-        //   /// status endpoint
-        //   GET "/status" {
-        //     name: "status"
-        //
-        //     on 200: string
-        //     on 400:
-        //   }
-        //
-        //   route "/users" {
-        //     on default:
-        //
-        //     /// list endpoint
-        //     GET "/list" {
-        //       name: list
-        //
-        //       on 200: string
-        //     }
-        //
-        //     /// create endpoint
-        //     POST "/create" {
-        //       name: create
-        //
-        //       on 201: bool
-        //     }
-        //
-        //     route "/admin" {
-        //       DELETE "/ban" {
-        //         on 404:
-        //       }
-        //     }
-        //   }
-        //
-        // }
-
-        let mut root = arena.add_route(PathPart::Empty);
-        root.add_response(ResponseData {
+        let (mut root, root_default_id) = arena.add_route(PathPart::Empty);
+        root.add_response(Response {
+            id: root_default_id,
             status: Some(ResponseStatus::Default),
             type_id: Some(bool_type),
         });
-        let root_not_found_id = root.add_response(ResponseData {
+        let root_not_found_id = next_route_response_id(&root);
+        root.add_response(Response {
+            id: root_not_found_id,
             status: Some(ResponseStatus::Code(StatusCode::NOT_FOUND)),
             type_id: None,
         });
 
         let mut status_endpoint = root.add_endpoint(
-            PathPart::Segment("/status"),
+            PathPart::Segment("status"),
             EndpointFields {
                 method: Method::GET,
                 name: Some(status_name),
@@ -598,24 +573,30 @@ mod test {
                 request_body: None,
             },
         );
-        status_endpoint.add_response(ResponseData {
+        let status_ok_id = next_endpoint_response_id(&status_endpoint);
+        status_endpoint.add_response(Response {
+            id: status_ok_id,
             status: Some(ResponseStatus::Code(StatusCode::OK)),
             type_id: Some(string_type),
         });
-        status_endpoint.add_response(ResponseData {
+        let status_bad_id = next_endpoint_response_id(&status_endpoint);
+        status_endpoint.add_response(Response {
+            id: status_bad_id,
             status: Some(ResponseStatus::Code(StatusCode::BAD_REQUEST)),
             type_id: None,
         });
         let status_endpoint_id = status_endpoint.finish();
 
-        let mut users_route = root.add_route(PathPart::Segment("/users"));
-        users_route.add_response(ResponseData {
+        let mut users_route = root.add_route(PathPart::Segment("users"));
+        let users_default_id = next_route_response_id(&users_route);
+        users_route.add_response(Response {
+            id: users_default_id,
             status: Some(ResponseStatus::Default),
             type_id: None,
         });
 
         let mut list_endpoint = users_route.add_endpoint(
-            PathPart::Segment("/list"),
+            PathPart::Segment("list"),
             EndpointFields {
                 method: Method::GET,
                 name: Some(list_name),
@@ -626,14 +607,16 @@ mod test {
                 request_body: None,
             },
         );
-        list_endpoint.add_response(ResponseData {
+        let list_ok_id = next_endpoint_response_id(&list_endpoint);
+        list_endpoint.add_response(Response {
+            id: list_ok_id,
             status: Some(ResponseStatus::Code(StatusCode::OK)),
             type_id: Some(string_type),
         });
         let list_endpoint_id = list_endpoint.finish();
 
         let mut create_endpoint = users_route.add_endpoint(
-            PathPart::Segment("/create"),
+            PathPart::Segment("create"),
             EndpointFields {
                 method: Method::POST,
                 name: Some(create_name),
@@ -644,20 +627,24 @@ mod test {
                 request_body: Some(string_type),
             },
         );
-        create_endpoint.add_response(ResponseData {
+        let create_created_id = next_endpoint_response_id(&create_endpoint);
+        create_endpoint.add_response(Response {
+            id: create_created_id,
             status: Some(ResponseStatus::Code(StatusCode::CREATED)),
             type_id: Some(bool_type),
         });
         let create_endpoint_id = create_endpoint.finish();
 
-        let mut admin_route = users_route.add_route(PathPart::Segment("/admin"));
-        admin_route.add_response(ResponseData {
+        let mut admin_route = users_route.add_route(PathPart::Segment("admin"));
+        let admin_unauth_id = next_route_response_id(&admin_route);
+        admin_route.add_response(Response {
+            id: admin_unauth_id,
             status: Some(ResponseStatus::Code(StatusCode::UNAUTHORIZED)),
             type_id: None,
         });
 
         let mut admin_endpoint = admin_route.add_endpoint(
-            PathPart::Segment("/ban"),
+            PathPart::Segment("ban"),
             EndpointFields {
                 method: Method::DELETE,
                 name: Some(admin_name),
@@ -668,7 +655,9 @@ mod test {
                 request_body: None,
             },
         );
-        let admin_no_content_id = admin_endpoint.add_response(ResponseData {
+        let admin_no_content_id = next_endpoint_response_id(&admin_endpoint);
+        admin_endpoint.add_response(Response {
+            id: admin_no_content_id,
             status: Some(ResponseStatus::Code(StatusCode::NO_CONTENT)),
             type_id: None,
         });
@@ -678,13 +667,10 @@ mod test {
         let users_route_id = users_route.finish();
         let root_route_id = root.finish();
 
-        // Check root route
         let root_route = arena.get_route(root_route_id);
         assert_eq!(root_route.path.part(), PathPart::Empty);
-        let root_response_statuses: Vec<_> = root_route
-            .responses()
-            .map(|resp| resp.data.status)
-            .collect();
+        let root_response_statuses: Vec<_> =
+            root_route.responses().map(|resp| resp.status).collect();
         assert_eq!(
             root_response_statuses,
             vec![
@@ -693,21 +679,18 @@ mod test {
             ]
         );
 
-        // Check root endpoints
         let root_endpoints: Vec<_> = root_route.endpoints().map(|endpoint| endpoint.id).collect();
         assert_eq!(root_endpoints, vec![status_endpoint_id]);
-        // Check root sub-routes
         let root_routes: Vec<_> = root_route.routes().map(|route| route.id).collect();
         assert_eq!(root_routes, vec![users_route_id]);
 
-        // Status endpoint
         let status_endpoint = arena.get_endpoint(status_endpoint_id);
         assert_eq!(status_endpoint.fields.method, Method::GET);
         assert_eq!(status_endpoint.fields.name, Some(status_name));
-        assert_eq!(status_endpoint.path.segments().as_slice(), &["/status"]);
+        assert_eq!(status_endpoint.path.segments().as_slice(), &["status"]);
         let status_responses: Vec<_> = status_endpoint
             .responses()
-            .map(|resp| resp.data.status)
+            .map(|resp| resp.status)
             .collect();
         assert_eq!(
             status_responses,
@@ -717,102 +700,73 @@ mod test {
             ]
         );
 
-        // Users route
         let users_route = arena.get_route(users_route_id);
-        assert_eq!(users_route.path.segments().as_slice(), &["/users"]);
-        // Users route responses
-        let users_responses: Vec<_> = users_route
-            .responses()
-            .map(|resp| resp.data.status)
-            .collect();
+        assert_eq!(users_route.path.segments().as_slice(), &["users"]);
+        let users_responses: Vec<_> = users_route.responses().map(|resp| resp.status).collect();
         assert_eq!(users_responses, vec![Some(ResponseStatus::Default)]);
-
-        // Users route endpoints
         let users_endpoints: Vec<_> = users_route
             .endpoints()
             .map(|endpoint| endpoint.id)
             .collect();
         assert_eq!(users_endpoints, vec![list_endpoint_id, create_endpoint_id]);
-
-        // User route sub-routes
         let users_routes: Vec<_> = users_route.routes().map(|route| route.id).collect();
         assert_eq!(users_routes, vec![admin_route_id]);
 
-        // Users list endpoint
         let list_endpoint = arena.get_endpoint(list_endpoint_id);
-        assert_eq!(
-            list_endpoint.path.segments().as_slice(),
-            &["/users", "/list"]
-        );
-        let list_responses: Vec<_> = list_endpoint
-            .responses()
-            .map(|resp| resp.data.status)
-            .collect();
+        assert_eq!(list_endpoint.path.segments().as_slice(), &["users", "list"]);
+        let list_responses: Vec<_> = list_endpoint.responses().map(|resp| resp.status).collect();
         assert_eq!(
             list_responses,
             vec![Some(ResponseStatus::Code(StatusCode::OK))]
         );
 
-        // Users create endpoint
         let create_endpoint = arena.get_endpoint(create_endpoint_id);
         assert_eq!(
             create_endpoint.path.segments().as_slice(),
-            &["/users", "/create"]
+            &["users", "create"]
         );
         assert_eq!(create_endpoint.fields.request_body, Some(string_type));
         let create_responses: Vec<_> = create_endpoint
             .responses()
-            .map(|resp| resp.data.status)
+            .map(|resp| resp.status)
             .collect();
         assert_eq!(
             create_responses,
             vec![Some(ResponseStatus::Code(StatusCode::CREATED))]
         );
 
-        // Users admin route
         let admin_route = arena.get_route(admin_route_id);
-        assert_eq!(
-            admin_route.path.segments().as_slice(),
-            &["/users", "/admin"]
-        );
-        assert_eq!(admin_route.routes().count(), 0);
-        // Admin route responses
-        let admin_route_responses: Vec<_> = admin_route
-            .responses()
-            .map(|resp| resp.data.status)
-            .collect();
+        assert_eq!(admin_route.path.segments().as_slice(), &["users", "admin"]);
+        let admin_route_responses: Vec<_> =
+            admin_route.responses().map(|resp| resp.status).collect();
         assert_eq!(
             admin_route_responses,
             vec![Some(ResponseStatus::Code(StatusCode::UNAUTHORIZED))]
         );
-        // Admin route endpoints
         let admin_endpoints: Vec<_> = admin_route
             .endpoints()
             .map(|endpoint| endpoint.id)
             .collect();
         assert_eq!(admin_endpoints, vec![admin_endpoint_id]);
 
-        // Admin ban endpoint
         let admin_endpoint = arena.get_endpoint(admin_endpoint_id);
         assert_eq!(
             admin_endpoint.path.segments().as_slice(),
-            &["/users", "/admin", "/ban"]
+            &["users", "admin", "ban"]
         );
         assert_eq!(admin_endpoint.fields.path, Some(i64_type));
 
-        // Root route 404 response
         let root_not_found = arena.get_response(root_not_found_id);
         assert_eq!(root_not_found.id, root_not_found_id);
         assert_eq!(
-            root_not_found.data.status,
+            root_not_found.status,
             Some(ResponseStatus::Code(StatusCode::NOT_FOUND))
         );
 
-        // Admin ban 404 response
         let admin_no_content = arena.get_response(admin_no_content_id);
         assert_eq!(admin_no_content.id, admin_no_content_id);
         assert_eq!(
-            admin_no_content.data.status,
+            admin_no_content.status,
             Some(ResponseStatus::Code(StatusCode::NO_CONTENT))
         );
     }
