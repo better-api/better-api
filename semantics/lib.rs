@@ -1,20 +1,9 @@
-mod source_map;
 mod string;
 mod text;
 
-pub mod endpoint;
 pub mod oracle;
 pub mod path;
-pub mod typ;
-pub mod value;
+pub mod spec;
 
 /// Re-export for simpler use case.
 pub use oracle::Oracle;
-
-/// Semantic element.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Element {
-    Value(value::ValueId),
-    Type(typ::TypeId),
-    TypeDefinition(string::StringId),
-}

@@ -96,6 +96,20 @@ impl<'a> Oracle<'a> {
     ///    Lowers `example` blocks, inserts them into the value arena,
     ///    and verifies that each example conforms to its declared type.
     fn analyze(&mut self, root: &ast::Root) {
+        // TODO:
+        // - lower metadata -> validate everything and lower to ir if possible, otherwise emit
+        //   report
+        // - lower type definitions -> validate type definition, lower to ir if possible, emit
+        //   errors. symbol table needs to be resilient for analysis of everything.
+        // - one pass for validating types, now that we have symbol table. we check type is correct
+        //   based on the context (in response, in request, ...). we check default values are
+        //   correct type
+        //
+        // other notes that we might need:
+        // - string mapping -> one pass to do node -> string
+        // - normalize object/struct types -> fields in correct order for easier comparison. but
+        //   this might be premature optimization, we can just suck up an allocation when comparing
+        //   stuff
         self.analyze_metadata(root);
 
         self.lower_type_definitions(root);
