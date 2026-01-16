@@ -251,8 +251,10 @@ pub struct Response<'a> {
     pub body: Option<Reference<'a>>,
     pub headers: Option<Reference<'a>>,
 
-    // TODO: Content type should be array of mime types, or single mime type.
-    // See comment in semantics/endpoint.rs, where this is discussed.
+    /// Possible Content-Type header values.
+    ///
+    /// At this point, this is just a value. [Oracle](crate::Oracle) is responsible for
+    /// validating that this is a content type string or array of strings.
     pub content_type: Option<value::ValueId>,
 }
 

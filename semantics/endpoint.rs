@@ -83,11 +83,10 @@ pub struct EndpointFields {
     /// Headers type.
     pub headers: Option<TypeId>,
 
-    // TODO: Accept should be an array of mime types.
-    // Where exactly this validation happens (during construction or late) is yet to be decided.
-    // It is also yet to be decided how to validate mime type is correct. This probably boils
-    // down to using a library, but I haven't looked into it yet.
-    /// Request `Content-Type` MIME types that are allowed.
+    /// MIME types the endpoint accepts for the request body.
+    ///
+    /// At this point, this is just a value. [Oracle](crate::Oracle) is responsible for
+    /// validating that this is a content type string or array of strings.
     pub accept: Option<ValueId>,
     /// Request body type.
     pub request_body: Option<TypeId>,
