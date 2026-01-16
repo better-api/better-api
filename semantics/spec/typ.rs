@@ -15,7 +15,7 @@
 //!
 //! To retrieve a type, pass a [`TypeId`] to [`TypeArena::get`]. This returns a [`Type`].
 
-use crate::spec::value;
+use crate::spec::value::{self, ValueId};
 use crate::string::StringId;
 
 /// Representation of a type.
@@ -92,9 +92,14 @@ impl<'a> Type<'a> {
                 arena,
                 id: TypeId(id.0 + 1),
             }),
-            Slot::Enum { typ, values } => Type::Enum(Enum {
+            Slot::Enum { typ, end } => Type::Enum(Enum {
+                id,
                 typ: Reference { arena, id: *typ },
-                values: *values,
+                members: EnumMemberIterator {
+                    arena,
+                    current: TypeId(id.0 + 1),
+                    end: *end,
+                },
             }),
             Slot::Response {
                 body,
@@ -125,7 +130,9 @@ impl<'a> Type<'a> {
                     id,
                 },
             }),
+
             Slot::TypeField { .. } => unreachable!("invalid conversion of Slot::TypeField to Type"),
+            Slot::EnumMember(_) => unreachable!("invalid conversion of Slot::EnumMember to Type"),
         }
     }
 }
@@ -154,6 +161,7 @@ pub struct TypeField<'a> {
     pub id: TypeFieldId,
     pub name: StringId,
     pub default: Option<value::ValueId>,
+    pub docs: Option<StringId>,
     pub typ: Type<'a>,
 }
 
@@ -237,12 +245,53 @@ impl<'a> Union<'a> {
 
 /// Semantic representation of an enum.
 ///
-/// Optional `typ` describes the type of enum values, while `values` points to
-/// an array in the [`value::ValueArena`].
+/// Field `typ` describes the type of enum values.
 #[derive(Debug, Clone)]
 pub struct Enum<'a> {
+    // Id of the union
+    pub id: TypeId,
+
+    /// Type of the enum members
     pub typ: Reference<'a>,
-    pub values: value::ValueId,
+
+    members: EnumMemberIterator<'a>,
+}
+
+impl<'a> Enum<'a> {
+    pub fn members(&self) -> EnumMemberIterator<'a> {
+        self.members.clone()
+    }
+}
+
+/// A single valid value of an enum.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EnumMember {
+    pub value: ValueId,
+    pub docs: Option<StringId>,
+}
+
+/// Iterator over enum members
+#[derive(derive_more::Debug, Clone)]
+pub struct EnumMemberIterator<'a> {
+    #[debug(skip)]
+    arena: &'a TypeArena,
+    current: TypeId,
+    end: TypeId,
+}
+
+impl<'a> Iterator for EnumMemberIterator<'a> {
+    type Item = EnumMember;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current.0 >= self.end.0 {
+            return None;
+        }
+
+        match &self.arena.data[self.current.0 as usize] {
+            Slot::EnumMember(member) => Some(*member),
+            typ => unreachable!("invalid enum member slot in arena: {typ:?}"),
+        }
+    }
 }
 
 /// Semantic information about a response type.
@@ -256,6 +305,16 @@ pub struct Response<'a> {
 
     /// Possible Content-Type header values.
     pub content_type: Option<value::MimeTypesId>,
+}
+
+/// Type definition.
+///
+/// Used to store doc comment for type id that can be set
+/// during type definition
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TypeDef {
+    pub docs: Option<StringId>,
+    pub type_id: TypeId,
 }
 
 /// Id of a type stored in the [`TypeArena`].
@@ -334,9 +393,14 @@ enum Slot {
         end: TypeId,
     },
     Enum {
+        /// Id of the enum type (string, i32, ...)
         typ: TypeId,
-        values: value::ValueId,
+
+        // Id after the last enum member.
+        // Used for skipping the whole Enum during iteration.
+        end: TypeId,
     },
+    EnumMember(EnumMember),
     Response {
         body: TypeId,
         headers: Option<TypeId>,
@@ -359,6 +423,7 @@ enum Slot {
     TypeField {
         name: StringId,
         default: Option<value::ValueId>,
+        docs: Option<StringId>,
     },
 }
 
@@ -418,10 +483,15 @@ impl<'p> FieldBuilder<'p> {
         name: StringId,
         typ: PrimitiveType,
         default: Option<value::ValueId>,
+        docs: Option<StringId>,
     ) -> TypeFieldId {
         let slot_idx = self.data.len() as u32;
 
-        self.data.push(Slot::TypeField { name, default });
+        self.data.push(Slot::TypeField {
+            name,
+            default,
+            docs,
+        });
         self.data.push(typ.into());
 
         TypeFieldId {
@@ -439,10 +509,15 @@ impl<'p> FieldBuilder<'p> {
         &'a mut self,
         name: StringId,
         default: Option<value::ValueId>,
+        docs: Option<StringId>,
     ) -> (OptionArrayBuilder<'a>, TypeFieldId) {
         let slot_idx = self.data.len() as u32;
 
-        self.data.push(Slot::TypeField { name, default });
+        self.data.push(Slot::TypeField {
+            name,
+            default,
+            docs,
+        });
 
         let field_id = TypeFieldId {
             container_id: self.start,
@@ -462,10 +537,15 @@ impl<'p> FieldBuilder<'p> {
         &'a mut self,
         name: StringId,
         default: Option<value::ValueId>,
+        docs: Option<StringId>,
     ) -> (OptionArrayBuilder<'a>, TypeFieldId) {
         let slot_idx = self.data.len() as u32;
 
-        self.data.push(Slot::TypeField { name, default });
+        self.data.push(Slot::TypeField {
+            name,
+            default,
+            docs,
+        });
 
         let field_id = TypeFieldId {
             container_id: self.start,
@@ -620,6 +700,70 @@ impl<'p> Drop for OptionArrayBuilder<'p> {
     }
 }
 
+/// Helper type for adding enums to arena.
+///
+/// Constructed via TODO: define constructor funcs
+/// Call [`finish`](EnumBuilder::finish) once all members are added.
+///
+/// Dropping the builder without finishing rolls back any changes.
+pub struct EnumBuilder<'p> {
+    data: &'p mut Vec<Slot>,
+
+    /// Index in the arena that contains Slot::Enum
+    start: TypeId,
+
+    /// Was finished called, used by drop implementation.
+    finished: bool,
+}
+
+impl<'p> EnumBuilder<'p> {
+    fn new(data: &'p mut Vec<Slot>, typ: TypeId) -> Self {
+        let idx = data.len();
+        data.push(Slot::Enum {
+            typ,
+            end: TypeId(0),
+        });
+
+        Self {
+            data,
+            start: TypeId(idx as u32),
+            finished: false,
+        }
+    }
+
+    /// Add new member to the enum.
+    pub fn add_member(&mut self, member: EnumMember) {
+        self.data.push(Slot::EnumMember(member));
+    }
+
+    /// Finish building the enum
+    pub fn finish(mut self) -> TypeId {
+        self.finished = true;
+
+        let idx = TypeId(self.data.len() as u32);
+
+        let start = self.start.0 as usize;
+        let head = &mut self.data[start];
+        match head {
+            Slot::Enum { end, .. } => *end = idx,
+            _ => unreachable!("invalid EnumBuilder start"),
+        }
+
+        self.start
+    }
+}
+
+impl<'p> Drop for EnumBuilder<'p> {
+    fn drop(&mut self) {
+        if self.finished {
+            return;
+        }
+
+        let len = self.start.0 as usize;
+        self.data.truncate(len);
+    }
+}
+
 /// Arena that holds semantic types.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TypeArena {
@@ -643,8 +787,12 @@ impl TypeArena {
         let field_slot = &self.data[id.slot_idx as usize];
         let typ_slot = &self.data[id.slot_idx as usize + 1];
 
-        let (name, default) = match &field_slot {
-            Slot::TypeField { name, default } => (*name, *default),
+        let (name, default, docs) = match &field_slot {
+            Slot::TypeField {
+                name,
+                default,
+                docs,
+            } => (*name, *default, *docs),
             val => unreachable!("invalid type field in arena for id {id:?}: {val:?}"),
         };
 
@@ -654,6 +802,7 @@ impl TypeArena {
             id,
             name,
             default,
+            docs,
             typ,
         }
     }
@@ -664,19 +813,6 @@ impl TypeArena {
     pub fn add_primitive(&mut self, typ: PrimitiveType) -> TypeId {
         let idx = self.data.len();
         self.data.push(typ.into());
-        TypeId(idx as u32)
-    }
-
-    /// Add an enum to the arena.
-    ///
-    /// - `typ` is the type of the values in the enum.
-    /// - `values` should be a [`ValueId`](value::ValueId) pointing to array of possible values for
-    ///   this arena.
-    ///
-    /// Returns the [`TypeId`] assigned to the enum.
-    pub fn add_enum(&mut self, typ: TypeId, values: value::ValueId) -> TypeId {
-        let idx = self.data.len();
-        self.data.push(Slot::Enum { typ, values });
         TypeId(idx as u32)
     }
 
@@ -701,6 +837,13 @@ impl TypeArena {
             content_type,
         });
         TypeId(idx as u32)
+    }
+
+    /// Start building an num
+    ///
+    /// Parameter `typ` is the type of the values in the enum.
+    pub fn start_enum<'a>(&'a mut self, typ: TypeId) -> EnumBuilder<'a> {
+        EnumBuilder::new(&mut self.data, typ)
     }
 
     /// Start building a record type.

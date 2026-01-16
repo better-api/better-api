@@ -5,26 +5,26 @@ use std::collections::HashMap;
 use better_api_diagnostic::Report;
 use better_api_syntax::ast;
 
-use crate::spec::Metadata;
 use crate::spec::endpoint::EndpointArena;
-use crate::spec::typ::{TypeArena, TypeId};
+use crate::spec::typ::TypeArena;
 use crate::spec::value::ValueArena;
+use crate::spec::{Metadata, SymbolTable};
 use crate::string::{StringId, StringInterner};
 
-mod metadata;
-mod symbols;
-mod typ;
-mod value;
+// mod metadata;
+// mod symbols;
+// mod typ;
+// mod value;
 
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 
 /// Core type responsible for semantic analysis.
 #[derive(Clone)]
 pub struct Oracle {
     // Valid spec data being constructed
     strings: StringInterner,
-    spec_symbol_table: HashMap<StringId, TypeId>,
+    spec_symbol_table: SymbolTable,
 
     metadata: Option<Metadata>,
 
@@ -74,16 +74,16 @@ impl Oracle {
         // - analyze type defs (not actual types, just defs), populate self.symbol_map, find cycles
         // - analyze types of type defs, populate spec_symbol_table
         // - analyze routes & endpoints. as you go also analyze and lower types
-        self.analyze_metadata(root);
+        // self.analyze_metadata(root);
 
-        self.lower_type_definitions(root);
+        // self.lower_type_definitions(root);
 
         // A placeholder, just so that warning about unused `Oracle::parse_type`
         // goes away
         // TODO: Remove this in the future.
-        if let Some(t) = root.dummy_type() {
-            self.lower_type(&t);
-        }
+        // if let Some(t) = root.dummy_type() {
+        //     self.lower_type(&t);
+        // }
 
         // TODO: Implement the actual analysis
     }

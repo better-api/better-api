@@ -8,6 +8,8 @@ pub mod endpoint;
 pub mod typ;
 pub mod value;
 
+pub type SymbolTable = HashMap<StringId, typ::TypeDef>;
+
 /// Valid semantic specification
 ///
 /// Usually constructed by [`Oracle`](crate::Oracle).
@@ -15,7 +17,7 @@ pub mod value;
 pub struct Spec {
     #[debug(skip)]
     pub strings: StringInterner,
-    pub symbol_table: HashMap<StringId, typ::TypeId>,
+    pub symbol_table: SymbolTable,
 
     pub metadata: Metadata,
 
@@ -31,6 +33,7 @@ pub struct Metadata {
 
     pub version: StringId,
     pub name: StringId,
+    pub description: Option<StringId>,
 
     pub servers: Vec<Server>,
 }
@@ -40,4 +43,6 @@ pub struct Metadata {
 pub struct Server {
     pub name: StringId,
     pub url: StringId,
+
+    pub docs: Option<StringId>,
 }

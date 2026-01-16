@@ -29,6 +29,8 @@ pub struct Route<'a> {
     pub id: RouteId,
     /// Route path at this level of the hierarchy.
     pub path: Path<'a>,
+    /// Doc comments
+    pub docs: Option<StringId>,
 
     /// Arena that holds the route, used to iterate through responses, endpoints and routes
     #[debug(skip)]
@@ -87,6 +89,8 @@ pub struct EndpointFields {
     pub accept: Option<value::MimeTypesId>,
     /// Request body type.
     pub request_body: Option<TypeId>,
+    /// Additional documentation for request body.
+    pub request_body_docs: Option<StringId>,
 }
 
 /// Endpoint representation returned by the [`EndpointArena`].
@@ -96,6 +100,8 @@ pub struct Endpoint<'a> {
     pub id: EndpointId,
     /// Path of the endpoint.
     pub path: Path<'a>,
+    /// Doc comments
+    pub docs: Option<StringId>,
     /// Endpoint fields.
     pub fields: &'a EndpointFields,
 
@@ -218,6 +224,8 @@ pub struct ResponseData {
     pub status: ResponseStatus,
     /// Response body type.
     pub type_id: TypeId,
+    /// Doc comments
+    pub docs: Option<StringId>,
 }
 
 /// Response definition
@@ -264,13 +272,19 @@ pub struct EndpointBuilder<'p> {
 }
 
 impl<'p> EndpointBuilder<'p> {
-    fn new(parent: Parent<'p>, path: PathPart, fields: EndpointFields) -> Self {
+    fn new(
+        parent: Parent<'p>,
+        path: PathPart,
+        fields: EndpointFields,
+        docs: Option<StringId>,
+    ) -> Self {
         let path_id = parent.paths.insert(parent.path_id, path);
 
         let idx = parent.data.len();
         parent.data.push(Slot::Endpoint {
             path: path_id,
             fields,
+            docs,
             end: 0,
         });
 
@@ -333,12 +347,13 @@ pub struct RouteBuilder<'p> {
 }
 
 impl<'p> RouteBuilder<'p> {
-    fn new(parent: Parent<'p>, path: PathPart) -> Self {
+    fn new(parent: Parent<'p>, path: PathPart, docs: Option<StringId>) -> Self {
         let path_id = parent.paths.insert(parent.path_id, path);
 
         let idx = parent.data.len();
         parent.data.push(Slot::Route {
             path: path_id,
+            docs,
             end: 0,
         });
 
@@ -371,13 +386,14 @@ impl<'p> RouteBuilder<'p> {
         &'a mut self,
         path: PathPart,
         fields: EndpointFields,
+        docs: Option<StringId>,
     ) -> EndpointBuilder<'a> {
-        EndpointBuilder::new(self.as_parent(), path, fields)
+        EndpointBuilder::new(self.as_parent(), path, fields, docs)
     }
 
     /// Starts building a nested route group under this route.
-    pub fn add_route<'a>(&'a mut self, path: PathPart) -> RouteBuilder<'a> {
-        RouteBuilder::new(self.as_parent(), path)
+    pub fn add_route<'a>(&'a mut self, path: PathPart, docs: Option<StringId>) -> RouteBuilder<'a> {
+        RouteBuilder::new(self.as_parent(), path, docs)
     }
 
     /// Finalize the route and return its [`RouteId`].
@@ -411,6 +427,7 @@ impl<'p> Drop for RouteBuilder<'p> {
 enum Slot {
     Route {
         path: PathId,
+        docs: Option<StringId>,
 
         /// Id after the last child of the route.
         /// Used for knowing when to stop iteration
@@ -418,6 +435,7 @@ enum Slot {
     },
     Endpoint {
         path: PathId,
+        docs: Option<StringId>,
         fields: EndpointFields,
 
         /// Id after the last response of the endpoint.
@@ -454,19 +472,25 @@ impl EndpointArena {
         &'a mut self,
         path: PathPart,
         fields: EndpointFields,
+        docs: Option<StringId>,
     ) -> EndpointBuilder<'a> {
-        EndpointBuilder::new(self.parent(), path, fields)
+        EndpointBuilder::new(self.parent(), path, fields, docs)
     }
 
     /// Start building a route at the root.
-    pub fn add_route<'a>(&'a mut self, path: PathPart) -> RouteBuilder<'a> {
-        RouteBuilder::new(self.parent(), path)
+    pub fn add_route<'a>(&'a mut self, path: PathPart, docs: Option<StringId>) -> RouteBuilder<'a> {
+        RouteBuilder::new(self.parent(), path, docs)
     }
 
     /// Get [`Endpoint`] by id.
     pub fn get_endpoint<'a>(&'a self, id: EndpointId) -> Endpoint<'a> {
         match &self.data[id.0 as usize] {
-            Slot::Endpoint { path, fields, end } => {
+            Slot::Endpoint {
+                path,
+                fields,
+                docs,
+                end,
+            } => {
                 let path = self.paths.get(*path);
 
                 Endpoint {
@@ -474,6 +498,7 @@ impl EndpointArena {
                     arena: self,
                     path,
                     fields,
+                    docs: *docs,
                     end: *end,
                 }
             }
@@ -484,12 +509,13 @@ impl EndpointArena {
     /// Get [`Route`] by id.
     pub fn get_route<'a>(&'a self, id: RouteId) -> Route<'a> {
         match &self.data[id.0 as usize] {
-            Slot::Route { path, end } => {
+            Slot::Route { path, docs, end } => {
                 let path = self.paths.get(*path);
 
                 Route {
                     id,
                     path,
+                    docs: *docs,
                     arena: self,
                     end: *end,
                 }
