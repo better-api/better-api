@@ -11,7 +11,9 @@ pub mod value;
 /// Valid semantic specification
 ///
 /// Usually constructed by [`Oracle`](crate::Oracle).
+#[derive(derive_more::Debug, Clone)]
 pub struct Spec {
+    #[debug(skip)]
     pub strings: StringInterner,
     pub symbol_table: HashMap<StringId, typ::TypeId>,
 
@@ -23,6 +25,7 @@ pub struct Spec {
 }
 
 /// Metadata of Better API spec
+#[derive(Debug, Clone)]
 pub struct Metadata {
     pub better_api_version: StringId,
 
@@ -33,6 +36,7 @@ pub struct Metadata {
 }
 
 /// Server that is part of spec metadata
+#[derive(Debug, Clone)]
 pub struct Server {
     pub name: StringId,
     pub url: StringId,

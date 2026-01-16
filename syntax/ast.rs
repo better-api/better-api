@@ -2,7 +2,7 @@ use crate::Kind::*;
 use crate::{Kind, Language, SyntaxNode, SyntaxToken};
 
 use rowan::TextRange;
-pub use rowan::ast::AstNode;
+pub use rowan::ast::{AstNode, AstPtr};
 
 // Helper macros to generator AST nodes as structs.
 macro_rules! ast_node {

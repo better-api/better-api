@@ -5,10 +5,11 @@ use std::collections::HashMap;
 use better_api_diagnostic::Report;
 use better_api_syntax::ast;
 
-use crate::source_map::SourceMap;
+use crate::spec::Metadata;
+use crate::spec::endpoint::EndpointArena;
+use crate::spec::typ::{TypeArena, TypeId};
+use crate::spec::value::ValueArena;
 use crate::string::{StringId, StringInterner};
-use crate::typ::{TypeArena, TypeId};
-use crate::value::ValueArena;
 
 mod metadata;
 mod symbols;
@@ -20,31 +21,40 @@ mod tests;
 
 /// Core type responsible for semantic analysis.
 #[derive(Clone)]
-pub struct Oracle<'a> {
-    // Containers for primary oracle data
+pub struct Oracle {
+    // Valid spec data being constructed
     strings: StringInterner,
+    spec_symbol_table: HashMap<StringId, TypeId>,
+
+    metadata: Option<Metadata>,
+
     values: ValueArena,
     types: TypeArena,
-    symbol_table: HashMap<StringId, TypeId>,
+    endpoints: EndpointArena,
 
-    source_map: SourceMap<'a>,
+    // Mappings used by oracle during validation.
+    // This allows for partial & invalid spec to be analyzed fully, without
+    // being lowered into valid data defined above.
+    symbol_map: HashMap<StringId, ast::AstPtr<ast::Type>>,
 
     // Reports generated during semantic analysis
     reports: Vec<Report>,
 }
 
-impl<'a> Oracle<'a> {
+impl Oracle {
     /// Create a new oracle.
     ///
     /// Runs semantic analysis on the given AST and creates an oracle
     /// that can be queried for semantics info.
-    pub fn new(root: &'a ast::Root) -> Self {
+    pub fn new(root: &ast::Root) -> Self {
         let mut oracle = Self {
             strings: Default::default(),
+            spec_symbol_table: Default::default(),
+            metadata: None,
             values: Default::default(),
             types: Default::default(),
-            symbol_table: Default::default(),
-            source_map: SourceMap::new(root),
+            endpoints: Default::default(),
+            symbol_map: Default::default(),
             reports: Default::default(),
         };
 
@@ -58,58 +68,12 @@ impl<'a> Oracle<'a> {
     }
 
     /// Analyzes the complete syntax tree and populates the analyzer arenas.
-    ///
-    /// The analysis is performed in strictly sequential phases to ensure that later
-    /// phases can rely on data collected by earlier ones (e.g., all named types are
-    /// available before full type validation).
-    ///
-    /// Phases:
-    /// 1. **Metadata analysis**  
-    ///    Validates global metadata nodes (`name`, `servers`, `security`, etc.).
-    ///    Checks that each metadata key appears the correct number of times and that
-    ///    its value has the expected type/shape.
-    ///
-    /// 2. **Named type definition lowering**  
-    ///    Lowers all top-level type definitions and inserts them into the type arena
-    ///    and source map. Detects and reports cyclic type definitions.  
-    ///    *Note:* Only basic syntactic validity and name-uniqueness are checked here.
-    ///    Full semantic validation is deferred to phase 4 (see below).
-    ///
-    /// 3. **Route & endpoint lowering**  
-    ///    Lowers routes and endpoints, and lowers
-    ///    any inline types they contain. Also performs:
-    ///    - Route/path uniqueness checks
-    ///    - Path-parameter vs. parameters-record consistency
-    ///
-    /// 4. **Complete type validation**  
-    ///    Now that **all** types (named + inline) are present in the arena, performs
-    ///    exhaustive semantic validation that requires the full type graph.  
-    ///    Examples:
-    ///    - All variants of a `union` must be record types
-    ///    - Field types exist and are used correctly
-    ///    - Enum variants, default values, constraints, etc.
-    ///
-    ///    Keeping this validation in a separate pass avoids duplicating logic between
-    ///    named types and inline types used in endpoints.
-    ///
-    /// 5. **Example lowering & validation**  
-    ///    Lowers `example` blocks, inserts them into the value arena,
-    ///    and verifies that each example conforms to its declared type.
     fn analyze(&mut self, root: &ast::Root) {
-        // TODO:
-        // - lower metadata -> validate everything and lower to ir if possible, otherwise emit
-        //   report
-        // - lower type definitions -> validate type definition, lower to ir if possible, emit
-        //   errors. symbol table needs to be resilient for analysis of everything.
-        // - one pass for validating types, now that we have symbol table. we check type is correct
-        //   based on the context (in response, in request, ...). we check default values are
-        //   correct type
-        //
-        // other notes that we might need:
-        // - string mapping -> one pass to do node -> string
-        // - normalize object/struct types -> fields in correct order for easier comparison. but
-        //   this might be premature optimization, we can just suck up an allocation when comparing
-        //   stuff
+        // TODO: Steps:
+        // - analyze metadata and generate self.meatada
+        // - analyze type defs (not actual types, just defs), populate self.symbol_map, find cycles
+        // - analyze types of type defs, populate spec_symbol_table
+        // - analyze routes & endpoints. as you go also analyze and lower types
         self.analyze_metadata(root);
 
         self.lower_type_definitions(root);
@@ -127,13 +91,15 @@ impl<'a> Oracle<'a> {
     #[cfg(test)]
     /// Create a new [`Oracle`] without calling analyze on it.
     /// Only used for testing.
-    fn new_raw(root: &'a ast::Root) -> Self {
+    fn new_raw(root: &ast::Root) -> Self {
         Self {
             strings: Default::default(),
+            spec_symbol_table: Default::default(),
+            metadata: None,
             values: Default::default(),
             types: Default::default(),
-            symbol_table: Default::default(),
-            source_map: SourceMap::new(root),
+            endpoints: Default::default(),
+            symbol_map: Default::default(),
             reports: Default::default(),
         }
     }
