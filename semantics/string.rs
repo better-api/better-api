@@ -11,13 +11,18 @@ impl StringInterner {
         Default::default()
     }
 
-    /// Insert a string
+    /// Interns a given string
     pub fn get_or_intern(&mut self, string: impl AsRef<str>) -> StringId {
         let id = self.0.get_or_intern(string);
         StringId(id)
     }
 
-    /// Get a string
+    /// Return symbol for given string, if any
+    pub fn get(&self, string: impl AsRef<str>) -> Option<StringId> {
+        self.0.get(string).map(StringId)
+    }
+
+    /// Returns the string for given symbol
     pub fn resolve(&self, id: StringId) -> &str {
         self.0
             .resolve(id.0)

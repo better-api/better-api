@@ -1,15 +1,15 @@
 use better_api_diagnostic::{Label, Report, Severity};
+use better_api_syntax::ast::{self, AstNode};
 use smallvec::SmallVec;
 
 use crate::Oracle;
 use crate::string::StringId;
-use crate::typ::{Type, TypeId};
 
 type ResolvePath = SmallVec<[StringId; 10]>;
 
 /// Result of symbol resolution
 #[derive(Debug, Clone)]
-pub(crate) enum ResolvedSymbol<'a> {
+pub(crate) enum ResolvedSymbol {
     /// Symbol with name inside this type is not in the symbols table.
     ///
     /// For example, when resolving symbol `Foo` in:
@@ -27,12 +27,12 @@ pub(crate) enum ResolvedSymbol<'a> {
     Cycle,
 
     /// Symbol successfully resolved into given type.
-    Type { id: TypeId, typ: Type<'a> },
+    Type(ast::Type),
 }
 
 impl<'a> Oracle<'a> {
     /// Resolve a symbol.
-    pub(crate) fn resolve<'o>(&'o self, mut name: StringId) -> ResolvedSymbol<'o> {
+    pub(crate) fn resolve(&self, mut name: StringId) -> ResolvedSymbol {
         let mut path = ResolvePath::new();
 
         loop {
@@ -41,13 +41,29 @@ impl<'a> Oracle<'a> {
             }
             path.push(name);
 
-            let Some(&next_type) = self.symbol_table.get(&name) else {
+            let Some(next_type_def) = self
+                .symbol_map
+                .get(&name)
+                .map(|ptr| ptr.to_node(self.root.syntax()))
+            else {
                 return ResolvedSymbol::Missing(name);
             };
 
-            match self.types.get(next_type) {
-                Type::Reference(reference) => name = reference,
-                typ => return ResolvedSymbol::Type { id: next_type, typ },
+            let Some(next_type) = next_type_def.typ() else {
+                return ResolvedSymbol::Missing(name);
+            };
+
+            match next_type {
+                ast::Type::TypeRef(reference) => {
+                    let next_name = reference.name();
+                    let next_id = self.strings.get(next_name.text());
+                    if let Some(next) = next_id {
+                        name = next
+                    } else {
+                        return ResolvedSymbol::Missing(name);
+                    }
+                }
+                typ => return ResolvedSymbol::Type(typ),
             }
         }
     }
@@ -56,13 +72,18 @@ impl<'a> Oracle<'a> {
     pub(crate) fn report_symbol_cycles(&mut self) {
         let mut path = ResolvePath::new();
         let mut reports = vec![];
-        for (name, type_id) in self.symbol_table.iter() {
+        for (name, typ_ptr) in self.symbol_map.iter() {
             path.clear();
             path.push(*name);
 
             reports.clear();
 
-            self.report_symbol_cycles_aux(*type_id, &mut path, &mut reports);
+            let typ_def = typ_ptr.to_node(self.root.syntax());
+            let Some(typ) = typ_def.typ() else {
+                continue;
+            };
+
+            self.report_symbol_cycles_aux(&typ, &mut path, &mut reports);
             self.reports.extend_from_slice(&reports);
         }
     }
@@ -73,27 +94,29 @@ impl<'a> Oracle<'a> {
     /// If a cycle is found, it is reported.
     fn report_symbol_cycles_aux(
         &self,
-        type_id: TypeId,
+        typ: &ast::Type,
         path: &mut ResolvePath,
         reports: &mut Vec<Report>,
     ) {
-        match self.types.get(type_id) {
+        match typ {
             // Primitive types are always valid.
-            Type::I32
-            | Type::I64
-            | Type::U32
-            | Type::U64
-            | Type::F32
-            | Type::F64
-            | Type::Date
-            | Type::Timestamp
-            | Type::Bool
-            | Type::String
-            | Type::File => (),
+            ast::Type::TypeI32(_)
+            | ast::Type::TypeI64(_)
+            | ast::Type::TypeU32(_)
+            | ast::Type::TypeU64(_)
+            | ast::Type::TypeF32(_)
+            | ast::Type::TypeF64(_)
+            | ast::Type::TypeDate(_)
+            | ast::Type::TypeTimestamp(_)
+            | ast::Type::TypeBool(_)
+            | ast::Type::TypeString(_)
+            | ast::Type::TypeFile(_) => (),
 
             // Enum can't have cycles. Type is restricted to non-cyclable types,
-            // and everything else is a value.
-            Type::Enum(_) => (),
+            // and members are values. Checking type to be correct (implies non-cyclable)
+            // already reports an error. Reporting both "invalid enum type" and "enum has cycles" error
+            // would be weird.
+            ast::Type::Enum(_) => (),
 
             // Option and array are terminating types. You can always end recursion with empty
             // array `[]` or empty option `null`. For instance
@@ -103,30 +126,43 @@ impl<'a> Oracle<'a> {
             // is valid, because `[]` is valid value of type Foo (is an array and all children are
             // of type Foo because there are no children).
             // Also more interesting values are valid Foo, but useless, ie `[[[], []], []]`
-            Type::Option(_) | Type::Array(_) => (),
+            ast::Type::TypeOption(_) | ast::Type::TypeArray(_) => (),
 
-            Type::Record(record) => {
+            ast::Type::Record(record) => {
                 for field in record.fields() {
-                    self.report_symbol_cycles_aux(field.id.type_id(), path, reports);
+                    if let Some(field_type) = field.typ() {
+                        self.report_symbol_cycles_aux(&field_type, path, reports);
+                    }
                 }
             }
-            Type::Union(union) => {
+            ast::Type::Union(union) => {
                 for field in union.fields() {
-                    self.report_symbol_cycles_aux(field.id.type_id(), path, reports);
+                    if let Some(field_type) = field.typ() {
+                        self.report_symbol_cycles_aux(&field_type, path, reports);
+                    }
                 }
             }
 
-            Type::Response(resp) => {
-                if let Some(headers) = resp.headers {
-                    self.report_symbol_cycles_aux(headers.id, path, reports);
+            ast::Type::TypeResponse(resp) => {
+                if let Some(headers) = resp.headers()
+                    && let Some(typ) = headers.typ()
+                {
+                    self.report_symbol_cycles_aux(&typ, path, reports);
                 }
 
-                if let Some(body) = resp.body {
-                    self.report_symbol_cycles_aux(body.id, path, reports);
+                if let Some(body) = resp.body()
+                    && let Some(typ) = body.typ()
+                {
+                    self.report_symbol_cycles_aux(&typ, path, reports);
                 }
             }
 
-            Type::Reference(name) => {
+            ast::Type::TypeRef(reference) => {
+                let next_name = reference.name();
+                let Some(name) = self.strings.get(next_name.text()) else {
+                    return;
+                };
+
                 // References back to the first element in path, so we want to report it.
                 if path.first() == Some(&name) {
                     let report = self.construct_cycle_report(path);
@@ -141,9 +177,14 @@ impl<'a> Oracle<'a> {
                 }
 
                 // Resolve the symbol and call recursively.
-                if let Some(type_id) = self.symbol_table.get(&name) {
+                if let Some(typ_ptr) = self.symbol_map.get(&name) {
+                    let typ_def = typ_ptr.to_node(self.root.syntax());
+                    let Some(typ) = typ_def.typ() else {
+                        return;
+                    };
+
                     path.push(name);
-                    self.report_symbol_cycles_aux(*type_id, path, reports);
+                    self.report_symbol_cycles_aux(&typ, path, reports);
                     path.pop();
                 }
             }
@@ -154,7 +195,7 @@ impl<'a> Oracle<'a> {
     fn construct_cycle_report(&self, path: &ResolvePath) -> Report {
         let names =
             path.iter()
-                .map(|id| self.strings.get(*id))
+                .map(|id| self.strings.resolve(*id))
                 .fold(String::new(), |mut acc, elt| {
                     if !acc.is_empty() {
                         acc.push_str(", ");
@@ -172,10 +213,10 @@ impl<'a> Oracle<'a> {
             .iter()
             .enumerate()
             .map(|(idx, id)| {
-                let def = self
-                    .source_map
-                    .get_type_definition(*id)
+                let def_ptr = self.symbol_map.get(id)
                     .expect("symbol in cycle path should have been registered in source_map during type definition parsing");
+                let def = def_ptr.to_node(self.root.syntax());
+
                 let range = def
                     .name()
                     .expect("type definition should have a name - only named types are stored in source_map")
@@ -184,7 +225,7 @@ impl<'a> Oracle<'a> {
                 if idx == 0 {
                     Label::primary(msg.clone(), range.into())
                 } else {
-                    let name = self.strings.get(*id);
+                    let name = self.strings.resolve(*id);
 
                     Label::secondary(format!("type `{name}` defined here"), range.into())
                 }

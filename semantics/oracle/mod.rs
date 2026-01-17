@@ -12,7 +12,7 @@ use crate::spec::{Metadata, SymbolTable};
 use crate::string::{StringId, StringInterner};
 
 mod metadata;
-// mod symbols;
+mod symbols;
 // mod typ;
 // mod value;
 
@@ -35,7 +35,7 @@ pub struct Oracle<'a> {
     // Mappings used by oracle during validation.
     // This allows for partial & invalid spec to be analyzed fully, without
     // being lowered into valid data defined above.
-    symbol_map: HashMap<StringId, ast::AstPtr<ast::Type>>,
+    symbol_map: HashMap<StringId, ast::AstPtr<ast::TypeDefinition>>,
     root: &'a ast::Root,
 
     // Reports generated during semantic analysis
