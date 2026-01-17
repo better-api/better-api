@@ -465,6 +465,21 @@ ast_node! {
     enum Value;
 }
 
+impl std::fmt::Display for Value {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let label = match self {
+            Value::String(_) => "string",
+            Value::Integer(_) => "integer",
+            Value::Float(_) => "float",
+            Value::Bool(_) => "bool",
+            Value::Array(_) => "array",
+            Value::Object(_) => "object",
+        };
+
+        formatter.write_str(label)
+    }
+}
+
 ///////////
 // Types //
 ///////////

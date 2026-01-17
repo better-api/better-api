@@ -551,10 +551,10 @@ mod test {
         let i64_type = types.add_primitive(PrimitiveType::I64);
 
         let mut interner = StringInterner::default();
-        let status_name = interner.insert("status");
-        let list_name = interner.insert("list");
-        let create_name = interner.insert("create");
-        let admin_name = interner.insert("admin");
+        let status_name = interner.get_or_intern("status");
+        let list_name = interner.get_or_intern("list");
+        let create_name = interner.get_or_intern("create");
+        let admin_name = interner.get_or_intern("admin");
 
         let mut arena = EndpointArena::new();
 

@@ -886,14 +886,14 @@ mod test {
 
         // Insert some strings
         let mut interner = StringInterner::default();
-        let id_str = interner.insert("id");
-        let simple_array_str = interner.insert("simple_array");
-        let values_str = interner.insert("values");
-        let metadata_str = interner.insert("metadata");
-        let unused_str = interner.insert("unused");
-        let success_str = interner.insert("success");
-        let error_str = interner.insert("error");
-        let discriminator_str = interner.insert("kind");
+        let id_str = interner.get_or_intern("id");
+        let simple_array_str = interner.get_or_intern("simple_array");
+        let values_str = interner.get_or_intern("values");
+        let metadata_str = interner.get_or_intern("metadata");
+        let unused_str = interner.get_or_intern("unused");
+        let success_str = interner.get_or_intern("success");
+        let error_str = interner.get_or_intern("error");
+        let discriminator_str = interner.get_or_intern("kind");
 
         // Add some primitive types
         let i32_id = arena.add_primitive(PrimitiveType::I32);

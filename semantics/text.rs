@@ -27,7 +27,7 @@ pub fn lower_name(
         return None;
     }
 
-    let name_id = strings.insert(name_str);
+    let name_id = strings.get_or_intern(name_str);
     Some(name_id)
 }
 

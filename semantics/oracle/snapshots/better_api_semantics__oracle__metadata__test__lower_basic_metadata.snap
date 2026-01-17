@@ -99,4 +99,36 @@ expression: oracle.reports()
         ],
         note: None,
     },
+    Report {
+        severity: Error,
+        title: "missing `server.name` field",
+        labels: [
+            Label {
+                style: Primary,
+                message: "missing `server.name` field",
+                span: Span {
+                    start: 281,
+                    end: 294,
+                },
+            },
+        ],
+        note: Some(
+            "help: provide `server.name` field",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "`server.url` must be a string, got integer",
+        labels: [
+            Label {
+                style: Primary,
+                message: "expected a string",
+                span: Span {
+                    start: 290,
+                    end: 292,
+                },
+            },
+        ],
+        note: None,
+    },
 ]

@@ -11,7 +11,7 @@ use crate::spec::value::ValueArena;
 use crate::spec::{Metadata, SymbolTable};
 use crate::string::{StringId, StringInterner};
 
-// mod metadata;
+mod metadata;
 // mod symbols;
 // mod typ;
 // mod value;
@@ -21,7 +21,7 @@ use crate::string::{StringId, StringInterner};
 
 /// Core type responsible for semantic analysis.
 #[derive(Clone)]
-pub struct Oracle {
+pub struct Oracle<'a> {
     // Valid spec data being constructed
     strings: StringInterner,
     spec_symbol_table: SymbolTable,
@@ -36,29 +36,35 @@ pub struct Oracle {
     // This allows for partial & invalid spec to be analyzed fully, without
     // being lowered into valid data defined above.
     symbol_map: HashMap<StringId, ast::AstPtr<ast::Type>>,
+    root: &'a ast::Root,
 
     // Reports generated during semantic analysis
     reports: Vec<Report>,
 }
 
-impl Oracle {
+impl<'a> Oracle<'a> {
     /// Create a new oracle.
     ///
     /// Runs semantic analysis on the given AST and creates an oracle
     /// that can be queried for semantics info.
-    pub fn new(root: &ast::Root) -> Self {
+    pub fn new(root: &'a ast::Root) -> Self {
         let mut oracle = Self {
             strings: Default::default(),
             spec_symbol_table: Default::default(),
+
             metadata: None,
+
             values: Default::default(),
             types: Default::default(),
             endpoints: Default::default(),
+
             symbol_map: Default::default(),
+            root,
+
             reports: Default::default(),
         };
 
-        oracle.analyze(root);
+        oracle.analyze();
         oracle
     }
 
@@ -68,13 +74,12 @@ impl Oracle {
     }
 
     /// Analyzes the complete syntax tree and populates the analyzer arenas.
-    fn analyze(&mut self, root: &ast::Root) {
+    fn analyze(&mut self) {
         // TODO: Steps:
-        // - analyze metadata and generate self.meatada
         // - analyze type defs (not actual types, just defs), populate self.symbol_map, find cycles
         // - analyze types of type defs, populate spec_symbol_table
         // - analyze routes & endpoints. as you go also analyze and lower types
-        // self.analyze_metadata(root);
+        self.lower_metadata();
 
         // self.lower_type_definitions(root);
 
@@ -91,15 +96,20 @@ impl Oracle {
     #[cfg(test)]
     /// Create a new [`Oracle`] without calling analyze on it.
     /// Only used for testing.
-    fn new_raw(root: &ast::Root) -> Self {
+    fn new_raw(root: &'a ast::Root) -> Self {
         Self {
             strings: Default::default(),
             spec_symbol_table: Default::default(),
+
             metadata: None,
+
             values: Default::default(),
             types: Default::default(),
             endpoints: Default::default(),
+
             symbol_map: Default::default(),
+            root,
+
             reports: Default::default(),
         }
     }
