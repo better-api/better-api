@@ -1,5 +1,5 @@
 use better_api_diagnostic::{Label, Report, Severity};
-use better_api_syntax::ast::{self, AstNode};
+use better_api_syntax::ast::{self, AstNode, AstPtr};
 use smallvec::SmallVec;
 
 use crate::Oracle;
@@ -68,8 +68,51 @@ impl<'a> Oracle<'a> {
         }
     }
 
+    /// Builds symbol map and validates redefinitions and cycles.
+    pub(crate) fn validate_symbols(&mut self) {
+        self.build_symbol_map();
+        self.report_symbol_cycles();
+    }
+
+    fn build_symbol_map(&mut self) {
+        for def in self.root.type_definitions() {
+            let Some(name) = def.name() else {
+                continue;
+            };
+
+            let name_id = self.strings.get_or_intern(name.text());
+            if let Some(original_def_ptr) = self.symbol_map.get(&name_id) {
+                let original_def = original_def_ptr.to_node(self.root.syntax());
+
+                // If symbol table contains the name already, we should also have a valid type def
+                // node, so expects should be fine.
+                let original_range = original_def
+                    .name()
+                    .expect("name of original type def should exist")
+                    .text_range();
+
+                let name_str = name.text();
+                let range = name.text_range();
+
+                self.reports.push(
+                    Report::error(format!("name `{name_str}` is defined multiple times"))
+                        .add_label(Label::primary(
+                            format!("name `{name_str}` is defined multiple times"),
+                            range.into(),
+                        ))
+                        .add_label(Label::secondary(
+                            format!("name `{name_str}` is first defined here"),
+                            original_range.into(),
+                        )),
+                );
+            } else {
+                self.symbol_map.insert(name_id, AstPtr::new(&def));
+            }
+        }
+    }
+
     /// Run cycle detection on defined symbols and report them.
-    pub(crate) fn report_symbol_cycles(&mut self) {
+    fn report_symbol_cycles(&mut self) {
         let mut path = ResolvePath::new();
         let mut reports = vec![];
         for (name, typ_ptr) in self.symbol_map.iter() {

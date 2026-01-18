@@ -16,8 +16,8 @@ mod symbols;
 // mod typ;
 // mod value;
 
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 /// Core type responsible for semantic analysis.
 #[derive(Clone)]
@@ -80,6 +80,11 @@ impl<'a> Oracle<'a> {
         // - analyze types of type defs, populate spec_symbol_table
         // - analyze routes & endpoints. as you go also analyze and lower types
         self.lower_metadata();
+
+        // Build symbol map and do basic symbol validation
+        // - symbol names are unique
+        // - no cycles
+        self.validate_symbols();
 
         // self.lower_type_definitions(root);
 
