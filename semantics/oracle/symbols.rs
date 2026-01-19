@@ -1,4 +1,5 @@
 use better_api_diagnostic::{Label, Report, Severity};
+use better_api_syntax::TextRange;
 use better_api_syntax::ast::{self, AstNode, AstPtr};
 use smallvec::SmallVec;
 
@@ -21,7 +22,7 @@ pub(crate) enum ResolvedSymbol {
     ///
     /// Code calling symbol resolution should report a missing error, if symbols inside
     /// `Missing` is the same as name that is being resolved.
-    Missing(StringId),
+    Missing { name: StringId, range: TextRange },
 
     /// Symbol resolution encountered a cycle.
     Cycle,
@@ -32,7 +33,7 @@ pub(crate) enum ResolvedSymbol {
 
 impl<'a> Oracle<'a> {
     /// Resolve a symbol.
-    pub(crate) fn resolve(&self, mut name: StringId) -> ResolvedSymbol {
+    pub(crate) fn resolve(&self, mut name: StringId, mut range: TextRange) -> ResolvedSymbol {
         let mut path = ResolvePath::new();
 
         loop {
@@ -46,11 +47,11 @@ impl<'a> Oracle<'a> {
                 .get(&name)
                 .map(|ptr| ptr.to_node(self.root.syntax()))
             else {
-                return ResolvedSymbol::Missing(name);
+                return ResolvedSymbol::Missing { name, range };
             };
 
             let Some(next_type) = next_type_def.typ() else {
-                return ResolvedSymbol::Missing(name);
+                return ResolvedSymbol::Missing { name, range };
             };
 
             match next_type {
@@ -58,9 +59,10 @@ impl<'a> Oracle<'a> {
                     let next_name = reference.name();
                     let next_id = self.strings.get(next_name.text());
                     if let Some(next) = next_id {
-                        name = next
+                        name = next;
+                        range = reference.syntax().text_range();
                     } else {
-                        return ResolvedSymbol::Missing(name);
+                        return ResolvedSymbol::Missing { name, range };
                     }
                 }
                 typ => return ResolvedSymbol::Type(typ),
@@ -80,6 +82,7 @@ impl<'a> Oracle<'a> {
                 continue;
             };
 
+            // TODO: Validate name with text::something
             let name_id = self.strings.get_or_intern(name.text());
             if let Some(original_def_ptr) = self.symbol_map.get(&name_id) {
                 let original_def = original_def_ptr.to_node(self.root.syntax());
@@ -285,4 +288,12 @@ impl<'a> Oracle<'a> {
             ),
         }
     }
+}
+
+/// Construct a report for missing symbol.
+pub(crate) fn report_missing(name: &str, range: TextRange) -> Report {
+    Report::error(format!("undefined symbol `{name}`")).add_label(Label::primary(
+        format!("symbol `{name}` is not defined"),
+        range.into(),
+    ))
 }

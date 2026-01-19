@@ -1,8 +1,9 @@
 use better_api_diagnostic::{Label, Report};
-use better_api_syntax::ast;
-use better_api_syntax::ast::AstNode;
+use better_api_syntax::ast::{self, AstNode};
 
-use crate::spec::value::{ArrayBuilder, ObjectBuilder, PrimitiveValue, ValueArena, ValueId};
+use crate::spec::value::{
+    ArrayBuilder, MimeTypesId, ObjectBuilder, PrimitiveValue, ValueArena, ValueId,
+};
 use crate::string::{StringId, StringInterner};
 use crate::text::{lower_name, parse_string};
 
@@ -203,4 +204,73 @@ fn check_object_fields_unique(
             )),
         );
     }
+}
+
+/// Validates value is a valid collection of mime types and lowers it.
+pub(crate) fn lower_mime_types(
+    values: &mut ValueArena,
+    strings: &mut StringInterner,
+    reports: &mut Vec<Report>,
+    value: &ast::Value,
+) -> Option<MimeTypesId> {
+    match value {
+        ast::Value::String(_) => {
+            let string_id = validate_mime_type_aux(strings, reports, value)?;
+            let value_id = values.add_primitive(PrimitiveValue::String(string_id));
+
+            // Safety: `validate_mime_type` has checked that the string is a valid mime type.
+            let mime_type_id = unsafe { MimeTypesId::new_unchecked(value_id) };
+            Some(mime_type_id)
+        }
+        ast::Value::Array(arr) => {
+            let mut builder = values.start_array();
+
+            for item in arr.values() {
+                let string_id = validate_mime_type_aux(strings, reports, &item)?;
+                builder.add_primitive(PrimitiveValue::String(string_id));
+            }
+
+            let value_id = builder.finish();
+
+            // Safety: We have checked that all values in array are valid mime type strings
+            let mime_type_id = unsafe { MimeTypesId::new_unchecked(value_id) };
+            Some(mime_type_id)
+        }
+        _ => {
+            reports.push(
+                Report::error(format!("expected string or array, got {value}")).add_label(
+                    Label::primary(
+                        format!("expected string or array, got {value}"),
+                        value.syntax().text_range().into(),
+                    ),
+                ),
+            );
+            None
+        }
+    }
+}
+
+/// Helper function for validating that a value is String that represents a mime type.
+fn validate_mime_type_aux(
+    strings: &mut StringInterner,
+    reports: &mut Vec<Report>,
+    value: &ast::Value,
+) -> Option<StringId> {
+    let ast::Value::String(string) = value else {
+        reports.push(
+            Report::error(format!("expected string, got {value}")).add_label(Label::primary(
+                format!("expected string, got {value}"),
+                value.syntax().text_range().into(),
+            )),
+        );
+        return None;
+    };
+
+    let token = string.string();
+    let string = parse_string(&token, reports);
+
+    // TODO: Validate it's actually a mime type
+
+    let id = strings.get_or_intern(string);
+    Some(id)
 }
