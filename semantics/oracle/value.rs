@@ -2,10 +2,9 @@ use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast;
 use better_api_syntax::ast::AstNode;
 
-use crate::source_map::SourceMap;
+use crate::spec::value::{ArrayBuilder, ObjectBuilder, PrimitiveValue, ValueArena, ValueId};
 use crate::string::{StringId, StringInterner};
 use crate::text::{lower_name, parse_string};
-use crate::value::{ArrayBuilder, ObjectBuilder, PrimitiveValue, ValueId};
 
 use super::Oracle;
 
@@ -17,35 +16,35 @@ struct InternedField {
 }
 
 impl<'a> Oracle<'a> {
-    /// Lower syntactical value [`ast::Value`] and store it in arena and source map mappings.
+    /// Sugar method for lowering a value. Calls [`lower_value`].
     pub(crate) fn lower_value(&mut self, value: &ast::Value) -> ValueId {
-        let id = match ParsedValue::new(value, &mut self.reports, &mut self.strings) {
-            ParsedValue::Primitive(primitive) => self.values.add_primitive(primitive),
-            ParsedValue::Object(obj) => {
-                let fields = parse_object_fields(obj, &mut self.reports, &mut self.strings);
-                let builder = self.values.start_object();
-                insert_object_fields(
-                    fields,
-                    builder,
-                    &mut self.source_map,
-                    &mut self.reports,
-                    &mut self.strings,
-                )
-            }
-            ParsedValue::Array(arr) => {
-                let builder = self.values.start_array();
-                insert_array_values(
-                    arr.values(),
-                    builder,
-                    &mut self.source_map,
-                    &mut self.reports,
-                    &mut self.strings,
-                )
-            }
-        };
+        lower_value(
+            &mut self.values,
+            &mut self.strings,
+            &mut self.reports,
+            value,
+        )
+    }
+}
 
-        self.source_map.insert_value(id, value);
-        id
+/// Lower syntactical value [`ast::Value`] and store it in arena and source map mappings.
+pub(crate) fn lower_value(
+    values: &mut ValueArena,
+    strings: &mut StringInterner,
+    reports: &mut Vec<Report>,
+    value: &ast::Value,
+) -> ValueId {
+    match ParsedValue::new(value, reports, strings) {
+        ParsedValue::Primitive(primitive) => values.add_primitive(primitive),
+        ParsedValue::Object(obj) => {
+            let fields = parse_object_fields(obj, reports, strings);
+            let builder = values.start_object();
+            insert_object_fields(fields, builder, reports, strings)
+        }
+        ParsedValue::Array(arr) => {
+            let builder = values.start_array();
+            insert_array_values(arr.values(), builder, reports, strings)
+        }
     }
 }
 
@@ -66,7 +65,7 @@ impl<'a> ParsedValue<'a> {
             ast::Value::String(string) => {
                 let token = string.string();
                 let parsed_str = parse_string(&token, reports);
-                let str_id = strings.insert(&parsed_str);
+                let str_id = strings.get_or_intern(&parsed_str);
 
                 Self::Primitive(PrimitiveValue::String(str_id))
             }
@@ -99,6 +98,7 @@ fn parse_object_fields(
     let mut fields: Vec<_> = object
         .fields()
         .filter_map(|f| {
+            // Missing name or value is reported by parser.
             f.value()?;
 
             let name = f.name().and_then(|n| lower_name(&n, strings, reports))?;
@@ -116,7 +116,6 @@ fn parse_object_fields(
 fn insert_object_fields(
     fields: Vec<InternedField>,
     mut builder: ObjectBuilder,
-    source_map: &mut SourceMap,
     reports: &mut Vec<Report>,
     strings: &mut StringInterner,
 ) -> ValueId {
@@ -126,26 +125,20 @@ fn insert_object_fields(
             .value()
             .expect("inserted field should have a value");
 
-        let field_id = match ParsedValue::new(&value, reports, strings) {
-            ParsedValue::Primitive(primitive) => builder.add_primitive(field.name, primitive),
+        match ParsedValue::new(&value, reports, strings) {
+            ParsedValue::Primitive(primitive) => {
+                builder.add_primitive(field.name, primitive);
+            }
             ParsedValue::Object(obj) => {
                 let fields = parse_object_fields(obj, reports, strings);
-                let (child_builder, field_id) = builder.start_object(field.name);
-
-                insert_object_fields(fields, child_builder, source_map, reports, strings);
-
-                field_id
+                let (child_builder, _) = builder.start_object(field.name);
+                insert_object_fields(fields, child_builder, reports, strings);
             }
             ParsedValue::Array(arr) => {
-                let (child_builder, field_id) = builder.start_array(field.name);
-
-                insert_array_values(arr.values(), child_builder, source_map, reports, strings);
-
-                field_id
+                let (child_builder, _) = builder.start_array(field.name);
+                insert_array_values(arr.values(), child_builder, reports, strings);
             }
         };
-
-        source_map.insert_value(field_id.value_id(), &value);
     }
 
     builder.finish()
@@ -155,26 +148,24 @@ fn insert_object_fields(
 pub(crate) fn insert_array_values(
     values: impl Iterator<Item = ast::Value>,
     mut builder: ArrayBuilder,
-    source_map: &mut SourceMap,
     reports: &mut Vec<Report>,
     strings: &mut StringInterner,
 ) -> ValueId {
     for value in values {
-        let value_id = match ParsedValue::new(&value, reports, strings) {
-            ParsedValue::Primitive(primitive) => builder.add_primitive(primitive),
+        match ParsedValue::new(&value, reports, strings) {
+            ParsedValue::Primitive(primitive) => {
+                builder.add_primitive(primitive);
+            }
             ParsedValue::Object(obj) => {
                 let fields = parse_object_fields(obj, reports, strings);
                 let child_builder = builder.start_object();
-
-                insert_object_fields(fields, child_builder, source_map, reports, strings)
+                insert_object_fields(fields, child_builder, reports, strings);
             }
             ParsedValue::Array(arr) => {
                 let child_builder = builder.start_array();
-                insert_array_values(arr.values(), child_builder, source_map, reports, strings)
+                insert_array_values(arr.values(), child_builder, reports, strings);
             }
         };
-
-        source_map.insert_value(value_id, &value);
     }
 
     builder.finish()
@@ -196,7 +187,7 @@ fn check_object_fields_unique(
             continue;
         }
 
-        let name = strings.get(fields[idx].name);
+        let name = strings.resolve(fields[idx].name);
 
         let range = fields[idx + 1]
             .field

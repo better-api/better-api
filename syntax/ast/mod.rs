@@ -4,6 +4,9 @@ use crate::{Kind, Language, SyntaxNode, SyntaxToken};
 use rowan::TextRange;
 pub use rowan::ast::{AstNode, AstPtr};
 
+mod compare;
+pub use compare::value_matches_type;
+
 // Helper macros to generator AST nodes as structs.
 macro_rules! ast_node {
     (
@@ -795,6 +798,33 @@ ast_node! {
     )]
     /// Represents a type.
     enum Type;
+}
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let label = match self {
+            Type::TypeOption(_) => "option",
+            Type::TypeArray(_) => "array",
+            Type::Record(_) => "record",
+            Type::Enum(_) => "enum",
+            Type::Union(_) => "union",
+            Type::TypeResponse(_) => "response",
+            Type::TypeRef(_) => "reference",
+            Type::TypeI32(_) => "i32",
+            Type::TypeI64(_) => "i64",
+            Type::TypeU32(_) => "u32",
+            Type::TypeU64(_) => "u64",
+            Type::TypeF32(_) => "f32",
+            Type::TypeF64(_) => "f64",
+            Type::TypeDate(_) => "date",
+            Type::TypeTimestamp(_) => "timestamp",
+            Type::TypeBool(_) => "bool",
+            Type::TypeString(_) => "string",
+            Type::TypeFile(_) => "file",
+        };
+
+        formatter.write_str(label)
+    }
 }
 
 ///////////////

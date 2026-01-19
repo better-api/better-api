@@ -2,12 +2,13 @@ use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast;
 use better_api_syntax::ast::AstNode;
 
-use crate::oracle::value::insert_array_values;
-use crate::source_map::SourceMap;
+use crate::oracle::value::lower_value;
+use crate::spec::typ::{
+    EnumMember, FieldBuilder, OptionArrayBuilder, PrimitiveType, TypeDef, TypeId,
+};
+use crate::spec::value::ValueId;
 use crate::string::{StringId, StringInterner};
 use crate::text::lower_name;
-use crate::typ::{FieldBuilder, OptionArrayBuilder, PrimitiveType, Type, TypeId};
-use crate::value::{Value, ValueId};
 
 use super::Oracle;
 
@@ -15,8 +16,11 @@ use super::Oracle;
 #[derive(Clone)]
 struct InternedField {
     name: StringId,
-    default: Option<ValueId>,
     field: ast::TypeField,
+
+    // Prologue
+    default: Option<ValueId>,
+    docs: Option<StringId>,
 }
 
 /// Helper type for handling primitive types separately from composite ones.
@@ -41,7 +45,7 @@ impl<'a> ParsedType<'a> {
             ast::Type::TypeResponse(resp) => Self::Response(resp),
             ast::Type::TypeRef(typ_ref) => {
                 let token = typ_ref.name();
-                let str_id = strings.insert(token.text());
+                let str_id = strings.get_or_intern(token.text());
 
                 Self::Primitive(PrimitiveType::Reference(str_id))
             }
@@ -61,62 +65,33 @@ impl<'a> ParsedType<'a> {
 }
 
 impl<'a> Oracle<'a> {
-    /// Lowers type definitions and checks for cycles.
-    ///
-    /// The lowered types are not validated completely, that has to be done
-    /// after _all_ the types have been lowered.
-    pub(crate) fn lower_type_definitions(&mut self, root: &ast::Root) {
-        for def in root.type_definitions() {
+    /// Lowers type definitions.
+    pub(crate) fn lower_type_definitions(&mut self) {
+        for def in self.root.type_definitions() {
             self.lower_type_def(&def);
         }
-
-        self.report_symbol_cycles();
     }
 
     /// Lowers type definition node.
     fn lower_type_def(&mut self, def: &ast::TypeDefinition) {
+        // Missing name error is reported by parser.
         let Some(name_token) = def.name() else {
             return;
         };
-        let name_id = self.strings.insert(name_token.text());
+        let name_id = self.strings.get_or_intern(name_token.text());
 
+        // Missing type report is handled by parser. Other errors are handled in lower_type.
         let Some(type_id) = def.typ().and_then(|t| self.lower_type(&t)) else {
             return;
         };
 
-        // There is already a symbol with the same name, so we report an error.
-        if self.symbol_table.contains_key(&name_id) {
-            let name = self.strings.get(name_id);
-            let range = name_token.text_range();
-
-            // If symbol table contains the name already, we should also have a valid type def
-            // node, so expects should be fine.
-            let original_def = self
-                .source_map
-                .get_type_definition(name_id)
-                .expect("original name should be a valid type definition");
-            let original_range = original_def
-                .name()
-                .expect("name of original type def should exist")
-                .text_range();
-
-            self.reports.push(
-                Report::error(format!("name `{name}` is defined multiple times"))
-                    .add_label(Label::primary(
-                        format!("name `{name}` is defined multiple times"),
-                        range.into(),
-                    ))
-                    .add_label(Label::secondary(
-                        format!("name `{name}` is first defined here"),
-                        original_range.into(),
-                    )),
-            );
-
-            return;
-        };
-
-        self.symbol_table.insert(name_id, type_id);
-        self.source_map.insert_type_definition(name_id, def);
+        // Insert type to symbol table if not already present.
+        // The duplicate type definition error is reported by [`Oracle::validate_symbols`].
+        self.spec_symbol_table.entry(name_id).or_insert(TypeDef {
+            type_id,
+            // TODO: Extract docs from type definition prologue
+            docs: None,
+        });
     }
 
     /// Lower a syntactical type and store it into the type arena and source map.
@@ -126,8 +101,8 @@ impl<'a> Oracle<'a> {
     /// If type was lowered successfully it's not yet completely validated.
     /// This has to be done after _all_ the types have been lowered.
     pub(crate) fn lower_type(&mut self, typ: &ast::Type) -> Option<TypeId> {
-        let id = match ParsedType::new(typ, &mut self.strings) {
-            ParsedType::Primitive(primitive) => self.types.add_primitive(primitive),
+        match ParsedType::new(typ, &mut self.strings) {
+            ParsedType::Primitive(primitive) => Some(self.types.add_primitive(primitive)),
             ParsedType::Enum(en) => self.lower_enum(en),
             ParsedType::Response(resp) => self.lower_response(resp),
             ParsedType::Record(record) => self.lower_record(record),
@@ -140,9 +115,8 @@ impl<'a> Oracle<'a> {
                     builder,
                     &mut self.reports,
                     &mut self.strings,
-                    &mut self.source_map,
                     "array",
-                )?
+                )
             }
             ParsedType::Option(opt) => {
                 let inner = opt.typ()?;
@@ -152,118 +126,140 @@ impl<'a> Oracle<'a> {
                     builder,
                     &mut self.reports,
                     &mut self.strings,
-                    &mut self.source_map,
                     "option",
-                )?
+                )
             }
-        };
-
-        self.source_map.insert_type(id, typ);
-        Some(id)
+        }
     }
 
     /// Lowers enum type and inserts it into arena
-    fn lower_enum(&mut self, typ: &ast::Enum) -> TypeId {
-        // TODO: Validate members types. For this value -> type comparison function is needed.
-
-        // Parse type of the enum and validate it
-        // Reports are handled by parser and self.parse_type methods already
-        // TODO: move this in the shared type validation logic
-        let enum_type_id = typ.typ().and_then(|t| self.lower_type(&t));
-        if let Some(id) = enum_type_id {
-            self.validate_enum_type(id);
+    fn lower_enum(&mut self, typ: &ast::Enum) -> Option<TypeId> {
+        // Validate enum type
+        let enum_type = typ.typ()?;
+        if !self.is_enum_type_valid(&enum_type) {
+            return None;
         }
 
-        // Parse enum members
-        let builder = self.values.start_array();
-        let members_id = insert_array_values(
-            typ.members().filter_map(|m| m.value()),
-            builder,
-            &mut self.source_map,
-            &mut self.reports,
-            &mut self.strings,
-        );
+        let type_id = self
+            .lower_type(&enum_type)
+            .expect("valid enum type should lowered");
 
-        self.types.add_enum(enum_type_id, members_id)
+        // Parse enum members
+        let mut builder = self.types.start_enum(type_id);
+        let mut is_valid = true;
+
+        for member in typ.members() {
+            let Some(value) = member.value() else {
+                // Missing enum member value is reported by parser.
+                is_valid = false;
+                continue;
+            };
+
+            if !ast::value_matches_type(&value, &enum_type, &mut self.reports) {
+                is_valid = false;
+                continue;
+            }
+
+            let value_id = lower_value(
+                &mut self.values,
+                &mut self.strings,
+                &mut self.reports,
+                &value,
+            );
+            builder.add_member(EnumMember {
+                value: value_id,
+                // TODO: Extract docs from enum member prologue
+                docs: None,
+            });
+        }
+
+        if is_valid {
+            Some(builder.finish())
+        } else {
+            None
+        }
     }
 
     /// Lowers response type and inserts it into arena
-    fn lower_response(&mut self, resp: &ast::TypeResponse) -> TypeId {
-        // Parse and validate content type
-        let content_type_id = resp
-            .content_type()
-            .and_then(|v| v.value())
-            .map(|v| self.lower_value(&v));
-        // TODO: Move validation to shared validation logic.
-        if let Some(id) = content_type_id {
-            self.validate_response_content_type(id);
-        }
-
-        // Parse and validate header type
-        let headers_id = resp
-            .headers()
-            .and_then(|h| h.typ())
-            .and_then(|t| self.lower_type(&t));
-        // TODO: Check that headers type is a record. Do not forget to resolve named references.
-
-        // Parse and validate response body
-        let body_id = resp
-            .body()
-            .and_then(|b| b.typ())
-            .and_then(|t| self.lower_type(&t));
-        // TODO: Check that body type is valid (not a response). Again, resolve named references
-
-        // TODO: Check response body type and header mime type match.
-
-        self.types
-            .add_response(body_id, headers_id, content_type_id)
+    fn lower_response(&mut self, resp: &ast::TypeResponse) -> Option<TypeId> {
+        todo!()
+        // // Parse and validate content type
+        // let content_type_id = resp
+        //     .content_type()
+        //     .and_then(|v| v.value())
+        //     .map(|v| self.lower_value(&v));
+        // // TODO: Move validation to shared validation logic.
+        // if let Some(id) = content_type_id {
+        //     self.validate_response_content_type(id);
+        // }
+        //
+        // // Parse and validate header type
+        // let headers_id = resp
+        //     .headers()
+        //     .and_then(|h| h.typ())
+        //     .and_then(|t| self.lower_type(&t));
+        // // TODO: Check that headers type is a record. Do not forget to resolve named references.
+        //
+        // // Parse and validate response body
+        // let body_id = resp
+        //     .body()
+        //     .and_then(|b| b.typ())
+        //     .and_then(|t| self.lower_type(&t));
+        // // TODO: Check that body type is valid (not a response). Again, resolve named references
+        //
+        // // TODO: Check response body type and header mime type match.
+        //
+        // self.types
+        //     .add_response(body_id, headers_id, content_type_id)
     }
 
     /// Lowers record type and inserts it into arena
-    fn lower_record(&mut self, record: &ast::Record) -> TypeId {
-        let fields = self.parse_type_fields(record.fields(), true);
-        let builder = self.types.start_record();
-        insert_type_fields(
-            fields,
-            builder,
-            &mut self.source_map,
-            &mut self.reports,
-            &mut self.strings,
-            "record field",
-        )
+    fn lower_record(&mut self, record: &ast::Record) -> Option<TypeId> {
+        todo!()
+        // let fields = self.parse_type_fields(record.fields(), true);
+        // let builder = self.types.start_record();
+        // insert_type_fields(
+        //     fields,
+        //     builder,
+        //     &mut self.source_map,
+        //     &mut self.reports,
+        //     &mut self.strings,
+        //     "record field",
+        // )
     }
 
     /// Lowers union type and inserts it into arena
-    fn lower_union(&mut self, union: &ast::Union) -> TypeId {
-        let discriminator = union
-            .discriminator()
-            .map(|v| (self.lower_value(&v), v.syntax().text_range()))
-            .and_then(|(id, range)| match self.values.get(id) {
-                Value::String(id) => Some(id),
-                val => {
-                    self.reports.push(
-                        Report::error(format!("union discriminator must be a string, got {val}"))
-                            .add_label(Label::primary(
-                                "invalid union discriminator".to_string(),
-                                range.into(),
-                            ))
-                            .with_note("help: union discrminator must be a string".to_string()),
-                    );
-
-                    None
-                }
-            });
-
-        let fields = self.parse_type_fields(union.fields(), false);
-        let builder = self.types.start_union(discriminator);
-        insert_type_fields(
-            fields,
-            builder,
-            &mut self.source_map,
-            &mut self.reports,
-            &mut self.strings,
-            "union field",
-        )
+    fn lower_union(&mut self, union: &ast::Union) -> Option<TypeId> {
+        todo!()
+        // let discriminator = union
+        //     .discriminator()
+        //     .map(|v| (self.lower_value(&v), v.syntax().text_range()))
+        //     .and_then(|(id, range)| match self.values.get(id) {
+        //         Value::String(id) => Some(id),
+        //         val => {
+        //             self.reports.push(
+        //                 Report::error(format!("union discriminator must be a string, got {val}"))
+        //                     .add_label(Label::primary(
+        //                         "invalid union discriminator".to_string(),
+        //                         range.into(),
+        //                     ))
+        //                     .with_note("help: union discrminator must be a string".to_string()),
+        //             );
+        //
+        //             None
+        //         }
+        //     });
+        //
+        // let fields = self.parse_type_fields(union.fields(), false);
+        // let builder = self.types.start_union(discriminator);
+        // insert_type_fields(
+        //     fields,
+        //     builder,
+        //     &mut self.source_map,
+        //     &mut self.reports,
+        //     &mut self.strings,
+        //     "union field",
+        // )
     }
 
     /// Collects type fields into a vector.
@@ -299,8 +295,10 @@ impl<'a> Oracle<'a> {
 
                 Some(InternedField {
                     name: name_id,
-                    default,
                     field: f,
+                    default,
+                    // TODO: Extract docs from field prologue
+                    docs: None,
                 })
             })
             .collect();
@@ -315,13 +313,16 @@ impl<'a> Oracle<'a> {
     ///
     /// When declaring an enum, you do `enum (T) {...}`. This function validates
     /// that `T` is one of the allowed types. If it isn't a report is generated.
-    fn validate_enum_type(&mut self, enum_type_id: TypeId) {
-        match self.types.get(enum_type_id) {
-            Type::I32 | Type::I64 | Type::U32 | Type::U64 | Type::String => (),
-            typ => {
-                let node = self.source_map.get_type(enum_type_id);
-                let range = node.syntax().text_range();
+    fn is_enum_type_valid(&mut self, enum_type: &ast::Type) -> bool {
+        match enum_type {
+            ast::Type::TypeI32(_)
+            | ast::Type::TypeI64(_)
+            | ast::Type::TypeU32(_)
+            | ast::Type::TypeU64(_)
+            | ast::Type::TypeString(_) => true,
 
+            typ => {
+                let range = enum_type.syntax().text_range();
                 self.reports.push(
                     Report::error(format!("invalid enum type {typ}"))
                         .add_label(Label::primary(
@@ -333,6 +334,8 @@ impl<'a> Oracle<'a> {
                                 .to_string(),
                         ),
                 );
+
+                false
             }
         }
     }
@@ -341,26 +344,27 @@ impl<'a> Oracle<'a> {
     ///
     /// If the content type isn't valid, report is generated.
     fn validate_response_content_type(&mut self, content_type_id: ValueId) {
-        match self.values.get(content_type_id) {
-            Value::String(str_id) => {
-                let _content_type = self.strings.get(str_id);
-
-                // TODO: Validate that header has a valid mime type and is not a random string
-            }
-            val => {
-                let node = self.source_map.get_value(content_type_id);
-                let range = node.syntax().text_range();
-
-                self.reports.push(
-                    Report::error(format!("invalid response content type {val}"))
-                        .add_label(Label::primary(
-                            format!("invalid response content type {val}"),
-                            range.into(),
-                        ))
-                        .with_note("help: response content type must be a string".to_string()),
-                );
-            }
-        }
+        todo!()
+        // match self.values.get(content_type_id) {
+        //     Value::String(str_id) => {
+        //         let _content_type = self.strings.get(str_id);
+        //
+        //         // TODO: Validate that header has a valid mime type and is not a random string
+        //     }
+        //     val => {
+        //         let node = self.source_map.get_value(content_type_id);
+        //         let range = node.syntax().text_range();
+        //
+        //         self.reports.push(
+        //             Report::error(format!("invalid response content type {val}"))
+        //                 .add_label(Label::primary(
+        //                     format!("invalid response content type {val}"),
+        //                     range.into(),
+        //                 ))
+        //                 .with_note("help: response content type must be a string".to_string()),
+        //         );
+        //     }
+        // }
     }
 }
 
@@ -373,43 +377,30 @@ fn lower_array_option(
     mut builder: OptionArrayBuilder,
     reports: &mut Vec<Report>,
     strings: &mut StringInterner,
-    source_map: &mut SourceMap,
     outer_type_name: &str,
 ) -> Option<TypeId> {
-    let (container_id, inner_id) = match ParsedType::new(inner, strings) {
+    let container_id = match ParsedType::new(inner, strings) {
         ParsedType::Primitive(primitive) => {
             let res = builder.finish(primitive);
-            (res.container_id, res.primitive_id)
+            res.container_id
         }
         ParsedType::Array(arr) => {
             // Error for empty inner type is reported by parser.
             let inner = arr.typ()?;
-            let inner_id = builder.start_array();
-            let container_id = lower_array_option(
-                &inner,
-                builder,
-                reports,
-                strings,
-                source_map,
-                outer_type_name,
-            )?;
+            builder.start_array();
+            let container_id =
+                lower_array_option(&inner, builder, reports, strings, outer_type_name)?;
 
-            (container_id, inner_id)
+            container_id
         }
         ParsedType::Option(opt) => {
             // Error for empty inner type is reported by parser.
             let inner = opt.typ()?;
-            let inner_id = builder.start_option();
-            let container_id = lower_array_option(
-                &inner,
-                builder,
-                reports,
-                strings,
-                source_map,
-                outer_type_name,
-            )?;
+            builder.start_option();
+            let container_id =
+                lower_array_option(&inner, builder, reports, strings, outer_type_name)?;
 
-            (container_id, inner_id)
+            container_id
         }
 
         ParsedType::Enum(_) => {
@@ -445,8 +436,6 @@ fn lower_array_option(
             return None;
         }
     };
-
-    source_map.insert_type(inner_id, inner);
 
     Some(container_id)
 }
@@ -496,103 +485,103 @@ fn new_invalid_inner_type(inner: InvalidInnerContext, outer: &str, node: &impl A
 fn insert_type_fields(
     fields: Vec<InternedField>,
     mut builder: FieldBuilder,
-    source_map: &mut SourceMap,
     reports: &mut Vec<Report>,
     strings: &mut StringInterner,
     type_field_name: &str,
 ) -> TypeId {
-    for field in fields {
-        let typ = field
-            .field
-            .typ()
-            .expect("inserted field should have a type");
-
-        let field_id = match ParsedType::new(&typ, strings) {
-            ParsedType::Primitive(primitive) => {
-                Some(builder.add_primitive(field.name, primitive, field.default))
-            }
-            ParsedType::Array(arr) => {
-                let Some(inner) = arr.typ() else {
-                    continue;
-                };
-
-                let (child_builder, field_id) = builder.start_array(field.name, field.default);
-                let type_id = lower_array_option(
-                    &inner,
-                    child_builder,
-                    reports,
-                    strings,
-                    source_map,
-                    "array",
-                );
-
-                if type_id.is_some() {
-                    Some(field_id)
-                } else {
-                    None
-                }
-            }
-            ParsedType::Option(opt) => {
-                let Some(inner) = opt.typ() else {
-                    continue;
-                };
-
-                let (child_builder, field_id) = builder.start_option(field.name, field.default);
-                let type_id = lower_array_option(
-                    &inner,
-                    child_builder,
-                    reports,
-                    strings,
-                    source_map,
-                    "option",
-                );
-
-                if type_id.is_some() {
-                    Some(field_id)
-                } else {
-                    None
-                }
-            }
-            ParsedType::Enum(_) => {
-                reports.push(new_invalid_inner_type(
-                    InvalidInnerContext::Enum,
-                    type_field_name,
-                    &typ,
-                ));
-                continue;
-            }
-            ParsedType::Response(_) => {
-                reports.push(new_invalid_inner_type(
-                    InvalidInnerContext::Response,
-                    type_field_name,
-                    &typ,
-                ));
-                continue;
-            }
-            ParsedType::Record(_) => {
-                reports.push(new_invalid_inner_type(
-                    InvalidInnerContext::Record,
-                    type_field_name,
-                    &typ,
-                ));
-                continue;
-            }
-            ParsedType::Union(_) => {
-                reports.push(new_invalid_inner_type(
-                    InvalidInnerContext::Union,
-                    type_field_name,
-                    &typ,
-                ));
-                continue;
-            }
-        };
-
-        let Some(field_id) = field_id else {
-            continue;
-        };
-
-        source_map.insert_type(field_id.type_id(), &typ);
-    }
-
-    builder.finish()
+    todo!()
+    // for field in fields {
+    //     let typ = field
+    //         .field
+    //         .typ()
+    //         .expect("inserted field should have a type");
+    //
+    //     let field_id = match ParsedType::new(&typ, strings) {
+    //         ParsedType::Primitive(primitive) => {
+    //             Some(builder.add_primitive(field.name, primitive, field.default))
+    //         }
+    //         ParsedType::Array(arr) => {
+    //             let Some(inner) = arr.typ() else {
+    //                 continue;
+    //             };
+    //
+    //             let (child_builder, field_id) = builder.start_array(field.name, field.default);
+    //             let type_id = lower_array_option(
+    //                 &inner,
+    //                 child_builder,
+    //                 reports,
+    //                 strings,
+    //                 source_map,
+    //                 "array",
+    //             );
+    //
+    //             if type_id.is_some() {
+    //                 Some(field_id)
+    //             } else {
+    //                 None
+    //             }
+    //         }
+    //         ParsedType::Option(opt) => {
+    //             let Some(inner) = opt.typ() else {
+    //                 continue;
+    //             };
+    //
+    //             let (child_builder, field_id) = builder.start_option(field.name, field.default);
+    //             let type_id = lower_array_option(
+    //                 &inner,
+    //                 child_builder,
+    //                 reports,
+    //                 strings,
+    //                 source_map,
+    //                 "option",
+    //             );
+    //
+    //             if type_id.is_some() {
+    //                 Some(field_id)
+    //             } else {
+    //                 None
+    //             }
+    //         }
+    //         ParsedType::Enum(_) => {
+    //             reports.push(new_invalid_inner_type(
+    //                 InvalidInnerContext::Enum,
+    //                 type_field_name,
+    //                 &typ,
+    //             ));
+    //             continue;
+    //         }
+    //         ParsedType::Response(_) => {
+    //             reports.push(new_invalid_inner_type(
+    //                 InvalidInnerContext::Response,
+    //                 type_field_name,
+    //                 &typ,
+    //             ));
+    //             continue;
+    //         }
+    //         ParsedType::Record(_) => {
+    //             reports.push(new_invalid_inner_type(
+    //                 InvalidInnerContext::Record,
+    //                 type_field_name,
+    //                 &typ,
+    //             ));
+    //             continue;
+    //         }
+    //         ParsedType::Union(_) => {
+    //             reports.push(new_invalid_inner_type(
+    //                 InvalidInnerContext::Union,
+    //                 type_field_name,
+    //                 &typ,
+    //             ));
+    //             continue;
+    //         }
+    //     };
+    //
+    //     let Some(field_id) = field_id else {
+    //         continue;
+    //     };
+    //
+    //     source_map.insert_type(field_id.type_id(), &typ);
+    // }
+    //
+    // builder.finish()
 }

@@ -13,8 +13,8 @@ use crate::string::{StringId, StringInterner};
 
 mod metadata;
 mod symbols;
-// mod typ;
-// mod value;
+mod typ;
+mod value;
 
 #[cfg(test)]
 mod tests;
@@ -86,7 +86,7 @@ impl<'a> Oracle<'a> {
         // - no cycles
         self.validate_symbols();
 
-        // self.lower_type_definitions(root);
+        self.lower_type_definitions();
 
         // A placeholder, just so that warning about unused `Oracle::parse_type`
         // goes away
