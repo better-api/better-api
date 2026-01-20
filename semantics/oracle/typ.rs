@@ -267,56 +267,10 @@ impl<'a> Oracle<'a> {
         // Parse and validate header type
         let mut headers_id = None;
         if let Some(headers) = resp.headers().and_then(|h| h.typ()) {
-            let report_builder = |range: TextRange| {
-                Report::error("invalid headers type".to_string())
-                    .add_label(Label::primary(
-                        "headers type must not contain `file`".to_string(),
-                        range.into(),
-                    ))
-                    .add_label(Label::secondary(
-                        "headers used here".to_string(),
-                        headers.syntax().text_range().into(),
-                    ))
-            };
-
-            match self.require_no_file(&headers, report_builder) {
-                Ok(_) => (),
-                Err(_) => is_valid = false,
+            match self.lower_headers(&headers) {
+                res @ Some(_) => headers_id = res,
+                None => is_valid = false,
             }
-
-            let report_builder = |typ: SimpleRecordReportType| match typ {
-                SimpleRecordReportType::NotStruct(resolved) => {
-                    Report::error("invalid header type".to_string())
-                        .add_label(Label::primary(
-                            format!("expected struct, got {resolved}"),
-                            headers.syntax().text_range().into(),
-                        ))
-                        .with_note("help: headers must be a simple struct".to_string())
-                }
-                SimpleRecordReportType::CompositeField(field) => {
-                    let range = field
-                        .typ()
-                        .map_or_else(|| field.syntax().text_range(), |t| t.syntax().text_range());
-
-                    Report::error("invalid header type".to_string())
-                        .add_label(Label::primary(
-                            "header fields can only be simple types or option".to_string(),
-                            range.into(),
-                        ))
-                        .add_label(Label::secondary(
-                            "headers used here".to_string(),
-                            headers.syntax().text_range().into(),
-                        ))
-                }
-            };
-
-            match self.require_simple_record(&headers, true, false, report_builder) {
-                Ok(_) => (),
-                Err(_) => is_valid = false,
-            }
-
-            // TODO: Check that headers type is a _simple_ record. Do not forget to resolve named references.
-            headers_id = self.lower_type(&headers)
         }
 
         // Parse and validate response body
@@ -403,6 +357,68 @@ impl<'a> Oracle<'a> {
             .types
             .add_response(body_id, headers_id, content_type_id);
         Some(id)
+    }
+
+    /// Checks that given type represents valid headers and lowers it.
+    ///
+    /// Valid headers are simple record without files. If type is valid,
+    /// Some(_) is returned. If any validation fails, reports are generated and None is returned.
+    fn lower_headers(&mut self, headers: &ast::Type) -> Option<TypeId> {
+        // Are headers valid. We don't want to early return, because we want
+        // to validate as many things as possible.
+        let mut is_valid = true;
+
+        let file_report_builder = |range: TextRange| {
+            Report::error("invalid headers type".to_string())
+                .add_label(Label::primary(
+                    "headers type must not contain `file`".to_string(),
+                    range.into(),
+                ))
+                .add_label(Label::secondary(
+                    "headers used here".to_string(),
+                    headers.syntax().text_range().into(),
+                ))
+        };
+
+        match self.require_no_file(headers, file_report_builder) {
+            Ok(_) => (),
+            Err(_) => is_valid = false,
+        }
+
+        let simple_report_builder = |typ: SimpleRecordReportType| match typ {
+            SimpleRecordReportType::NotStruct(resolved) => {
+                Report::error("invalid header type".to_string())
+                    .add_label(Label::primary(
+                        format!("expected struct, got {resolved}"),
+                        headers.syntax().text_range().into(),
+                    ))
+                    .with_note("help: headers must be a simple record".to_string())
+            }
+            SimpleRecordReportType::CompositeField(field) => {
+                let range = field
+                    .typ()
+                    .map_or_else(|| field.syntax().text_range(), |t| t.syntax().text_range());
+
+                Report::error("invalid header type".to_string())
+                    .add_label(Label::primary(
+                        "header fields can only be simple types or option".to_string(),
+                        range.into(),
+                    ))
+                    .add_label(Label::secondary(
+                        "headers used here".to_string(),
+                        headers.syntax().text_range().into(),
+                    ))
+            }
+        };
+
+        match self.require_simple_record(headers, true, false, simple_report_builder) {
+            Ok(_) => (),
+            Err(_) => is_valid = false,
+        }
+
+        let id = self.lower_type(headers);
+
+        if is_valid { id } else { None }
     }
 
     /// Lowers record type and inserts it into arena
