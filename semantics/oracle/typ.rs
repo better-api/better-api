@@ -161,10 +161,10 @@ impl<'a> Oracle<'a> {
             | ast::Type::TypeString(_)
             | ast::Type::TypeFile(_) => Ok(true),
 
-            ast::Type::Record(_)
-            | ast::Type::Enum(_)
-            | ast::Type::Union(_)
-            | ast::Type::TypeResponse(_) => Ok(false),
+            // Enum is a simple type
+            ast::Type::Enum(_) => Ok(true),
+
+            ast::Type::Record(_) | ast::Type::Union(_) | ast::Type::TypeResponse(_) => Ok(false),
 
             // If option is invalid (has no type) parser already reports an error.
             // It would be bad UX if you also got an error for type not being simple, just because
