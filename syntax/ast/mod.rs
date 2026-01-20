@@ -633,7 +633,7 @@ ast_node! {
 
 impl Record {
     /// Returns iterator over fields in the record
-    pub fn fields(&self) -> impl Iterator<Item = TypeField> {
+    pub fn fields(&self) -> impl Iterator<Item = TypeField> + use<> {
         self.0.children().filter_map(TypeField::cast)
     }
 }

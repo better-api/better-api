@@ -2,7 +2,6 @@ use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast::AstNode;
 use better_api_syntax::{TextRange, ast};
 
-use crate::oracle::symbols::{ResolvedSymbol, report_missing};
 use crate::oracle::value::{lower_mime_types, lower_value};
 use crate::spec::typ::{
     EnumMember, FieldBuilder, OptionArrayBuilder, PrimitiveType, TypeDef, TypeId,
@@ -133,6 +132,74 @@ impl<'a> Oracle<'a> {
         }
     }
 
+    /// Check if type is simple by resolving the references.
+    ///
+    /// For instance:
+    ///
+    /// ```text
+    /// type Foo: string
+    /// type Bar: Foo
+    /// ```
+    ///
+    /// are both simple types
+    pub(crate) fn is_simple_type(
+        &self,
+        typ: &ast::Type,
+        allow_option: bool,
+        allow_array: bool,
+    ) -> Result<bool, Report> {
+        match typ {
+            ast::Type::TypeI32(_)
+            | ast::Type::TypeI64(_)
+            | ast::Type::TypeU32(_)
+            | ast::Type::TypeU64(_)
+            | ast::Type::TypeF32(_)
+            | ast::Type::TypeF64(_)
+            | ast::Type::TypeDate(_)
+            | ast::Type::TypeTimestamp(_)
+            | ast::Type::TypeBool(_)
+            | ast::Type::TypeString(_)
+            | ast::Type::TypeFile(_) => Ok(true),
+
+            ast::Type::Record(_)
+            | ast::Type::Enum(_)
+            | ast::Type::Union(_)
+            | ast::Type::TypeResponse(_) => Ok(false),
+
+            // If option is invalid (has no type) parser already reports an error.
+            // It would be bad UX if you also got an error for type not being simple, just because
+            // you didn't finish writing an option type. Same goes for array.
+            ast::Type::TypeOption(opt) => {
+                if allow_option {
+                    match opt.typ() {
+                        None => Ok(true),
+                        Some(typ) => self.is_simple_type(&typ, allow_option, allow_array),
+                    }
+                } else {
+                    Ok(false)
+                }
+            }
+            ast::Type::TypeArray(arr) => {
+                if allow_array {
+                    match arr.typ() {
+                        None => Ok(true),
+                        Some(typ) => self.is_simple_type(&typ, allow_option, allow_array),
+                    }
+                } else {
+                    Ok(false)
+                }
+            }
+            // If there is a missing type (name doesn't exist) we want to report an error.
+            // If there are cycles, we don't want to report any error for the same reasons
+            // as option and array.
+            ast::Type::TypeRef(reference) => match self.deref(reference) {
+                Err(None) => Ok(true),
+                Err(Some(report)) => Err(report),
+                Ok(typ) => self.is_simple_type(&typ, allow_option, allow_array),
+            },
+        }
+    }
+
     /// Lowers enum type and inserts it into arena
     fn lower_enum(&mut self, typ: &ast::Enum) -> Option<TypeId> {
         // Validate enum type
@@ -201,14 +268,50 @@ impl<'a> Oracle<'a> {
         let mut headers_id = None;
         if let Some(headers) = resp.headers().and_then(|h| h.typ()) {
             let report_builder = |range: TextRange| {
-                Report::error("invalid headers type".to_string()).add_label(Label::primary(
-                    "headers type must not contain `file`".to_string(),
-                    range.into(),
-                ))
+                Report::error("invalid headers type".to_string())
+                    .add_label(Label::primary(
+                        "headers type must not contain `file`".to_string(),
+                        range.into(),
+                    ))
+                    .add_label(Label::secondary(
+                        "headers used here".to_string(),
+                        headers.syntax().text_range().into(),
+                    ))
             };
 
             match self.require_no_file(&headers, report_builder) {
-                Ok(()) => (),
+                Ok(_) => (),
+                Err(_) => is_valid = false,
+            }
+
+            let report_builder = |typ: SimpleRecordReportType| match typ {
+                SimpleRecordReportType::NotStruct(resolved) => {
+                    Report::error("invalid header type".to_string())
+                        .add_label(Label::primary(
+                            format!("expected struct, got {resolved}"),
+                            headers.syntax().text_range().into(),
+                        ))
+                        .with_note("help: headers must be a simple struct".to_string())
+                }
+                SimpleRecordReportType::CompositeField(field) => {
+                    let range = field
+                        .typ()
+                        .map_or_else(|| field.syntax().text_range(), |t| t.syntax().text_range());
+
+                    Report::error("invalid header type".to_string())
+                        .add_label(Label::primary(
+                            "header fields can only be simple types or option".to_string(),
+                            range.into(),
+                        ))
+                        .add_label(Label::secondary(
+                            "headers used here".to_string(),
+                            headers.syntax().text_range().into(),
+                        ))
+                }
+            };
+
+            match self.require_simple_record(&headers, true, false, report_builder) {
+                Ok(_) => (),
                 Err(_) => is_valid = false,
             }
 
@@ -429,7 +532,7 @@ impl<'a> Oracle<'a> {
         }
     }
 
-    /// Requires that node is not a file. It also resolves references.
+    /// Requires that node is a file or reference to a file.
     ///
     /// Reports are added to self.reports on the fly.
     ///
@@ -469,35 +572,21 @@ impl<'a> Oracle<'a> {
         }
 
         match &node {
-            ast::Type::TypeRef(reference) => {
-                // No need to validate name here, since we are referencing it not defining it.
-                let name_token = reference.name();
-                let name = name_token.text();
-                let Some(name_id) = self.strings.get(name) else {
-                    self.reports
-                        .push(report_missing(name, reference.syntax().text_range()));
-                    return Err(());
-                };
-
-                match self.resolve(name_id, reference.syntax().text_range()) {
-                    ResolvedSymbol::Missing { name, range } => {
-                        self.reports
-                            .push(report_missing(self.strings.resolve(name), range));
-                        return Err(());
-                    }
-                    ResolvedSymbol::Cycle => {
-                        // Cycle report is constructed by `Oracle::validate_symbols` function
-                        return Err(());
-                    }
-                    ResolvedSymbol::Type(typ) => match require_file_aux(&typ, content_type) {
-                        Ok(_) => Ok(()),
-                        Err(report) => {
-                            self.reports.push(report);
-                            Err(())
-                        }
-                    },
+            ast::Type::TypeRef(reference) => match self.deref(reference) {
+                Err(None) => Err(()),
+                Err(Some(report)) => {
+                    self.reports.push(report);
+                    Err(())
                 }
-            }
+                Ok(typ) => match require_file_aux(&typ, content_type) {
+                    Ok(_) => Ok(()),
+                    Err(report) => {
+                        self.reports.push(report);
+                        Err(())
+                    }
+                },
+            },
+
             _ => match require_file_aux(node, content_type) {
                 Ok(_) => Ok(()),
                 Err(report) => {
@@ -561,50 +650,101 @@ impl<'a> Oracle<'a> {
                 if valid { Ok(()) } else { Err(()) }
             }
 
-            // If we get to response we have an invalid node. But the reason it's
-            // invalid should be reported someplace else.
+            // There are only two ways to get here:
+            // - call this method directly on a response: we have a bug in `lower_response`
+            // - one of the composite types contains a response: during lowering of that type the
+            //   error is reported
+            //
+            // In any case, we don't have to report an error here
             ast::Type::TypeResponse(_) => Err(()),
 
-            ast::Type::TypeRef(reference) => {
-                let name_token = reference.name();
-                let name = name_token.text();
-                let Some(name_id) = self.strings.get(name) else {
-                    self.reports
-                        .push(report_missing(name, reference.syntax().text_range()));
-                    return Err(());
-                };
-
-                match self.resolve(name_id, reference.syntax().text_range()) {
-                    ResolvedSymbol::Missing { name, range } => {
-                        self.reports
-                            .push(report_missing(self.strings.resolve(name), range));
-                        Err(())
-                    }
-                    ResolvedSymbol::Cycle => Err(()),
-                    ResolvedSymbol::Type(typ) => self.require_no_file(&typ, build_report),
+            ast::Type::TypeRef(reference) => match self.deref(reference) {
+                Err(None) => Err(()),
+                Err(Some(report)) => {
+                    self.reports.push(report);
+                    Err(())
                 }
-            }
+                Ok(typ) => self.require_no_file(&typ, build_report),
+            },
 
             ast::Type::TypeFile(_) => {
-                // let mut report = Report::error("invalid response body type".to_string())
-                //     .add_label(Label::primary(
-                //         "content type requires that no `file` is present in body".to_string(),
-                //         node.syntax().text_range().into(),
-                //     ))
-                //     .with_note(
-                //         "help: `application/json` response must not use `file` in body".to_string(),
-                //     );
-                // if let Some(content_type) = content_type {
-                //     report = report.add_label(Label::secondary(
-                //         "content type defined here".to_string(),
-                //         content_type.syntax().text_range().into(),
-                //     ));
-                // }
                 self.reports.push(build_report(node.syntax().text_range()));
                 Err(())
             }
         }
     }
+
+    /// Requires that node is a record and all fields are primitive type.
+    ///
+    /// Reports are added to self.reports on the fly.
+    ///
+    /// If node is valid, Ok is returned, otherwise Err
+    fn require_simple_record<R>(
+        &mut self,
+        node: &ast::Type,
+        allow_option: bool,
+        allow_array: bool,
+        build_report: R,
+    ) -> Result<(), ()>
+    where
+        R: Fn(SimpleRecordReportType) -> Report,
+    {
+        let fields = match node {
+            ast::Type::Record(rec) => rec.fields(),
+            ast::Type::TypeRef(reference) => match self.deref(reference) {
+                Err(None) => return Err(()),
+                Err(Some(report)) => {
+                    self.reports.push(report);
+                    return Err(());
+                }
+                Ok(ast::Type::Record(rec)) => rec.fields(),
+                Ok(typ) => {
+                    let report = build_report(SimpleRecordReportType::NotStruct(&typ));
+                    self.reports.push(report);
+                    return Err(());
+                }
+            },
+
+            typ => {
+                let report = build_report(SimpleRecordReportType::NotStruct(typ));
+                self.reports.push(report);
+                return Err(());
+            }
+        };
+
+        let mut is_valid = true;
+        for field in fields {
+            let Some(typ) = field.typ() else {
+                continue;
+            };
+
+            match self.is_simple_type(&typ, allow_option, allow_array) {
+                Ok(true) => (),
+                Ok(false) => {
+                    let report = build_report(SimpleRecordReportType::CompositeField(&field));
+                    self.reports.push(report);
+                    is_valid = false;
+                }
+                Err(report) => {
+                    self.reports.push(report);
+                    is_valid = false;
+                }
+            }
+        }
+
+        if is_valid { Ok(()) } else { Err(()) }
+    }
+}
+
+/// Helper type to determine what report should be build when type is not simple record.
+///
+/// Used by [`Oracle::require_simple_record`].
+enum SimpleRecordReportType<'a> {
+    /// Given type is not a record
+    NotStruct(&'a ast::Type),
+
+    /// Given record has a composite field (not simple)
+    CompositeField(&'a ast::TypeField),
 }
 
 /// Lowers array or option by using the [`OptionArrayBuilder`].
