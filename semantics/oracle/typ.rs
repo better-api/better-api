@@ -26,6 +26,7 @@ struct InternedField {
 /// Helper type for handling primitive types separately from composite ones.
 enum ParsedType<'a> {
     Primitive(PrimitiveType),
+    Reference(StringId),
     Enum(&'a ast::Enum),
     Response(&'a ast::TypeResponse),
     Record(&'a ast::Record),
@@ -47,7 +48,7 @@ impl<'a> ParsedType<'a> {
                 let token = typ_ref.name();
                 let str_id = strings.get_or_intern(token.text());
 
-                Self::Primitive(PrimitiveType::Reference(str_id))
+                Self::Reference(str_id)
             }
             ast::Type::TypeI32(_) => Self::Primitive(PrimitiveType::I32),
             ast::Type::TypeI64(_) => Self::Primitive(PrimitiveType::I64),
@@ -103,6 +104,9 @@ impl<'a> Oracle<'a> {
     pub(crate) fn lower_type(&mut self, typ: &ast::Type) -> Option<TypeId> {
         match ParsedType::new(typ, &mut self.strings) {
             ParsedType::Primitive(primitive) => Some(self.types.add_primitive(primitive)),
+            ParsedType::Reference(reference) => {
+                todo!("implement lower_reference - check it exists, then lower")
+            }
             ParsedType::Enum(en) => self.lower_enum(en),
             ParsedType::Response(resp) => self.lower_response(resp),
             ParsedType::Record(record) => self.lower_record(record),
@@ -189,13 +193,11 @@ impl<'a> Oracle<'a> {
                     Ok(false)
                 }
             }
-            // If there is a missing type (name doesn't exist) we want to report an error.
-            // If there are cycles, we don't want to report any error for the same reasons
-            // as option and array.
+            // If there is an error during type resolution, we don't want to report it
+            // for the same reasons as option and array.
             ast::Type::TypeRef(reference) => match self.deref(reference) {
-                Err(None) => Ok(true),
-                Err(Some(report)) => Err(report),
-                Ok(typ) => self.is_simple_type(&typ, allow_option, allow_array),
+                None => Ok(true),
+                Some(typ) => self.is_simple_type(&typ, allow_option, allow_array),
             },
         }
     }
@@ -589,12 +591,8 @@ impl<'a> Oracle<'a> {
 
         match &node {
             ast::Type::TypeRef(reference) => match self.deref(reference) {
-                Err(None) => Err(()),
-                Err(Some(report)) => {
-                    self.reports.push(report);
-                    Err(())
-                }
-                Ok(typ) => match require_file_aux(&typ, content_type) {
+                None => Err(()),
+                Some(typ) => match require_file_aux(&typ, content_type) {
                     Ok(_) => Ok(()),
                     Err(report) => {
                         self.reports.push(report);
@@ -675,12 +673,8 @@ impl<'a> Oracle<'a> {
             ast::Type::TypeResponse(_) => Err(()),
 
             ast::Type::TypeRef(reference) => match self.deref(reference) {
-                Err(None) => Err(()),
-                Err(Some(report)) => {
-                    self.reports.push(report);
-                    Err(())
-                }
-                Ok(typ) => self.require_no_file(&typ, build_report),
+                None => Err(()),
+                Some(typ) => self.require_no_file(&typ, build_report),
             },
 
             ast::Type::TypeFile(_) => {
@@ -708,13 +702,9 @@ impl<'a> Oracle<'a> {
         let fields = match node {
             ast::Type::Record(rec) => rec.fields(),
             ast::Type::TypeRef(reference) => match self.deref(reference) {
-                Err(None) => return Err(()),
-                Err(Some(report)) => {
-                    self.reports.push(report);
-                    return Err(());
-                }
-                Ok(ast::Type::Record(rec)) => rec.fields(),
-                Ok(typ) => {
+                None => return Err(()),
+                Some(ast::Type::Record(rec)) => rec.fields(),
+                Some(typ) => {
                     let report = build_report(SimpleRecordReportType::NotStruct(&typ));
                     self.reports.push(report);
                     return Err(());
@@ -774,65 +764,66 @@ fn lower_array_option(
     strings: &mut StringInterner,
     outer_type_name: &str,
 ) -> Option<TypeId> {
-    let container_id = match ParsedType::new(inner, strings) {
-        ParsedType::Primitive(primitive) => {
-            let res = builder.finish(primitive);
-            res.container_id
-        }
-        ParsedType::Array(arr) => {
-            // Error for empty inner type is reported by parser.
-            let inner = arr.typ()?;
-            builder.start_array();
-            let container_id =
-                lower_array_option(&inner, builder, reports, strings, outer_type_name)?;
-
-            container_id
-        }
-        ParsedType::Option(opt) => {
-            // Error for empty inner type is reported by parser.
-            let inner = opt.typ()?;
-            builder.start_option();
-            let container_id =
-                lower_array_option(&inner, builder, reports, strings, outer_type_name)?;
-
-            container_id
-        }
-
-        ParsedType::Enum(_) => {
-            reports.push(new_invalid_inner_type(
-                InvalidInnerContext::Enum,
-                outer_type_name,
-                inner,
-            ));
-            return None;
-        }
-        ParsedType::Response(_) => {
-            reports.push(new_invalid_inner_type(
-                InvalidInnerContext::Response,
-                outer_type_name,
-                inner,
-            ));
-            return None;
-        }
-        ParsedType::Record(_) => {
-            reports.push(new_invalid_inner_type(
-                InvalidInnerContext::Record,
-                outer_type_name,
-                inner,
-            ));
-            return None;
-        }
-        ParsedType::Union(_) => {
-            reports.push(new_invalid_inner_type(
-                InvalidInnerContext::Union,
-                outer_type_name,
-                inner,
-            ));
-            return None;
-        }
-    };
-
-    Some(container_id)
+    todo!()
+    // let container_id = match ParsedType::new(inner, strings) {
+    //     ParsedType::Primitive(primitive) => {
+    //         let res = builder.finish(primitive);
+    //         res.container_id
+    //     }
+    //     ParsedType::Array(arr) => {
+    //         // Error for empty inner type is reported by parser.
+    //         let inner = arr.typ()?;
+    //         builder.start_array();
+    //         let container_id =
+    //             lower_array_option(&inner, builder, reports, strings, outer_type_name)?;
+    //
+    //         container_id
+    //     }
+    //     ParsedType::Option(opt) => {
+    //         // Error for empty inner type is reported by parser.
+    //         let inner = opt.typ()?;
+    //         builder.start_option();
+    //         let container_id =
+    //             lower_array_option(&inner, builder, reports, strings, outer_type_name)?;
+    //
+    //         container_id
+    //     }
+    //
+    //     ParsedType::Enum(_) => {
+    //         reports.push(new_invalid_inner_type(
+    //             InvalidInnerContext::Enum,
+    //             outer_type_name,
+    //             inner,
+    //         ));
+    //         return None;
+    //     }
+    //     ParsedType::Response(_) => {
+    //         reports.push(new_invalid_inner_type(
+    //             InvalidInnerContext::Response,
+    //             outer_type_name,
+    //             inner,
+    //         ));
+    //         return None;
+    //     }
+    //     ParsedType::Record(_) => {
+    //         reports.push(new_invalid_inner_type(
+    //             InvalidInnerContext::Record,
+    //             outer_type_name,
+    //             inner,
+    //         ));
+    //         return None;
+    //     }
+    //     ParsedType::Union(_) => {
+    //         reports.push(new_invalid_inner_type(
+    //             InvalidInnerContext::Union,
+    //             outer_type_name,
+    //             inner,
+    //         ));
+    //         return None;
+    //     }
+    // };
+    //
+    // Some(container_id)
 }
 
 /// Helper type for passing around the context in which an invalid inner

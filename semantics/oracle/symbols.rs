@@ -34,21 +34,19 @@ pub(crate) enum ResolvedSymbol {
 impl<'a> Oracle<'a> {
     /// Dereferences a type reference node.
     ///
-    /// Returns a type, or an error. Error can be None in case no new error should be emitted.
-    /// For instance when dealing with cycles, errors should be emitted in [`Self::validate_symbols`].
-    pub(crate) fn deref(&self, node: &ast::TypeRef) -> Result<ast::Type, Option<Report>> {
+    /// Errors are not reported. For detecting missing symbols, use [`Self::resolve`] which reports
+    /// errors.
+    pub(crate) fn deref(&self, node: &ast::TypeRef) -> Option<ast::Type> {
         let name_token = node.name();
         let name = name_token.text();
         let Some(name_id) = self.strings.get(name) else {
-            return Err(Some(report_missing(name, node.syntax().text_range())));
+            return None;
         };
 
         match self.resolve(name_id, node.syntax().text_range()) {
-            ResolvedSymbol::Missing { name, range } => {
-                Err(Some(report_missing(self.strings.resolve(name), range)))
-            }
-            ResolvedSymbol::Cycle => Err(None),
-            ResolvedSymbol::Type(typ) => Ok(typ),
+            ResolvedSymbol::Missing { .. } => None,
+            ResolvedSymbol::Cycle => None,
+            ResolvedSymbol::Type(typ) => Some(typ),
         }
     }
 
