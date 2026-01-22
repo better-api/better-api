@@ -558,19 +558,14 @@ impl<'a> Oracle<'a> {
         node: &ast::Type,
         content_type: Option<&ast::ResponseContentType>,
     ) -> Result<(), ()> {
-        // Helper function for building invalid body report.
-        fn require_file_aux(
-            node: &ast::Type,
-            range: TextRange,
-            content_type: Option<&ast::ResponseContentType>,
-        ) -> Result<(), Report> {
-            if matches!(node, ast::Type::TypeFile(_)) {
+        let check = |derefed: &ast::Type| {
+            if matches!(derefed, ast::Type::TypeFile(_)) {
                 Ok(())
             } else {
                 let mut report = Report::error("invalid response body type".to_string())
                     .add_label(Label::primary(
                         "content type requires `file` body".to_string(),
-                        range.into(),
+                        node.syntax().text_range().into(),
                     ))
                     .with_note(
                         "help: non `application/json` responses must use `file` as body"
@@ -586,28 +581,15 @@ impl<'a> Oracle<'a> {
 
                 Err(report)
             }
-        }
+        };
 
-        match &node {
-            ast::Type::TypeRef(reference) => match self.deref(reference) {
-                None => Err(()),
-                Some(typ) => match require_file_aux(&typ, node.syntax().text_range(), content_type)
-                {
-                    Ok(_) => Ok(()),
-                    Err(report) => {
-                        self.reports.push(report);
-                        Err(())
-                    }
-                },
-            },
-
-            _ => match require_file_aux(node, node.syntax().text_range(), content_type) {
-                Ok(_) => Ok(()),
-                Err(report) => {
-                    self.reports.push(report);
-                    Err(())
-                }
-            },
+        match self.require_with_deref(node, check) {
+            Ok(_) => Ok(()),
+            Err(None) => Err(()),
+            Err(Some(report)) => {
+                self.reports.push(report);
+                Err(())
+            }
         }
     }
 
@@ -759,40 +741,54 @@ impl<'a> Oracle<'a> {
     ///
     /// If no reports are generated (node is valid), Ok is returned, otherwise Err.
     fn require_not_response(&mut self, node: &ast::Type) -> Result<(), ()> {
-        fn require_not_response_aux(node: &ast::Type, range: TextRange) -> Result<(), Report> {
-            if !matches!(node, ast::Type::TypeResponse(_)) {
+        let check = |derefed: &ast::Type| {
+            if !matches!(derefed, ast::Type::TypeResponse(_)) {
                 Ok(())
             } else {
-                let report = Report::error("invalid usage of `response` type".to_string())
+                let range = node.syntax().text_range();
+                let deref_range = derefed.syntax().text_range();
+
+                let mut report = Report::error("invalid usage of `response` type".to_string())
                     .add_label(Label::primary(
                         "invalid usage of `response` type".to_string(),
                         range.into(),
                     ))
-                    .with_note("help: `response` type can't be a child of any type".to_string());
+                    .with_note("help: `response` type can't be a child of a type".to_string());
+
+                if range != deref_range {
+                    report = report.add_label(Label::secondary(
+                        "`response` type introduced here".to_string(),
+                        deref_range.into(),
+                    ))
+                }
 
                 Err(report)
             }
-        }
+        };
 
+        match self.require_with_deref(node, check) {
+            Ok(_) => Ok(()),
+            Err(None) => Err(()),
+            Err(Some(report)) => {
+                self.reports.push(report);
+                Err(())
+            }
+        }
+    }
+
+    /// Requires that check C succeeds for given node. If node is a reference,
+    /// it dereferences it first.
+    fn require_with_deref<C>(&self, node: &ast::Type, check: C) -> Result<(), Option<Report>>
+    where
+        C: Fn(&ast::Type) -> Result<(), Report>,
+    {
         match &node {
             ast::Type::TypeRef(reference) => match self.deref(reference) {
-                None => Err(()),
-                Some(typ) => match require_not_response_aux(&typ, node.syntax().text_range()) {
-                    Ok(_) => Ok(()),
-                    Err(report) => {
-                        self.reports.push(report);
-                        Err(())
-                    }
-                },
+                None => Err(None),
+                Some(typ) => check(&typ).map_err(Some),
             },
 
-            _ => match require_not_response_aux(node, node.syntax().text_range()) {
-                Ok(_) => Ok(()),
-                Err(report) => {
-                    self.reports.push(report);
-                    Err(())
-                }
-            },
+            _ => check(node).map_err(Some),
         }
     }
 }
