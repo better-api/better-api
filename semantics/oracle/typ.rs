@@ -289,14 +289,8 @@ impl<'a> Oracle<'a> {
             return None;
         };
 
-        if matches!(body, ast::Type::TypeResponse(_)) {
-            self.reports.push(
-                Report::error("invalid response body type".to_string()).add_label(Label::primary(
-                    "response body cannot be a response".to_string(),
-                    body.syntax().text_range().into(),
-                )),
-            );
-
+        // Response body can't be response
+        if self.require_not_response(&body).is_err() {
             return None;
         }
 
@@ -310,7 +304,7 @@ impl<'a> Oracle<'a> {
 
         // Check that response body is `file` by also resolving references
         if requires_file {
-            match self.require_file(&body, resp.content_type().as_ref()) {
+            match self.require_resp_body_is_file(&body, resp.content_type().as_ref()) {
                 Ok(_) => (),
                 Err(_) => is_valid = false,
             }
@@ -554,12 +548,12 @@ impl<'a> Oracle<'a> {
         }
     }
 
-    /// Requires that node is a file or reference to a file.
+    /// Requires that response body is a file or reference to a file.
     ///
     /// Reports are added to self.reports on the fly.
     ///
     /// If no reports are generated (node is valid), Ok is returned, otherwise Err.
-    fn require_file(
+    fn require_resp_body_is_file(
         &mut self,
         node: &ast::Type,
         content_type: Option<&ast::ResponseContentType>,
@@ -764,7 +758,43 @@ impl<'a> Oracle<'a> {
     /// Reports are added to self.reports on the fly.
     ///
     /// If no reports are generated (node is valid), Ok is returned, otherwise Err.
-    fn require_not_response() {}
+    fn require_not_response(&mut self, node: &ast::Type) -> Result<(), ()> {
+        fn require_not_response_aux(node: &ast::Type, range: TextRange) -> Result<(), Report> {
+            if !matches!(node, ast::Type::TypeResponse(_)) {
+                Ok(())
+            } else {
+                let report = Report::error("invalid usage of `response` type".to_string())
+                    .add_label(Label::primary(
+                        "invalid usage of `response` type".to_string(),
+                        range.into(),
+                    ))
+                    .with_note("help: `response` type can't be a child of any type".to_string());
+
+                Err(report)
+            }
+        }
+
+        match &node {
+            ast::Type::TypeRef(reference) => match self.deref(reference) {
+                None => Err(()),
+                Some(typ) => match require_not_response_aux(&typ, node.syntax().text_range()) {
+                    Ok(_) => Ok(()),
+                    Err(report) => {
+                        self.reports.push(report);
+                        Err(())
+                    }
+                },
+            },
+
+            _ => match require_not_response_aux(node, node.syntax().text_range()) {
+                Ok(_) => Ok(()),
+                Err(report) => {
+                    self.reports.push(report);
+                    Err(())
+                }
+            },
+        }
+    }
 }
 
 /// Helper type to determine what report should be build when type is not simple record.
