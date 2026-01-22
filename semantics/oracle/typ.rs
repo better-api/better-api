@@ -323,6 +323,10 @@ impl<'a> Oracle<'a> {
                 let mut report = Report::error("invalid response body type".to_string())
                     .add_label(Label::primary(
                         "content type requires that no `file` is present in body".to_string(),
+                        body.syntax().text_range().into(),
+                    ))
+                    .add_label(Label::secondary(
+                        "file introduced here".to_string(),
                         range.into(),
                     ))
                     .with_note(
@@ -374,11 +378,11 @@ impl<'a> Oracle<'a> {
             Report::error("invalid headers type".to_string())
                 .add_label(Label::primary(
                     "headers type must not contain `file`".to_string(),
-                    range.into(),
+                    headers.syntax().text_range().into(),
                 ))
                 .add_label(Label::secondary(
-                    "headers used here".to_string(),
-                    headers.syntax().text_range().into(),
+                    "file introduced here".to_string(),
+                    range.into(),
                 ))
         };
 
@@ -404,11 +408,11 @@ impl<'a> Oracle<'a> {
                 Report::error("invalid header type".to_string())
                     .add_label(Label::primary(
                         "header fields can only be simple types or option".to_string(),
-                        range.into(),
+                        headers.syntax().text_range().into(),
                     ))
                     .add_label(Label::secondary(
-                        "headers used here".to_string(),
-                        headers.syntax().text_range().into(),
+                        "non-simple field type here".to_string(),
+                        range.into(),
                     ))
             }
         };
@@ -563,6 +567,7 @@ impl<'a> Oracle<'a> {
         // Helper function for building invalid body report.
         fn require_file_aux(
             node: &ast::Type,
+            range: TextRange,
             content_type: Option<&ast::ResponseContentType>,
         ) -> Result<(), Report> {
             if matches!(node, ast::Type::TypeFile(_)) {
@@ -571,7 +576,7 @@ impl<'a> Oracle<'a> {
                 let mut report = Report::error("invalid response body type".to_string())
                     .add_label(Label::primary(
                         "content type requires `file` body".to_string(),
-                        node.syntax().text_range().into(),
+                        range.into(),
                     ))
                     .with_note(
                         "help: non `application/json` responses must use `file` as body"
@@ -592,7 +597,8 @@ impl<'a> Oracle<'a> {
         match &node {
             ast::Type::TypeRef(reference) => match self.deref(reference) {
                 None => Err(()),
-                Some(typ) => match require_file_aux(&typ, content_type) {
+                Some(typ) => match require_file_aux(&typ, node.syntax().text_range(), content_type)
+                {
                     Ok(_) => Ok(()),
                     Err(report) => {
                         self.reports.push(report);
@@ -601,7 +607,7 @@ impl<'a> Oracle<'a> {
                 },
             },
 
-            _ => match require_file_aux(node, content_type) {
+            _ => match require_file_aux(node, node.syntax().text_range(), content_type) {
                 Ok(_) => Ok(()),
                 Err(report) => {
                     self.reports.push(report);
@@ -611,8 +617,13 @@ impl<'a> Oracle<'a> {
         }
     }
 
-    /// Requires that node is not a file, and if it's a composite type (like record) does
+    /// Requires that node is not a file and it does not contain any children that are `file`.
+    ///
+    /// and if it's a composite type (like record) does
     /// not contain a file. It also resolves references.
+    ///
+    /// The check is recursive. If a node is a composite type (like record) and one of the fields
+    /// is a `file`, the method does report errors. It also resolves references.
     ///
     /// Reports are added to self.reports on the fly.
     ///
@@ -740,6 +751,20 @@ impl<'a> Oracle<'a> {
 
         if is_valid { Ok(()) } else { Err(()) }
     }
+
+    /// Requires that node is not a response type by resolving references.
+    ///
+    /// The check is **not** recursive. If a node is composite type (like record) and one of the
+    /// fields is a response, this method will not report an error. The reason why the check does
+    /// not need to be recursive is, that this is an invariant. No type can contain response as a
+    /// child. When lowering type A, we check it doesn't have a response. When lowering type B
+    /// depending on A, we have now already checked A so we don't have to perform the same check on
+    /// B recursively. This is different to [`Self::require_no_file`].
+    ///
+    /// Reports are added to self.reports on the fly.
+    ///
+    /// If no reports are generated (node is valid), Ok is returned, otherwise Err.
+    fn require_not_response() {}
 }
 
 /// Helper type to determine what report should be build when type is not simple record.
