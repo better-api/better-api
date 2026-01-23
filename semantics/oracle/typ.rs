@@ -124,8 +124,8 @@ impl<'a> Oracle<'a> {
             }
             ParsedType::Enum(en) => self.lower_enum(en),
             ParsedType::Response(resp) => self.lower_response(resp),
-            ParsedType::Record(record) => self.lower_record(record),
-            ParsedType::Union(union) => self.lower_union(union),
+            ParsedType::Record(record) => Some(self.lower_record(record)),
+            ParsedType::Union(union) => Some(self.lower_union(union)),
             ParsedType::Array(arr) => {
                 let inner = arr.typ()?;
                 let builder = self.types.start_array();
@@ -443,52 +443,33 @@ impl<'a> Oracle<'a> {
     }
 
     /// Lowers record type and inserts it into arena
-    fn lower_record(&mut self, record: &ast::Record) -> Option<TypeId> {
-        todo!()
-        // let fields = self.parse_type_fields(record.fields(), true);
-        // let builder = self.types.start_record();
-        // insert_type_fields(
-        //     fields,
-        //     builder,
-        //     &mut self.source_map,
-        //     &mut self.reports,
-        //     &mut self.strings,
-        //     "record field",
-        // )
+    fn lower_record(&mut self, record: &ast::Record) -> TypeId {
+        let fields = self.parse_type_fields(record.fields(), true);
+        let builder = self.types.start_record();
+        insert_type_fields(
+            fields,
+            builder,
+            &mut self.reports,
+            &mut self.strings,
+            &self.symbol_map,
+            self.root,
+            InvalidOuterContext::RecordField,
+        )
     }
 
     /// Lowers union type and inserts it into arena
-    fn lower_union(&mut self, union: &ast::Union) -> Option<TypeId> {
-        todo!()
-        // let discriminator = union
-        //     .discriminator()
-        //     .map(|v| (self.lower_value(&v), v.syntax().text_range()))
-        //     .and_then(|(id, range)| match self.values.get(id) {
-        //         Value::String(id) => Some(id),
-        //         val => {
-        //             self.reports.push(
-        //                 Report::error(format!("union discriminator must be a string, got {val}"))
-        //                     .add_label(Label::primary(
-        //                         "invalid union discriminator".to_string(),
-        //                         range.into(),
-        //                     ))
-        //                     .with_note("help: union discrminator must be a string".to_string()),
-        //             );
-        //
-        //             None
-        //         }
-        //     });
-        //
-        // let fields = self.parse_type_fields(union.fields(), false);
-        // let builder = self.types.start_union(discriminator);
-        // insert_type_fields(
-        //     fields,
-        //     builder,
-        //     &mut self.source_map,
-        //     &mut self.reports,
-        //     &mut self.strings,
-        //     "union field",
-        // )
+    fn lower_union(&mut self, union: &ast::Union) -> TypeId {
+        let fields = self.parse_type_fields(union.fields(), false);
+        let builder = self.types.start_union(todo!("redefine union"));
+        insert_type_fields(
+            fields,
+            builder,
+            &mut self.reports,
+            &mut self.strings,
+            &self.symbol_map,
+            self.root,
+            InvalidOuterContext::UnionField,
+        )
     }
 
     /// Collects type fields into a vector.
@@ -505,7 +486,7 @@ impl<'a> Oracle<'a> {
     ) -> Vec<InternedField> {
         let mut fields: Vec<_> = fields
             .filter_map(|f| {
-                f.typ()?;
+                let typ = f.typ()?;
 
                 let name_id = f
                     .name()
@@ -515,17 +496,25 @@ impl<'a> Oracle<'a> {
                     f.prologue()
                         .and_then(|p| p.default())
                         .and_then(|d| d.value())
-                        .map(|val| self.lower_value(&val))
                 } else {
                     // No need to report an error if default is present in field.
                     // It's already reported by the parser.
                     None
                 };
 
+                if let Some(val) = &default {
+                    ast::value_matches_type(val, &typ, &mut self.reports, |node| {
+                        deref(&self.strings, &self.symbol_map, self.root, node)
+                    });
+                }
+
+                let default_id = default.map(|val| self.lower_value(&val));
+
                 Some(InternedField {
                     name: name_id,
                     field: f,
-                    default,
+                    default: default_id,
+
                     // TODO: Extract docs from field prologue
                     docs: None,
                 })
@@ -533,7 +522,7 @@ impl<'a> Oracle<'a> {
             .collect();
 
         fields.sort_by_key(|f| f.name);
-        // TODO: Check fields are unique in the place where type validation happens
+        check_type_fields_unique(&fields, &mut self.reports, &self.strings);
 
         fields
     }
@@ -967,8 +956,15 @@ enum InvalidInnerContext {
 enum InvalidOuterContext {
     #[display("option")]
     Option,
+
     #[display("array")]
     Array,
+
+    #[display("record field")]
+    RecordField,
+
+    #[display("union field")]
+    UnionField,
 }
 
 /// Constructs a [`Report`] for reporting that a type contains invalid inner(inline) type.
@@ -1005,101 +1001,129 @@ fn insert_type_fields(
     mut builder: FieldBuilder,
     reports: &mut Vec<Report>,
     strings: &mut StringInterner,
-    type_field_name: &str,
+    symbol_map: &SymbolMap,
+    root: &ast::Root,
+    outer_type: InvalidOuterContext,
 ) -> TypeId {
-    todo!()
-    // for field in fields {
-    //     let typ = field
-    //         .field
-    //         .typ()
-    //         .expect("inserted field should have a type");
-    //
-    //     let field_id = match ParsedType::new(&typ, strings) {
-    //         ParsedType::Primitive(primitive) => {
-    //             Some(builder.add_primitive(field.name, primitive, field.default))
-    //         }
-    //         ParsedType::Array(arr) => {
-    //             let Some(inner) = arr.typ() else {
-    //                 continue;
-    //             };
-    //
-    //             let (child_builder, field_id) = builder.start_array(field.name, field.default);
-    //             let type_id = lower_array_option(
-    //                 &inner,
-    //                 child_builder,
-    //                 reports,
-    //                 strings,
-    //                 source_map,
-    //                 "array",
-    //             );
-    //
-    //             if type_id.is_some() {
-    //                 Some(field_id)
-    //             } else {
-    //                 None
-    //             }
-    //         }
-    //         ParsedType::Option(opt) => {
-    //             let Some(inner) = opt.typ() else {
-    //                 continue;
-    //             };
-    //
-    //             let (child_builder, field_id) = builder.start_option(field.name, field.default);
-    //             let type_id = lower_array_option(
-    //                 &inner,
-    //                 child_builder,
-    //                 reports,
-    //                 strings,
-    //                 source_map,
-    //                 "option",
-    //             );
-    //
-    //             if type_id.is_some() {
-    //                 Some(field_id)
-    //             } else {
-    //                 None
-    //             }
-    //         }
-    //         ParsedType::Enum(_) => {
-    //             reports.push(new_invalid_inner_type(
-    //                 InvalidInnerContext::Enum,
-    //                 type_field_name,
-    //                 &typ,
-    //             ));
-    //             continue;
-    //         }
-    //         ParsedType::Response(_) => {
-    //             reports.push(new_invalid_inner_type(
-    //                 InvalidInnerContext::Response,
-    //                 type_field_name,
-    //                 &typ,
-    //             ));
-    //             continue;
-    //         }
-    //         ParsedType::Record(_) => {
-    //             reports.push(new_invalid_inner_type(
-    //                 InvalidInnerContext::Record,
-    //                 type_field_name,
-    //                 &typ,
-    //             ));
-    //             continue;
-    //         }
-    //         ParsedType::Union(_) => {
-    //             reports.push(new_invalid_inner_type(
-    //                 InvalidInnerContext::Union,
-    //                 type_field_name,
-    //                 &typ,
-    //             ));
-    //             continue;
-    //         }
-    //     };
-    //
-    //     let Some(field_id) = field_id else {
-    //         continue;
-    //     };
-    //
-    //     source_map.insert_type(field_id.type_id(), &typ);
-    // }
-    //
-    // builder.finish()
+    for field in fields {
+        let typ = field
+            .field
+            .typ()
+            .expect("inserted field should have a type");
+
+        match ParsedType::new(&typ, strings) {
+            ParsedType::Primitive(primitive) => {
+                builder.add_primitive(field.name, primitive, field.default, field.docs);
+            }
+            ParsedType::Reference { name, range } => {
+                match validate_reference(strings, symbol_map, root, reports, name, range) {
+                    None => (),
+                    Some(typ) => {
+                        builder.add_primitive(field.name, typ, field.default, field.docs);
+                    }
+                }
+            }
+            ParsedType::Array(arr) => {
+                let Some(inner) = arr.typ() else {
+                    continue;
+                };
+
+                let (child_builder, _) = builder.start_array(field.name, field.default, None);
+                lower_array_option(
+                    &inner,
+                    child_builder,
+                    reports,
+                    strings,
+                    symbol_map,
+                    root,
+                    InvalidOuterContext::Array,
+                );
+            }
+            ParsedType::Option(opt) => {
+                let Some(inner) = opt.typ() else {
+                    continue;
+                };
+
+                let (child_builder, _) =
+                    builder.start_option(field.name, field.default, field.docs);
+                lower_array_option(
+                    &inner,
+                    child_builder,
+                    reports,
+                    strings,
+                    symbol_map,
+                    root,
+                    InvalidOuterContext::Option,
+                );
+            }
+            ParsedType::Enum(_) => {
+                reports.push(new_invalid_inner_type(
+                    InvalidInnerContext::Enum,
+                    outer_type,
+                    &typ,
+                ));
+                continue;
+            }
+            ParsedType::Response(_) => {
+                reports.push(new_invalid_inner_type(
+                    InvalidInnerContext::Response,
+                    outer_type,
+                    &typ,
+                ));
+                continue;
+            }
+            ParsedType::Record(_) => {
+                reports.push(new_invalid_inner_type(
+                    InvalidInnerContext::Record,
+                    outer_type,
+                    &typ,
+                ));
+                continue;
+            }
+            ParsedType::Union(_) => {
+                reports.push(new_invalid_inner_type(
+                    InvalidInnerContext::Union,
+                    outer_type,
+                    &typ,
+                ));
+                continue;
+            }
+        };
+    }
+
+    builder.finish()
+}
+
+/// Check that names of type fields are unique.
+/// Fields are expected to be sorted by name.
+fn check_type_fields_unique(
+    fields: &[InternedField],
+    reports: &mut Vec<Report>,
+    strings: &StringInterner,
+) {
+    if fields.is_empty() {
+        return;
+    }
+
+    for idx in 0..(fields.len() - 1) {
+        if fields[idx].name != fields[idx + 1].name {
+            continue;
+        }
+
+        let name = strings.resolve(fields[idx].name);
+
+        let range = fields[idx + 1]
+            .field
+            .name()
+            .expect("collected type field should have a name")
+            .syntax()
+            .text_range();
+
+        reports.push(
+            Report::error(format!("repeated field name `{name}`")).add_label(Label::primary(
+                "repeated field name".to_string(),
+                range.into(),
+            )),
+        );
+    }
 }
