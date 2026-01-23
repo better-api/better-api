@@ -19,6 +19,8 @@ mod value;
 #[cfg(test)]
 mod tests;
 
+type SymbolMap = HashMap<StringId, ast::AstPtr<ast::TypeDefinition>>;
+
 /// Core type responsible for semantic analysis.
 #[derive(Clone)]
 pub struct Oracle<'a> {
@@ -35,7 +37,7 @@ pub struct Oracle<'a> {
     // Mappings used by oracle during validation.
     // This allows for partial & invalid spec to be analyzed fully, without
     // being lowered into valid data defined above.
-    symbol_map: HashMap<StringId, ast::AstPtr<ast::TypeDefinition>>,
+    symbol_map: SymbolMap,
     root: &'a ast::Root,
 
     // Reports generated during semantic analysis

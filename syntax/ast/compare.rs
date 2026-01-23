@@ -8,8 +8,13 @@ use super::*;
 /// `false` is returned. If it matches, `true` is returned.
 ///
 /// Caller does not need to handle reporting for mismatched types, as it is done here.
-pub fn value_matches_type(value: &Value, typ: &Type, reports: &mut Vec<Report>) -> bool {
-    match (value, typ) {
+pub fn value_matches_type<D: Fn(&TypeRef) -> Option<Type>>(
+    val: &Value,
+    typ: &Type,
+    reports: &mut Vec<Report>,
+    deref: D,
+) -> bool {
+    match (val, typ) {
         (Value::Integer(n), Type::TypeI32(_)) => check_integer::<i32>(n, "i32", reports),
         (Value::Integer(n), Type::TypeI64(_)) => check_integer::<i64>(n, "i64", reports),
         (Value::Integer(n), Type::TypeU32(_)) => check_integer::<u32>(n, "u32", reports),
@@ -33,16 +38,21 @@ pub fn value_matches_type(value: &Value, typ: &Type, reports: &mut Vec<Report>) 
 
         // TODO: handle `null` separately, when we get it parsed.
         (_, Type::TypeOption(opt)) => match opt.typ() {
-            Some(opt) => value_matches_type(value, &opt, reports),
+            Some(opt) => value_matches_type(val, &opt, reports, deref),
             // Error is reported by parser.
+            None => false,
+        },
+
+        (_, Type::TypeRef(reference)) => match deref(reference) {
+            Some(typ) => value_matches_type(val, &typ, reports, deref),
             None => false,
         },
 
         _ => {
             reports.push(
-                Report::error(format!("expected {typ}, found {value}")).add_label(Label::primary(
-                    format!("expected {typ}, found {value}"),
-                    value.syntax().text_range().into(),
+                Report::error(format!("expected {typ}, found {val}")).add_label(Label::primary(
+                    format!("expected {typ}, found {val}"),
+                    val.syntax().text_range().into(),
                 )),
             );
             false

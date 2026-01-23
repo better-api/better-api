@@ -4,7 +4,8 @@ use better_api_syntax::ast::{self, AstNode, AstPtr};
 use smallvec::SmallVec;
 
 use crate::Oracle;
-use crate::string::StringId;
+use crate::oracle::SymbolMap;
+use crate::string::{StringId, StringInterner};
 
 type ResolvePath = SmallVec<[StringId; 10]>;
 
@@ -32,62 +33,19 @@ pub(crate) enum ResolvedSymbol {
 }
 
 impl<'a> Oracle<'a> {
-    /// Dereferences a type reference node.
+    /// Dereferences a type reference node. Sugar for [`deref`].
     ///
     /// Errors are not reported. For detecting missing symbols, use [`Self::resolve`] which reports
     /// errors.
     pub(crate) fn deref(&self, node: &ast::TypeRef) -> Option<ast::Type> {
-        let name_token = node.name();
-        let name = name_token.text();
-        let Some(name_id) = self.strings.get(name) else {
-            return None;
-        };
-
-        match self.resolve(name_id, node.syntax().text_range()) {
-            ResolvedSymbol::Missing { .. } => None,
-            ResolvedSymbol::Cycle => None,
-            ResolvedSymbol::Type(typ) => Some(typ),
-        }
+        deref(&self.strings, &self.symbol_map, self.root, node)
     }
 
-    /// Resolve a symbol.
+    /// Resolve a symbol. Sugar for [`resolve`]
     ///
     /// In most cases, [`Self::deref`] should be used.
-    pub(crate) fn resolve(&self, mut name: StringId, mut range: TextRange) -> ResolvedSymbol {
-        let mut path = ResolvePath::new();
-
-        loop {
-            if path.contains(&name) {
-                return ResolvedSymbol::Cycle;
-            }
-            path.push(name);
-
-            let Some(next_type_def) = self
-                .symbol_map
-                .get(&name)
-                .map(|ptr| ptr.to_node(self.root.syntax()))
-            else {
-                return ResolvedSymbol::Missing { name, range };
-            };
-
-            let Some(next_type) = next_type_def.typ() else {
-                return ResolvedSymbol::Missing { name, range };
-            };
-
-            match next_type {
-                ast::Type::TypeRef(reference) => {
-                    let next_name = reference.name();
-                    let next_id = self.strings.get(next_name.text());
-                    if let Some(next) = next_id {
-                        name = next;
-                        range = reference.syntax().text_range();
-                    } else {
-                        return ResolvedSymbol::Missing { name, range };
-                    }
-                }
-                typ => return ResolvedSymbol::Type(typ),
-            }
-        }
+    pub(crate) fn resolve(&self, name: StringId, range: TextRange) -> ResolvedSymbol {
+        resolve(&self.strings, &self.symbol_map, self.root, name, range)
     }
 
     /// Builds symbol map and validates redefinitions and cycles.
@@ -306,6 +264,78 @@ impl<'a> Oracle<'a> {
                 "help: type cycles have to end with an Array or Option to avoid infinite recursion"
                     .to_string(),
             ),
+        }
+    }
+}
+
+/// Dereferences a type reference node.
+///
+/// Errors are not reported. For detecting missing symbols, use [`resolve`] which reports
+/// errors.
+pub(crate) fn deref(
+    strings: &StringInterner,
+    symbol_map: &SymbolMap,
+    root: &ast::Root,
+    node: &ast::TypeRef,
+) -> Option<ast::Type> {
+    let name_token = node.name();
+    let name = name_token.text();
+    let Some(name_id) = strings.get(name) else {
+        return None;
+    };
+
+    match resolve(
+        strings,
+        symbol_map,
+        root,
+        name_id,
+        node.syntax().text_range(),
+    ) {
+        ResolvedSymbol::Missing { .. } => None,
+        ResolvedSymbol::Cycle => None,
+        ResolvedSymbol::Type(typ) => Some(typ),
+    }
+}
+
+/// Resolve a symbol.
+///
+/// In most cases, [`deref`] should be used.
+pub(crate) fn resolve(
+    strings: &StringInterner,
+    symbol_map: &SymbolMap,
+    root: &ast::Root,
+    mut name: StringId,
+    mut range: TextRange,
+) -> ResolvedSymbol {
+    let mut path = ResolvePath::new();
+
+    loop {
+        if path.contains(&name) {
+            return ResolvedSymbol::Cycle;
+        }
+        path.push(name);
+
+        let Some(next_type_def) = symbol_map.get(&name).map(|ptr| ptr.to_node(root.syntax()))
+        else {
+            return ResolvedSymbol::Missing { name, range };
+        };
+
+        let Some(next_type) = next_type_def.typ() else {
+            return ResolvedSymbol::Missing { name, range };
+        };
+
+        match next_type {
+            ast::Type::TypeRef(reference) => {
+                let next_name = reference.name();
+                let next_id = strings.get(next_name.text());
+                if let Some(next) = next_id {
+                    name = next;
+                    range = reference.syntax().text_range();
+                } else {
+                    return ResolvedSymbol::Missing { name, range };
+                }
+            }
+            typ => return ResolvedSymbol::Type(typ),
         }
     }
 }

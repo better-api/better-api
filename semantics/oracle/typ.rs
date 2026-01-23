@@ -2,6 +2,7 @@ use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast::AstNode;
 use better_api_syntax::{TextRange, ast};
 
+use crate::oracle::symbols::deref;
 use crate::oracle::value::{lower_mime_types, lower_value};
 use crate::spec::typ::{
     EnumMember, FieldBuilder, OptionArrayBuilder, PrimitiveType, TypeDef, TypeId,
@@ -217,7 +218,6 @@ impl<'a> Oracle<'a> {
         // Parse enum members
         let mut builder = self.types.start_enum(type_id);
         let mut is_valid = true;
-
         for member in typ.members() {
             let Some(value) = member.value() else {
                 // Missing enum member value is reported by parser.
@@ -225,7 +225,10 @@ impl<'a> Oracle<'a> {
                 continue;
             };
 
-            if !ast::value_matches_type(&value, &enum_type, &mut self.reports) {
+            let deref = |reference: &ast::TypeRef| {
+                deref(&self.strings, &self.symbol_map, self.root, reference)
+            };
+            if !ast::value_matches_type(&value, &enum_type, &mut self.reports, deref) {
                 is_valid = false;
                 continue;
             }
