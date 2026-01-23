@@ -460,6 +460,7 @@ impl<'a> Oracle<'a> {
     /// Lowers union type and inserts it into arena
     fn lower_union(&mut self, union: &ast::Union) -> TypeId {
         let fields = self.parse_type_fields(union.fields(), false);
+        // TODO: Validate fields are valid, response is already here
         let builder = self.types.start_union(todo!("redefine union"));
         insert_type_fields(
             fields,
@@ -488,10 +489,12 @@ impl<'a> Oracle<'a> {
             .filter_map(|f| {
                 let typ = f.typ()?;
 
+                // Lower name
                 let name_id = f
                     .name()
                     .and_then(|n| lower_name(&n, &mut self.strings, &mut self.reports))?;
 
+                // Get default from prologue
                 let default = if parse_default {
                     f.prologue()
                         .and_then(|p| p.default())
@@ -502,12 +505,20 @@ impl<'a> Oracle<'a> {
                     None
                 };
 
-                if let Some(val) = &default {
+                // Check typ is valid
+                let typ_valid = self.require_not_response(&typ).is_ok();
+                // Don't
+
+                // Check default matches type. Only check if type is valid, to not have two reports
+                if let Some(val) = &default
+                    && typ_valid
+                {
                     ast::value_matches_type(val, &typ, &mut self.reports, |node| {
                         deref(&self.strings, &self.symbol_map, self.root, node)
                     });
                 }
 
+                // Lower default value
                 let default_id = default.map(|val| self.lower_value(&val));
 
                 Some(InternedField {
