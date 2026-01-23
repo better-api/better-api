@@ -118,6 +118,7 @@ impl<'a> Type<'a> {
                     current: TypeId(id.0 + 1),
                     end: *end,
                     id,
+                    phantom_field: std::marker::PhantomData,
                 },
             }),
             Slot::Union { discriminator, end } => Type::Union(Union {
@@ -128,6 +129,7 @@ impl<'a> Type<'a> {
                     current: TypeId(id.0 + 1),
                     end: *end,
                     id,
+                    phantom_field: std::marker::PhantomData,
                 },
             }),
 
@@ -154,10 +156,22 @@ impl<'a> Reference<'a> {
     }
 }
 
-/// Field exposed by a record or union.
+/// Internal representation of record and union field.
 ///
 /// Default is stored in the [`value::ValueArena`].
-pub struct TypeField<'a> {
+struct TypeField<'a> {
+    id: TypeFieldId,
+    name: StringId,
+    default: Option<value::ValueId>,
+    docs: Option<StringId>,
+    typ: Type<'a>,
+}
+
+/// Record field.
+///
+/// Default is stored in [`value::ValueArena`]
+#[derive(Clone)]
+pub struct RecordField<'a> {
     pub id: TypeFieldId,
     pub name: StringId,
     pub default: Option<value::ValueId>,
@@ -165,11 +179,43 @@ pub struct TypeField<'a> {
     pub typ: Type<'a>,
 }
 
+impl<'a> From<TypeField<'a>> for RecordField<'a> {
+    fn from(value: TypeField<'a>) -> Self {
+        Self {
+            id: value.id,
+            name: value.name,
+            default: value.default,
+            docs: value.docs,
+            typ: value.typ,
+        }
+    }
+}
+
+/// Union field.
+#[derive(Clone)]
+pub struct UnionField<'a> {
+    pub id: TypeFieldId,
+    pub name: StringId,
+    pub docs: Option<StringId>,
+    pub typ: Type<'a>,
+}
+
+impl<'a> From<TypeField<'a>> for UnionField<'a> {
+    fn from(value: TypeField<'a>) -> Self {
+        Self {
+            id: value.id,
+            name: value.name,
+            docs: value.docs,
+            typ: value.typ,
+        }
+    }
+}
+
 /// Iterator returned for composite types.
 ///
 /// Each item is a [`TypeField`].
 #[derive(derive_more::Debug, Clone)]
-pub struct TypeFieldIterator<'a> {
+pub struct TypeFieldIterator<'a, F> {
     #[debug(skip)]
     arena: &'a TypeArena,
     current: TypeId,
@@ -177,10 +223,12 @@ pub struct TypeFieldIterator<'a> {
 
     // Id of the record or union
     id: TypeId,
+
+    phantom_field: std::marker::PhantomData<F>,
 }
 
-impl<'a> Iterator for TypeFieldIterator<'a> {
-    type Item = TypeField<'a>;
+impl<'a, F: From<TypeField<'a>>> Iterator for TypeFieldIterator<'a, F> {
+    type Item = F;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.current.0 >= self.end.0 {
@@ -202,7 +250,7 @@ impl<'a> Iterator for TypeFieldIterator<'a> {
             typ => unreachable!("invalid type's field type in arena: {typ:?}"),
         };
 
-        Some(field)
+        Some(field.into())
     }
 }
 
@@ -214,12 +262,12 @@ pub struct Record<'a> {
     // Id of the record
     pub id: TypeId,
 
-    fields: TypeFieldIterator<'a>,
+    fields: TypeFieldIterator<'a, RecordField<'a>>,
 }
 
 impl<'a> Record<'a> {
-    /// Returns iterator over [record fields](TypeField)
-    pub fn fields(&self) -> TypeFieldIterator<'a> {
+    /// Returns iterator over [record fields](RecordField)
+    pub fn fields(&self) -> TypeFieldIterator<'a, RecordField<'a>> {
         self.fields.clone()
     }
 }
@@ -233,12 +281,12 @@ pub struct Union<'a> {
     pub id: TypeId,
     pub disriminator: StringId,
 
-    fields: TypeFieldIterator<'a>,
+    fields: TypeFieldIterator<'a, UnionField<'a>>,
 }
 
 impl<'a> Union<'a> {
-    /// Returns iterator over [union fields](TypeField)
-    pub fn fields(&self) -> TypeFieldIterator<'a> {
+    /// Returns iterator over [union fields](UnionField)
+    pub fn fields(&self) -> TypeFieldIterator<'a, UnionField<'a>> {
         self.fields.clone()
     }
 }
@@ -783,7 +831,7 @@ impl TypeArena {
     }
 
     /// Get [`TypeField`] by id.
-    pub fn get_field<'a>(&'a self, id: TypeFieldId) -> TypeField<'a> {
+    fn get_field<'a>(&'a self, id: TypeFieldId) -> TypeField<'a> {
         let field_slot = &self.data[id.slot_idx as usize];
         let typ_slot = &self.data[id.slot_idx as usize + 1];
 
@@ -805,6 +853,16 @@ impl TypeArena {
             docs,
             typ,
         }
+    }
+
+    /// Get [`UnionField`] by id.
+    pub fn get_union_field<'a>(&'a self, id: TypeFieldId) -> UnionField<'a> {
+        self.get_field(id).into()
+    }
+
+    /// Get [`RecordField`] by id.
+    pub fn get_record_field<'a>(&'a self, id: TypeFieldId) -> RecordField<'a> {
+        self.get_field(id).into()
     }
 
     /// Add a primitive type to the arena.
