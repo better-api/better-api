@@ -280,9 +280,7 @@ pub(crate) fn deref(
 ) -> Option<ast::Type> {
     let name_token = node.name();
     let name = name_token.text();
-    let Some(name_id) = strings.get(name) else {
-        return None;
-    };
+    let name_id = strings.get(name)?;
 
     match resolve(
         strings,

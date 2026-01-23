@@ -2,7 +2,8 @@ use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast::AstNode;
 use better_api_syntax::{TextRange, ast};
 
-use crate::oracle::symbols::{ResolvedSymbol, deref, report_missing};
+use crate::oracle::SymbolMap;
+use crate::oracle::symbols::{ResolvedSymbol, deref, report_missing, resolve};
 use crate::oracle::value::{lower_mime_types, lower_value};
 use crate::spec::typ::{
     EnumMember, FieldBuilder, OptionArrayBuilder, PrimitiveType, TypeDef, TypeId,
@@ -27,7 +28,7 @@ struct InternedField {
 /// Helper type for handling primitive types separately from composite ones.
 enum ParsedType<'a> {
     Primitive(PrimitiveType),
-    Reference(StringId),
+    Reference { name: StringId, range: TextRange },
     Enum(&'a ast::Enum),
     Response(&'a ast::TypeResponse),
     Record(&'a ast::Record),
@@ -49,7 +50,10 @@ impl<'a> ParsedType<'a> {
                 let token = typ_ref.name();
                 let str_id = strings.get_or_intern(token.text());
 
-                Self::Reference(str_id)
+                Self::Reference {
+                    name: str_id,
+                    range: typ.syntax().text_range(),
+                }
             }
             ast::Type::TypeI32(_) => Self::Primitive(PrimitiveType::I32),
             ast::Type::TypeI64(_) => Self::Primitive(PrimitiveType::I64),
@@ -105,23 +109,17 @@ impl<'a> Oracle<'a> {
     pub(crate) fn lower_type(&mut self, typ: &ast::Type) -> Option<TypeId> {
         match ParsedType::new(typ, &mut self.strings) {
             ParsedType::Primitive(primitive) => Some(self.types.add_primitive(primitive)),
-            ParsedType::Reference(reference) => {
-                match self.resolve(reference, typ.syntax().text_range()) {
-                    ResolvedSymbol::Missing { name, range } => {
-                        let name_str = self.strings.resolve(name);
-                        self.reports.push(report_missing(name_str, range));
-                        None
-                    }
-
-                    // Report created during cycle detection
-                    ResolvedSymbol::Cycle => None,
-
-                    // We don't care to what it resolves to, we just care that it resolves to
-                    // something
-                    ResolvedSymbol::Type(_) => Some(
-                        self.types
-                            .add_primitive(PrimitiveType::Reference(reference)),
-                    ),
+            ParsedType::Reference { name, range } => {
+                match validate_reference(
+                    &self.strings,
+                    &self.symbol_map,
+                    self.root,
+                    &mut self.reports,
+                    name,
+                    range,
+                ) {
+                    None => None,
+                    Some(typ) => Some(self.types.add_primitive(typ)),
                 }
             }
             ParsedType::Enum(en) => self.lower_enum(en),
@@ -136,7 +134,9 @@ impl<'a> Oracle<'a> {
                     builder,
                     &mut self.reports,
                     &mut self.strings,
-                    "array",
+                    &self.symbol_map,
+                    self.root,
+                    InvalidOuterContext::Array,
                 )
             }
             ParsedType::Option(opt) => {
@@ -147,7 +147,9 @@ impl<'a> Oracle<'a> {
                     builder,
                     &mut self.reports,
                     &mut self.strings,
-                    "option",
+                    &self.symbol_map,
+                    self.root,
+                    InvalidOuterContext::Option,
                 )
             }
         }
@@ -823,6 +825,34 @@ enum SimpleRecordReportType<'a> {
     CompositeField(&'a ast::TypeField),
 }
 
+/// Validates reference is valid.
+///
+/// Reports are pushed to `reports` on the fly. If reference is valid, [`PrimitiveType`] that can
+/// be inserted into types arena is returned, otherwise `None` is returned.
+fn validate_reference(
+    strings: &StringInterner,
+    symbol_map: &SymbolMap,
+    root: &ast::Root,
+    reports: &mut Vec<Report>,
+    reference: StringId,
+    range: TextRange,
+) -> Option<PrimitiveType> {
+    match resolve(strings, symbol_map, root, reference, range) {
+        ResolvedSymbol::Missing { name, range } => {
+            let name_str = strings.resolve(name);
+            reports.push(report_missing(name_str, range));
+            None
+        }
+
+        // Report created during cycle detection
+        ResolvedSymbol::Cycle => None,
+
+        // We don't care to what it resolves to, we just care that it resolves to
+        // something
+        ResolvedSymbol::Type(_) => Some(PrimitiveType::Reference(reference)),
+    }
+}
+
 /// Lowers array or option by using the [`OptionArrayBuilder`].
 ///
 /// It inserts the `inner` type to the builder and returns the id of the constructed
@@ -832,68 +862,86 @@ fn lower_array_option(
     mut builder: OptionArrayBuilder,
     reports: &mut Vec<Report>,
     strings: &mut StringInterner,
-    outer_type_name: &str,
+    symbol_map: &SymbolMap,
+    root: &ast::Root,
+    outer_type: InvalidOuterContext,
 ) -> Option<TypeId> {
-    todo!()
-    // let container_id = match ParsedType::new(inner, strings) {
-    //     ParsedType::Primitive(primitive) => {
-    //         let res = builder.finish(primitive);
-    //         res.container_id
-    //     }
-    //     ParsedType::Array(arr) => {
-    //         // Error for empty inner type is reported by parser.
-    //         let inner = arr.typ()?;
-    //         builder.start_array();
-    //         let container_id =
-    //             lower_array_option(&inner, builder, reports, strings, outer_type_name)?;
-    //
-    //         container_id
-    //     }
-    //     ParsedType::Option(opt) => {
-    //         // Error for empty inner type is reported by parser.
-    //         let inner = opt.typ()?;
-    //         builder.start_option();
-    //         let container_id =
-    //             lower_array_option(&inner, builder, reports, strings, outer_type_name)?;
-    //
-    //         container_id
-    //     }
-    //
-    //     ParsedType::Enum(_) => {
-    //         reports.push(new_invalid_inner_type(
-    //             InvalidInnerContext::Enum,
-    //             outer_type_name,
-    //             inner,
-    //         ));
-    //         return None;
-    //     }
-    //     ParsedType::Response(_) => {
-    //         reports.push(new_invalid_inner_type(
-    //             InvalidInnerContext::Response,
-    //             outer_type_name,
-    //             inner,
-    //         ));
-    //         return None;
-    //     }
-    //     ParsedType::Record(_) => {
-    //         reports.push(new_invalid_inner_type(
-    //             InvalidInnerContext::Record,
-    //             outer_type_name,
-    //             inner,
-    //         ));
-    //         return None;
-    //     }
-    //     ParsedType::Union(_) => {
-    //         reports.push(new_invalid_inner_type(
-    //             InvalidInnerContext::Union,
-    //             outer_type_name,
-    //             inner,
-    //         ));
-    //         return None;
-    //     }
-    // };
-    //
-    // Some(container_id)
+    match ParsedType::new(inner, strings) {
+        ParsedType::Primitive(primitive) => {
+            let res = builder.finish(primitive);
+            Some(res.container_id)
+        }
+        ParsedType::Reference { name, range } => {
+            match validate_reference(strings, symbol_map, root, reports, name, range) {
+                None => None,
+                Some(typ) => {
+                    let res = builder.finish(typ);
+                    Some(res.container_id)
+                }
+            }
+        }
+        ParsedType::Array(arr) => {
+            // Error for empty inner type is reported by parser.
+            let inner = arr.typ()?;
+            builder.start_array();
+            lower_array_option(
+                &inner,
+                builder,
+                reports,
+                strings,
+                symbol_map,
+                root,
+                InvalidOuterContext::Array,
+            )
+        }
+        ParsedType::Option(opt) => {
+            // Error for empty inner type is reported by parser.
+            let inner = opt.typ()?;
+            builder.start_option();
+            lower_array_option(
+                &inner,
+                builder,
+                reports,
+                strings,
+                symbol_map,
+                root,
+                InvalidOuterContext::Option,
+            )
+        }
+
+        ParsedType::Enum(_) => {
+            reports.push(new_invalid_inner_type(
+                InvalidInnerContext::Enum,
+                outer_type,
+                inner,
+            ));
+            None
+        }
+        ParsedType::Response(_) => {
+            reports.push(new_invalid_inner_type(
+                InvalidInnerContext::Response,
+                outer_type,
+                inner,
+            ));
+            None
+        }
+        ParsedType::Record(_) => {
+            reports.push(new_invalid_inner_type(
+                InvalidInnerContext::Record,
+                outer_type,
+                inner,
+            ));
+            None
+        }
+        ParsedType::Union(_) => {
+            reports.push(new_invalid_inner_type(
+                InvalidInnerContext::Union,
+                outer_type,
+                inner,
+            ));
+            None
+        }
+    }
 }
 
 /// Helper type for passing around the context in which an invalid inner
@@ -913,11 +961,25 @@ enum InvalidInnerContext {
     Response,
 }
 
+/// Helper type for passing around the context in which an invalid inner
+/// type has been found
+#[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display)]
+enum InvalidOuterContext {
+    #[display("option")]
+    Option,
+    #[display("array")]
+    Array,
+}
+
 /// Constructs a [`Report`] for reporting that a type contains invalid inner(inline) type.
 ///
 /// For instance, when parsing a record, not all types are valid inside a record field.
 /// This function can be used to construct a [`Report`] that tells the user about invalid type.
-fn new_invalid_inner_type(inner: InvalidInnerContext, outer: &str, node: &impl AstNode) -> Report {
+fn new_invalid_inner_type(
+    inner: InvalidInnerContext,
+    outer: InvalidOuterContext,
+    node: &impl AstNode,
+) -> Report {
     let range = node.syntax().text_range();
 
     let syntax_example = match inner {
