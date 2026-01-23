@@ -2,7 +2,7 @@ use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast::AstNode;
 use better_api_syntax::{TextRange, ast};
 
-use crate::oracle::symbols::deref;
+use crate::oracle::symbols::{ResolvedSymbol, deref, report_missing};
 use crate::oracle::value::{lower_mime_types, lower_value};
 use crate::spec::typ::{
     EnumMember, FieldBuilder, OptionArrayBuilder, PrimitiveType, TypeDef, TypeId,
@@ -106,7 +106,23 @@ impl<'a> Oracle<'a> {
         match ParsedType::new(typ, &mut self.strings) {
             ParsedType::Primitive(primitive) => Some(self.types.add_primitive(primitive)),
             ParsedType::Reference(reference) => {
-                todo!("implement lower_reference - check it exists, then lower")
+                match self.resolve(reference, typ.syntax().text_range()) {
+                    ResolvedSymbol::Missing { name, range } => {
+                        let name_str = self.strings.resolve(name);
+                        self.reports.push(report_missing(name_str, range));
+                        None
+                    }
+
+                    // Report created during cycle detection
+                    ResolvedSymbol::Cycle => None,
+
+                    // We don't care to what it resolves to, we just care that it resolves to
+                    // something
+                    ResolvedSymbol::Type(_) => Some(
+                        self.types
+                            .add_primitive(PrimitiveType::Reference(reference)),
+                    ),
+                }
             }
             ParsedType::Enum(en) => self.lower_enum(en),
             ParsedType::Response(resp) => self.lower_response(resp),
