@@ -12,7 +12,7 @@ pub fn value_matches_type<D: Fn(&TypeRef) -> Option<Type>>(
     val: &Value,
     typ: &Type,
     reports: &mut Vec<Report>,
-    deref: D,
+    deref: &D,
 ) -> bool {
     match (val, typ) {
         (Value::Integer(n), Type::TypeI32(_)) => check_integer::<i32>(n, "i32", reports),
@@ -145,12 +145,12 @@ fn compare_arrays<D: Fn(&TypeRef) -> Option<Type>>(
     arr: &Array,
     arr_type: &TypeArray,
     reports: &mut Vec<Report>,
-    deref: D,
+    deref: &D,
 ) -> bool {
     let Some(typ) = arr_type.typ() else {
         return false;
     };
 
     arr.values()
-        .all(|val| value_matches_type(&val, &typ, reports, &deref))
+        .all(|val| value_matches_type(&val, &typ, reports, deref))
 }

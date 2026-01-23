@@ -246,7 +246,7 @@ impl<'a> Oracle<'a> {
             let deref = |reference: &ast::TypeRef| {
                 deref(&self.strings, &self.symbol_map, self.root, reference)
             };
-            if !ast::value_matches_type(&value, &enum_type, &mut self.reports, deref) {
+            if !ast::value_matches_type(&value, &enum_type, &mut self.reports, &deref) {
                 is_valid = false;
                 continue;
             }
@@ -358,7 +358,7 @@ impl<'a> Oracle<'a> {
                 report
             };
 
-            match self.require_no_file(&body, report_builder) {
+            match self.require_no_file(&body, &report_builder) {
                 Ok(_) => (),
                 Err(_) => is_valid = false,
             }
@@ -401,7 +401,7 @@ impl<'a> Oracle<'a> {
                 ))
         };
 
-        match self.require_no_file(headers, file_report_builder) {
+        match self.require_no_file(headers, &file_report_builder) {
             Ok(_) => (),
             Err(_) => is_valid = false,
         }
@@ -513,9 +513,10 @@ impl<'a> Oracle<'a> {
                 if let Some(val) = &default
                     && typ_valid
                 {
-                    ast::value_matches_type(val, &typ, &mut self.reports, |node| {
+                    let deref = |node: &ast::TypeRef| {
                         deref(&self.strings, &self.symbol_map, self.root, node)
-                    });
+                    };
+                    ast::value_matches_type(val, &typ, &mut self.reports, &deref);
                 }
 
                 // Lower default value
@@ -625,7 +626,7 @@ impl<'a> Oracle<'a> {
     /// Reports are added to self.reports on the fly.
     ///
     /// If no reports are generated (node is valid), Ok is returned, otherwise Err.
-    fn require_no_file<R>(&mut self, node: &ast::Type, build_report: R) -> Result<(), ()>
+    fn require_no_file<R>(&mut self, node: &ast::Type, build_report: &R) -> Result<(), ()>
     where
         R: Fn(TextRange) -> Report,
     {
@@ -657,7 +658,7 @@ impl<'a> Oracle<'a> {
                 let valid = record.fields().all(|field| {
                     field
                         .typ()
-                        .is_none_or(|typ| self.require_no_file(&typ, &build_report).is_ok())
+                        .is_none_or(|typ| self.require_no_file(&typ, build_report).is_ok())
                 });
 
                 if valid { Ok(()) } else { Err(()) }
@@ -666,7 +667,7 @@ impl<'a> Oracle<'a> {
                 let valid = union.fields().all(|field| {
                     field
                         .typ()
-                        .is_none_or(|typ| self.require_no_file(&typ, &build_report).is_ok())
+                        .is_none_or(|typ| self.require_no_file(&typ, build_report).is_ok())
                 });
 
                 if valid { Ok(()) } else { Err(()) }
