@@ -18,9 +18,9 @@
 use crate::spec::value::{self, ValueId};
 use crate::string::StringId;
 
-/// Representation of a type.
-#[derive(Debug, Clone, derive_more::Display)]
-pub enum Type<'a> {
+/// Primitive types.
+#[derive(Debug, Clone, Copy, PartialEq, derive_more::Display)]
+pub enum PrimitiveType {
     #[display("`i32`")]
     I32,
     #[display("`i64`")]
@@ -43,10 +43,57 @@ pub enum Type<'a> {
     String,
     #[display("`file`")]
     File,
+
+    /// Reference to a named type.
+    #[display("`reference`")]
+    Reference(StringId),
+}
+
+/// Simple types.
+///
+/// Simple types are primitive types, option and array
+#[derive(Debug, Clone, derive_more::Display)]
+pub enum SimpleType<'a> {
+    // derive_more::Display will use display of PrimitiveType by default.
+    Primitive(PrimitiveType),
+
     #[display("`option`")]
     Option(Reference<'a>),
     #[display("`array`")]
     Array(Reference<'a>),
+}
+
+impl From<PrimitiveType> for SimpleType<'_> {
+    fn from(value: PrimitiveType) -> Self {
+        Self::Primitive(value)
+    }
+}
+
+impl<'a> SimpleType<'a> {
+    fn from_slot(arena: &'a TypeArena, id: TypeId, slot: &'a Slot) -> Self {
+        match slot {
+            Slot::Primitive(simple) => (*simple).into(),
+            Slot::Array { .. } => Self::Array(Reference {
+                arena,
+                id: TypeId(id.0 + 1),
+            }),
+            Slot::Option { .. } => Self::Option(Reference {
+                arena,
+                id: TypeId(id.0 + 1),
+            }),
+
+            // The arena should make it impossible to construct invalid conversion
+            _ => unreachable!("invalid conversion of {slot:?} to SimpleType"),
+        }
+    }
+}
+
+/// Any type.
+#[derive(Debug, Clone, derive_more::Display)]
+pub enum Type<'a> {
+    // derive_more::Display will use display of SimpleType by default.
+    Simple(SimpleType<'a>),
+
     #[display("`record`")]
     Record(Record<'a>),
     #[display("`union`")]
@@ -55,43 +102,27 @@ pub enum Type<'a> {
     Enum(Enum<'a>),
     #[display("`response`")]
     Response(Response<'a>),
+}
 
-    /// Reference to a named type.
-    #[display("`reference`")]
-    Reference(StringId),
+impl<'a> From<SimpleType<'a>> for Type<'a> {
+    fn from(value: SimpleType<'a>) -> Self {
+        Self::Simple(value)
+    }
 }
 
 impl From<PrimitiveType> for Type<'_> {
     fn from(value: PrimitiveType) -> Self {
-        match value {
-            PrimitiveType::I32 => Type::I32,
-            PrimitiveType::I64 => Type::I64,
-            PrimitiveType::U32 => Type::U32,
-            PrimitiveType::U64 => Type::U64,
-            PrimitiveType::F32 => Type::F32,
-            PrimitiveType::F64 => Type::F64,
-            PrimitiveType::Date => Type::Date,
-            PrimitiveType::Timestamp => Type::Timestamp,
-            PrimitiveType::Bool => Type::Bool,
-            PrimitiveType::String => Type::String,
-            PrimitiveType::File => Type::File,
-            PrimitiveType::Reference(name) => Type::Reference(name),
-        }
+        Self::Simple(SimpleType::Primitive(value))
     }
 }
 
 impl<'a> Type<'a> {
     fn from_slot(arena: &'a TypeArena, id: TypeId, slot: &'a Slot) -> Self {
         match slot {
-            Slot::Primitive(simple) => (*simple).into(),
-            Slot::Array { .. } => Type::Array(Reference {
-                arena,
-                id: TypeId(id.0 + 1),
-            }),
-            Slot::Option { .. } => Type::Option(Reference {
-                arena,
-                id: TypeId(id.0 + 1),
-            }),
+            Slot::Primitive(_) | Slot::Array { .. } | Slot::Option { .. } => {
+                Self::Simple(SimpleType::from_slot(arena, id, slot))
+            }
+
             Slot::Enum { typ, end } => Type::Enum(Enum {
                 id,
                 typ: Reference { arena, id: *typ },
@@ -139,7 +170,7 @@ impl<'a> Type<'a> {
     }
 }
 
-/// Reference to a type stored in the [`TypeArena`].
+/// Reference to a [`SimpleType`] stored in the [`TypeArena`].
 #[derive(derive_more::Debug, Clone)]
 pub struct Reference<'a> {
     /// Id of the type in the arena.
@@ -151,8 +182,9 @@ pub struct Reference<'a> {
 
 impl<'a> Reference<'a> {
     /// Resolve the referenced type.
-    pub fn typ(&self) -> Type<'a> {
-        self.arena.get(self.id)
+    pub fn typ(&self) -> SimpleType<'a> {
+        let typ = &self.arena.data[self.id.0 as usize];
+        SimpleType::from_slot(self.arena, self.id, typ)
     }
 }
 
@@ -164,7 +196,7 @@ struct TypeField<'a> {
     name: StringId,
     default: Option<value::ValueId>,
     docs: Option<StringId>,
-    typ: Type<'a>,
+    typ: SimpleType<'a>,
 }
 
 /// Record field.
@@ -176,7 +208,7 @@ pub struct RecordField<'a> {
     pub name: StringId,
     pub default: Option<value::ValueId>,
     pub docs: Option<StringId>,
-    pub typ: Type<'a>,
+    pub typ: SimpleType<'a>,
 }
 
 impl<'a> From<TypeField<'a>> for RecordField<'a> {
@@ -197,7 +229,7 @@ pub struct UnionField<'a> {
     pub id: TypeFieldId,
     pub name: StringId,
     pub docs: Option<StringId>,
-    pub typ: Type<'a>,
+    pub typ: SimpleType<'a>,
 }
 
 impl<'a> From<TypeField<'a>> for UnionField<'a> {
@@ -390,25 +422,6 @@ impl TypeFieldId {
     pub fn type_id(&self) -> TypeId {
         TypeId(self.slot_idx + 1)
     }
-}
-
-/// Simple types.
-///
-/// These types can be constructed without using a builder.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum PrimitiveType {
-    I32,
-    I64,
-    U32,
-    U64,
-    F32,
-    F64,
-    Date,
-    Timestamp,
-    Bool,
-    String,
-    File,
-    Reference(StringId),
 }
 
 /// Slot in the type arena.
@@ -844,7 +857,7 @@ impl TypeArena {
             val => unreachable!("invalid type field in arena for id {id:?}: {val:?}"),
         };
 
-        let typ = Type::from_slot(self, TypeId(id.slot_idx + 1), typ_slot);
+        let typ = SimpleType::from_slot(self, TypeId(id.slot_idx + 1), typ_slot);
 
         TypeField {
             id,
@@ -936,7 +949,7 @@ impl TypeArena {
 #[cfg(test)]
 mod test {
     use super::{PrimitiveType, Slot, Type, TypeArena, TypeFieldId, TypeId};
-    use crate::string::StringInterner;
+    use crate::{spec::typ::SimpleType, string::StringInterner};
 
     #[test]
     fn builds_nested_types() {
@@ -1067,9 +1080,18 @@ mod test {
         }
 
         // Test getting primitive types
-        assert!(matches!(arena.get(i32_id), Type::I32));
-        assert!(matches!(arena.get(string_id), Type::String));
-        assert!(matches!(arena.get(bool_id), Type::Bool));
+        assert!(matches!(
+            arena.get(i32_id),
+            Type::Simple(SimpleType::Primitive(PrimitiveType::I32))
+        ));
+        assert!(matches!(
+            arena.get(string_id),
+            Type::Simple(SimpleType::Primitive(PrimitiveType::String))
+        ));
+        assert!(matches!(
+            arena.get(bool_id),
+            Type::Simple(SimpleType::Primitive(PrimitiveType::Bool))
+        ));
 
         // Test getting the root record
         let root_type = arena.get(root_id);
@@ -1083,15 +1105,21 @@ mod test {
         // Check id field
         let id_field = root_record_fields.next().expect("id field");
         assert!(id_field.name == id_str);
-        assert!(matches!(id_field.typ, Type::I64));
+        assert!(matches!(
+            id_field.typ,
+            SimpleType::Primitive(PrimitiveType::I64)
+        ));
         assert!(id_field.default.is_none());
 
         // Check simple_array field
         let simple_array_field = root_record_fields.next().expect("simple_array field");
         assert!(simple_array_field.name == simple_array_str);
         match simple_array_field.typ {
-            Type::Array(ref inner) => {
-                assert!(matches!(inner.typ(), Type::F32));
+            SimpleType::Array(ref inner) => {
+                assert!(matches!(
+                    inner.typ(),
+                    SimpleType::Primitive(PrimitiveType::F32)
+                ));
             }
             other => panic!("expected array type, got {other:?}"),
         }
@@ -1102,26 +1130,29 @@ mod test {
 
         // Navigate through [[[string?]]]
         let level1 = match values_field.typ {
-            Type::Array(ref inner) => inner.typ(),
+            SimpleType::Array(ref inner) => inner.typ(),
             other => panic!("expected array at level 1, got {other:?}"),
         };
 
         let level2 = match level1 {
-            Type::Array(ref inner) => inner.typ(),
+            SimpleType::Array(ref inner) => inner.typ(),
             other => panic!("expected array at level 2, got {other:?}"),
         };
 
         let level3 = match level2 {
-            Type::Array(ref inner) => inner.typ(),
+            SimpleType::Array(ref inner) => inner.typ(),
             other => panic!("expected array at level 3, got {other:?}"),
         };
 
         let option_inner = match level3 {
-            Type::Option(ref inner) => inner.typ(),
+            SimpleType::Option(ref inner) => inner.typ(),
             other => panic!("expected option, got {other:?}"),
         };
 
-        assert!(matches!(option_inner, Type::String));
+        assert!(matches!(
+            option_inner,
+            SimpleType::Primitive(PrimitiveType::String)
+        ));
 
         // Check metadata field
         let metadata_field = root_record_fields.next().expect("metadata field");
@@ -1141,28 +1172,37 @@ mod test {
 
         let success_field = union_fields.next().expect("success field");
         assert!(success_field.name == success_str);
-        assert!(matches!(success_field.typ, Type::Bool));
+        assert!(matches!(
+            success_field.typ,
+            SimpleType::Primitive(PrimitiveType::Bool)
+        ));
 
         let error_field = union_fields.next().expect("error field");
         assert!(error_field.name == error_str);
-        assert!(matches!(error_field.typ, Type::String));
+        assert!(matches!(
+            error_field.typ,
+            SimpleType::Primitive(PrimitiveType::String)
+        ));
 
         assert!(union_fields.next().is_none());
 
         // Test getting values array type directly
         let values_type = arena.get(values_id.container_id);
         match values_type {
-            Type::Array(ref inner) => {
+            Type::Simple(SimpleType::Array(ref inner)) => {
                 let level1 = inner.typ();
                 match level1 {
-                    Type::Array(ref inner2) => {
+                    SimpleType::Array(ref inner2) => {
                         let level2 = inner2.typ();
                         match level2 {
-                            Type::Array(ref inner3) => {
+                            SimpleType::Array(ref inner3) => {
                                 let level3 = inner3.typ();
                                 match level3 {
-                                    Type::Option(ref inner4) => {
-                                        assert!(matches!(inner4.typ(), Type::String));
+                                    SimpleType::Option(ref inner4) => {
+                                        assert!(matches!(
+                                            inner4.typ(),
+                                            SimpleType::Primitive(PrimitiveType::String)
+                                        ));
                                     }
                                     other => {
                                         panic!("expected option at deepest level, got {other:?}")
