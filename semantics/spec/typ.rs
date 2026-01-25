@@ -149,7 +149,6 @@ impl<'a> Type<'a> {
                     current: TypeId(id.0 + 1),
                     end: *end,
                     id,
-                    phantom_field: std::marker::PhantomData,
                 },
             }),
             Slot::Union { discriminator, end } => Type::Union(Union {
@@ -160,7 +159,6 @@ impl<'a> Type<'a> {
                     current: TypeId(id.0 + 1),
                     end: *end,
                     id,
-                    phantom_field: std::marker::PhantomData,
                 },
             }),
 
@@ -191,7 +189,7 @@ impl<'a> Reference<'a> {
 /// Internal representation of record and union field.
 ///
 /// Default is stored in the [`value::ValueArena`].
-struct TypeField<'a> {
+struct TypeFieldInner<'a> {
     id: TypeFieldId,
     name: StringId,
     default: Option<value::ValueId>,
@@ -211,8 +209,8 @@ pub struct RecordField<'a> {
     pub typ: SimpleType<'a>,
 }
 
-impl<'a> From<TypeField<'a>> for RecordField<'a> {
-    fn from(value: TypeField<'a>) -> Self {
+impl<'a> From<TypeFieldInner<'a>> for RecordField<'a> {
+    fn from(value: TypeFieldInner<'a>) -> Self {
         Self {
             id: value.id,
             name: value.name,
@@ -232,8 +230,8 @@ pub struct UnionField<'a> {
     pub typ: SimpleType<'a>,
 }
 
-impl<'a> From<TypeField<'a>> for UnionField<'a> {
-    fn from(value: TypeField<'a>) -> Self {
+impl<'a> From<TypeFieldInner<'a>> for UnionField<'a> {
+    fn from(value: TypeFieldInner<'a>) -> Self {
         Self {
             id: value.id,
             name: value.name,
@@ -247,7 +245,7 @@ impl<'a> From<TypeField<'a>> for UnionField<'a> {
 ///
 /// Each item is a [`TypeField`].
 #[derive(derive_more::Debug, Clone)]
-pub struct TypeFieldIterator<'a, F> {
+struct TypeFieldIterator<'a> {
     #[debug(skip)]
     arena: &'a TypeArena,
     current: TypeId,
@@ -255,12 +253,10 @@ pub struct TypeFieldIterator<'a, F> {
 
     // Id of the record or union
     id: TypeId,
-
-    phantom_field: std::marker::PhantomData<F>,
 }
 
-impl<'a, F: From<TypeField<'a>>> Iterator for TypeFieldIterator<'a, F> {
-    type Item = F;
+impl<'a> Iterator for TypeFieldIterator<'a> {
+    type Item = TypeFieldInner<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.current.0 >= self.end.0 {
@@ -282,7 +278,7 @@ impl<'a, F: From<TypeField<'a>>> Iterator for TypeFieldIterator<'a, F> {
             typ => unreachable!("invalid type's field type in arena: {typ:?}"),
         };
 
-        Some(field.into())
+        Some(field)
     }
 }
 
@@ -294,13 +290,13 @@ pub struct Record<'a> {
     // Id of the record
     pub id: TypeId,
 
-    fields: TypeFieldIterator<'a, RecordField<'a>>,
+    fields: TypeFieldIterator<'a>,
 }
 
 impl<'a> Record<'a> {
     /// Returns iterator over [record fields](RecordField)
-    pub fn fields(&self) -> TypeFieldIterator<'a, RecordField<'a>> {
-        self.fields.clone()
+    pub fn fields(&self) -> impl Iterator<Item = RecordField<'a>> {
+        self.fields.clone().map(|it| it.into())
     }
 }
 
@@ -313,13 +309,13 @@ pub struct Union<'a> {
     pub id: TypeId,
     pub disriminator: StringId,
 
-    fields: TypeFieldIterator<'a, UnionField<'a>>,
+    fields: TypeFieldIterator<'a>,
 }
 
 impl<'a> Union<'a> {
     /// Returns iterator over [union fields](UnionField)
-    pub fn fields(&self) -> TypeFieldIterator<'a, UnionField<'a>> {
-        self.fields.clone()
+    pub fn fields(&self) -> impl Iterator<Item = UnionField<'a>> {
+        self.fields.clone().map(|it| it.into())
     }
 }
 
@@ -844,7 +840,7 @@ impl TypeArena {
     }
 
     /// Get [`TypeField`] by id.
-    fn get_field<'a>(&'a self, id: TypeFieldId) -> TypeField<'a> {
+    fn get_field<'a>(&'a self, id: TypeFieldId) -> TypeFieldInner<'a> {
         let field_slot = &self.data[id.slot_idx as usize];
         let typ_slot = &self.data[id.slot_idx as usize + 1];
 
@@ -859,7 +855,7 @@ impl TypeArena {
 
         let typ = SimpleType::from_slot(self, TypeId(id.slot_idx + 1), typ_slot);
 
-        TypeField {
+        TypeFieldInner {
             id,
             name,
             default,
