@@ -1077,7 +1077,6 @@ fn insert_type_fields(
                     outer_type,
                     &typ,
                 ));
-                continue;
             }
             ParsedType::Response(_) => {
                 reports.push(new_invalid_inner_type(
@@ -1085,7 +1084,6 @@ fn insert_type_fields(
                     outer_type,
                     &typ,
                 ));
-                continue;
             }
             ParsedType::Record(_) => {
                 reports.push(new_invalid_inner_type(
@@ -1093,7 +1091,6 @@ fn insert_type_fields(
                     outer_type,
                     &typ,
                 ));
-                continue;
             }
             ParsedType::Union(_) => {
                 reports.push(new_invalid_inner_type(
@@ -1101,7 +1098,6 @@ fn insert_type_fields(
                     outer_type,
                     &typ,
                 ));
-                continue;
             }
         };
     }
