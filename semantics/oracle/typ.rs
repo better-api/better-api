@@ -317,10 +317,9 @@ impl<'a> Oracle<'a> {
 
         // Does content type require the response body to be `file`
         let requires_file = content_type_id.is_some_and(|id| {
-            self.values.get_mime_types(id).any(|str_id| {
-                let str = self.strings.resolve(str_id);
-                str != "application/json"
-            })
+            self.spec_ctx()
+                .get_mime_types(id)
+                .any(|str| str != "application/json")
         });
 
         // Check that response body is `file` by also resolving references

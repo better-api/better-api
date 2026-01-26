@@ -3,7 +3,7 @@
 //! The main data structure is a [`ValueArena`] that holds
 //! the values. Values in the arena are referenced with [`ValueId`].
 //!
-//! Values are completely valid. Invalid values can not be inserted into arena.
+//! Values are valid by construction, unless created through unchecked helpers.
 //!
 //! ## Building An Arena
 //!
@@ -17,14 +17,14 @@
 //!
 //! ## Getting Values
 //!
-//! To retrieve the value, you pass [`ValueId`] to [`ValueArena::get`] method.
+//! To retrieve the value, you pass [`ValueId`] to [`SpecContext::get_value`].
 //! This will give you a [`Value`]. Primitive values are represented directly
 //! with Rust types.
 //!
 //! Composite types are represented with [`Array`] and [`Object`]. These two types
 //! allow you to iterate through the values inside the composite type.
 
-use crate::string::StringId;
+use crate::{spec::SpecContext, string::StringId};
 
 /// Representation of a value.
 #[derive(Debug, derive_more::Display, Clone)]
@@ -32,7 +32,7 @@ pub enum Value<'a> {
     #[display("`null`")]
     Null,
     #[display("string")]
-    String(StringId),
+    String(&'a str),
     #[display("bool")]
     Bool(bool),
     #[display("integer")]
@@ -45,25 +45,21 @@ pub enum Value<'a> {
     Array(Array<'a>),
 }
 
-impl<'a> From<PrimitiveValue> for Value<'a> {
-    fn from(value: PrimitiveValue) -> Self {
-        match value {
-            PrimitiveValue::Null => Value::Null,
-            PrimitiveValue::String(s) => Value::String(s),
-            PrimitiveValue::Bool(b) => Value::Bool(b),
-            PrimitiveValue::Integer(i) => Value::Integer(i),
-            PrimitiveValue::Float(f) => Value::Float(f),
-        }
-    }
-}
-
 impl<'a> Value<'a> {
-    fn from_slot(arena: &'a ValueArena, id: ValueId, slot: &'a Slot) -> Self {
+    fn from_slot(ctx: SpecContext<'a>, id: ValueId, slot: &'a Slot) -> Self {
         match slot {
-            Slot::Primitive(val) => (*val).into(),
+            Slot::Primitive(PrimitiveValue::Null) => Value::Null,
+            Slot::Primitive(PrimitiveValue::Bool(b)) => Value::Bool(*b),
+            Slot::Primitive(PrimitiveValue::Integer(i)) => Value::Integer(*i),
+            Slot::Primitive(PrimitiveValue::Float(f)) => Value::Float(*f),
+            Slot::Primitive(PrimitiveValue::String(id)) => {
+                let string = ctx.strings.resolve(*id);
+                Value::String(string)
+            }
+
             Slot::Object { end } => Value::Object(Object {
                 fields: ObjectFields {
-                    arena,
+                    ctx,
                     current: ValueId(id.0 + 1),
                     end: *end,
                     object_id: id,
@@ -72,7 +68,7 @@ impl<'a> Value<'a> {
             }),
             Slot::Array { end } => Value::Array(Array {
                 items: ArrayItems {
-                    arena,
+                    ctx,
                     current: ValueId(id.0 + 1),
                     end: *end,
                 },
@@ -88,16 +84,16 @@ impl<'a> Value<'a> {
 /// A field inside of the object.
 #[derive(Debug, Clone)]
 pub struct ObjectField<'a> {
-    pub id: ObjectFieldId,
-    pub name: StringId,
+    pub(crate) id: ObjectFieldId,
+    pub name: &'a str,
     pub value: Value<'a>,
 }
 
-/// Object value returned by the [`ValueArena`].
+/// Object value returned by the [`SpecContext`].
 #[derive(Debug, Clone)]
 pub struct Object<'a> {
     // Id of the object
-    pub id: ValueId,
+    pub(crate) id: ValueId,
 
     /// Iterator over fields.
     fields: ObjectFields<'a>,
@@ -114,7 +110,7 @@ impl<'a> Object<'a> {
 #[derive(derive_more::Debug, Clone)]
 pub struct ObjectFields<'a> {
     #[debug(skip)]
-    arena: &'a ValueArena,
+    ctx: SpecContext<'a>,
     current: ValueId,
     end: ValueId,
 
@@ -133,7 +129,7 @@ impl<'a> Iterator for ObjectFields<'a> {
             object_id: self.object_id,
             slot_idx: self.current.0,
         };
-        let field = self.arena.get_field(field_id);
+        let field = self.ctx.get_object_field(field_id);
 
         self.current = match field.value {
             Value::Object(Object { ref fields, .. }) => fields.end,
@@ -148,18 +144,18 @@ impl<'a> Iterator for ObjectFields<'a> {
 /// Item returned by an [`Array`] iterator.
 #[derive(Debug)]
 pub struct ArrayItem<'a> {
-    /// Id of the item, used for [`ValueArena::get`]
-    pub id: ValueId,
+    /// Id of the item, used for [`SpecContext::get_value`]
+    pub(crate) id: ValueId,
 
     /// Value of the item
     pub value: Value<'a>,
 }
 
-/// Array value returned by the [`ValueArena`].
+/// Array value returned by the [`SpecContext`].
 #[derive(Debug, Clone)]
 pub struct Array<'a> {
     // Id of the array
-    pub id: ValueId,
+    pub(crate) id: ValueId,
 
     items: ArrayItems<'a>,
 }
@@ -175,7 +171,7 @@ impl<'a> Array<'a> {
 #[derive(derive_more::Debug, Clone)]
 pub struct ArrayItems<'a> {
     #[debug(skip)]
-    arena: &'a ValueArena,
+    ctx: SpecContext<'a>,
     current: ValueId,
     end: ValueId,
 }
@@ -189,8 +185,8 @@ impl<'a> Iterator for ArrayItems<'a> {
         }
 
         let id = self.current;
-        let item = &self.arena.data[id.0 as usize];
-        let value = Value::from_slot(self.arena, id, item);
+        let item = &self.ctx.values.data[id.0 as usize];
+        let value = Value::from_slot(self.ctx, id, item);
 
         self.current = match value {
             Value::Object(Object { ref fields, .. }) => fields.end,
@@ -204,7 +200,7 @@ impl<'a> Iterator for ArrayItems<'a> {
 
 /// Helper type for mime types iterator
 enum MimeTypesInner<'a> {
-    String(Option<StringId>),
+    String(Option<&'a str>),
     Array(ArrayItems<'a>),
 }
 
@@ -216,7 +212,7 @@ pub struct MimeTypes<'a>(MimeTypesInner<'a>);
 impl<'a> Iterator for MimeTypes<'a> {
     // TODO: For now items are just strings. Later on we'll probably want to
     // have proper "mime type" type.
-    type Item = StringId;
+    type Item = &'a str;
 
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.0 {
@@ -233,7 +229,7 @@ impl<'a> Iterator for MimeTypes<'a> {
 
 /// Non-composite value
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum PrimitiveValue {
+pub(crate) enum PrimitiveValue {
     Null,
     String(StringId),
     Bool(bool),
@@ -249,7 +245,7 @@ pub enum PrimitiveValue {
 ///
 /// If builder is dropped before calling finish, added values are removed from the
 /// arena.
-pub struct ArrayBuilder<'p> {
+pub(crate) struct ArrayBuilder<'p> {
     data: &'p mut Vec<Slot>,
 
     /// Optionally clean up the data if array is not finished successfully.
@@ -276,7 +272,7 @@ impl<'p> ArrayBuilder<'p> {
     }
 
     /// Add a new primitive value to the array.
-    pub fn add_primitive(&mut self, value: PrimitiveValue) -> ValueId {
+    pub(crate) fn add_primitive(&mut self, value: PrimitiveValue) -> ValueId {
         let idx = self.data.len();
 
         self.data.push(value.into());
@@ -285,19 +281,19 @@ impl<'p> ArrayBuilder<'p> {
     }
 
     /// Insert an array as the next element of this array.
-    pub fn start_array<'a>(&'a mut self) -> ArrayBuilder<'a> {
+    pub(crate) fn start_array<'a>(&'a mut self) -> ArrayBuilder<'a> {
         ArrayBuilder::new(self.data, None)
     }
 
     /// Insert an object as the next element of this array.
-    pub fn start_object<'a>(&'a mut self) -> ObjectBuilder<'a> {
+    pub(crate) fn start_object<'a>(&'a mut self) -> ObjectBuilder<'a> {
         ObjectBuilder::new(self.data, None)
     }
 
     /// Constructs the final array.
     ///
     /// Returns the id of the final array in the arena.
-    pub fn finish(mut self) -> ValueId {
+    pub(crate) fn finish(mut self) -> ValueId {
         self.finished = true;
 
         let idx = self.data.len();
@@ -333,7 +329,7 @@ impl<'p> Drop for ArrayBuilder<'p> {
 ///
 /// If builder is dropped before calling finish, added fields and values are removed from the
 /// arena.
-pub struct ObjectBuilder<'p> {
+pub(crate) struct ObjectBuilder<'p> {
     data: &'p mut Vec<Slot>,
 
     /// Optionally clean up the data if array is not finished successfully.
@@ -360,7 +356,7 @@ impl<'p> ObjectBuilder<'p> {
     }
 
     /// Add a new field to the object with primitive value.
-    pub fn add_primitive(&mut self, name: StringId, value: PrimitiveValue) -> ObjectFieldId {
+    pub(crate) fn add_primitive(&mut self, name: StringId, value: PrimitiveValue) -> ObjectFieldId {
         let slot_idx = self.data.len() as u32;
 
         self.data.push(Slot::ObjectField(name));
@@ -373,7 +369,10 @@ impl<'p> ObjectBuilder<'p> {
     }
 
     /// Add a new field to the object with object value.
-    pub fn start_object<'a>(&'a mut self, name: StringId) -> (ObjectBuilder<'a>, ObjectFieldId) {
+    pub(crate) fn start_object<'a>(
+        &'a mut self,
+        name: StringId,
+    ) -> (ObjectBuilder<'a>, ObjectFieldId) {
         let slot_idx = self.data.len() as u32;
 
         self.data.push(Slot::ObjectField(name));
@@ -388,7 +387,10 @@ impl<'p> ObjectBuilder<'p> {
     }
 
     /// Add a new field to the object with array value.
-    pub fn start_array<'a>(&'a mut self, name: StringId) -> (ArrayBuilder<'a>, ObjectFieldId) {
+    pub(crate) fn start_array<'a>(
+        &'a mut self,
+        name: StringId,
+    ) -> (ArrayBuilder<'a>, ObjectFieldId) {
         let slot_idx = self.data.len() as u32;
 
         self.data.push(Slot::ObjectField(name));
@@ -405,7 +407,7 @@ impl<'p> ObjectBuilder<'p> {
     /// Constructs the final object.
     ///
     /// Returns the id of the final object in the arena.
-    pub fn finish(mut self) -> ValueId {
+    pub(crate) fn finish(mut self) -> ValueId {
         self.finished = true;
 
         let idx = self.data.len();
@@ -436,7 +438,7 @@ impl<'p> Drop for ObjectBuilder<'p> {
 /// Id of the value in the [`ValueArena`] .
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
-pub struct ValueId(u32);
+pub(crate) struct ValueId(u32);
 
 /// Semantic wrapper around [`ValueId`] for value representing MIME types.
 ///
@@ -446,7 +448,7 @@ pub struct ValueId(u32);
 /// or [`Value::Array`] of strings. Each string is a valid MIME type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
-pub struct MimeTypesId(ValueId);
+pub(crate) struct MimeTypesId(ValueId);
 
 impl MimeTypesId {
     /// Flag given value id as valid mime types value.
@@ -461,16 +463,16 @@ impl MimeTypesId {
     }
 
     /// Return value id
-    pub fn value_id(&self) -> ValueId {
+    pub(crate) fn value_id(&self) -> ValueId {
         self.0
     }
 }
 
 /// Id of a object field.
 ///
-/// Used for getting specific [`ObjectField`] with [`ValueArena::get_field`].
+/// Used for getting specific [`ObjectField`] with [`SpecContext::get_object_field`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ObjectFieldId {
+pub(crate) struct ObjectFieldId {
     object_id: ValueId,
 
     /// Index of the slot in the arena
@@ -479,12 +481,12 @@ pub struct ObjectFieldId {
 
 impl ObjectFieldId {
     /// Get [`ValueId`] of the object that contains this field.
-    pub fn object_id(&self) -> ValueId {
+    pub(crate) fn object_id(&self) -> ValueId {
         self.object_id
     }
 
     /// Get [`ValueId`] of the field's value.
-    pub fn value_id(&self) -> ValueId {
+    pub(crate) fn value_id(&self) -> ValueId {
         ValueId(self.slot_idx + 1)
     }
 }
@@ -517,44 +519,60 @@ impl From<PrimitiveValue> for Slot {
 
 /// Arena that holds the values.
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct ValueArena {
+pub(crate) struct ValueArena {
     data: Vec<Slot>,
 }
 
 impl ValueArena {
     /// Create a new value arena.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
+    /// Add primitive value to arena.
+    pub(crate) fn add_primitive(&mut self, value: PrimitiveValue) -> ValueId {
+        let idx = self.data.len();
+        self.data.push(value.into());
+        ValueId(idx as u32)
+    }
+
+    /// Insert an object into the arena.
+    pub(crate) fn start_object<'a>(&'a mut self) -> ObjectBuilder<'a> {
+        ObjectBuilder::new(&mut self.data, None)
+    }
+
+    /// Insert an array into the arena.
+    pub(crate) fn start_array<'a>(&'a mut self) -> ArrayBuilder<'a> {
+        ArrayBuilder::new(&mut self.data, None)
+    }
+}
+
+impl<'a> SpecContext<'a> {
     /// Get [`Value`] by id.
-    pub fn get<'a>(&'a self, id: ValueId) -> Value<'a> {
-        let val = &self.data[id.0 as usize];
-        Value::from_slot(self, id, val)
+    pub(crate) fn get_value(&self, id: ValueId) -> Value<'a> {
+        let val = &self.values.data[id.0 as usize];
+        Value::from_slot(*self, id, val)
     }
 
     /// Get [`ObjectField`] by id.
-    pub fn get_field<'a>(&'a self, id: ObjectFieldId) -> ObjectField<'a> {
-        let name_slot = &self.data[id.slot_idx as usize];
-        let value_slot = &self.data[id.slot_idx as usize + 1];
+    pub(crate) fn get_object_field(&self, id: ObjectFieldId) -> ObjectField<'a> {
+        let name_slot = &self.values.data[id.slot_idx as usize];
+        let value_slot = &self.values.data[id.slot_idx as usize + 1];
 
-        let name = match &name_slot {
+        let name_id = match &name_slot {
             Slot::ObjectField(name) => name,
             val => unreachable!("invalid object field in arena for id {id:?}: {val:?}"),
         };
+        let name = self.strings.resolve(*name_id);
 
-        let value = Value::from_slot(self, ValueId(id.slot_idx + 1), value_slot);
+        let value = Value::from_slot(*self, ValueId(id.slot_idx + 1), value_slot);
 
-        ObjectField {
-            id,
-            name: *name,
-            value,
-        }
+        ObjectField { id, name, value }
     }
 
     /// Get iterator over mime types.
-    pub fn get_mime_types<'a>(&'a self, id: MimeTypesId) -> MimeTypes<'a> {
-        let val = self.get(id.0);
+    pub(crate) fn get_mime_types(&self, id: MimeTypesId) -> MimeTypes<'a> {
+        let val = self.get_value(id.0);
         let inner = match val {
             Value::String(id) => MimeTypesInner::String(Some(id)),
             Value::Array(arr) => MimeTypesInner::Array(arr.items()),
@@ -563,54 +581,36 @@ impl ValueArena {
 
         MimeTypes(inner)
     }
-
-    /// Add primitive value to arena.
-    pub fn add_primitive(&mut self, value: PrimitiveValue) -> ValueId {
-        let idx = self.data.len();
-        self.data.push(value.into());
-        ValueId(idx as u32)
-    }
-
-    /// Insert an object into the arena.
-    pub fn start_object<'a>(&'a mut self) -> ObjectBuilder<'a> {
-        ObjectBuilder::new(&mut self.data, None)
-    }
-
-    /// Insert an array into the arena.
-    pub fn start_array<'a>(&'a mut self) -> ArrayBuilder<'a> {
-        ArrayBuilder::new(&mut self.data, None)
-    }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{ArrayItem, ObjectFieldId, PrimitiveValue, Slot, Value, ValueArena, ValueId};
-    use crate::string::StringInterner;
+    use super::{ArrayItem, ObjectFieldId, PrimitiveValue, Slot, Value, ValueId};
+    use crate::spec::Spec;
 
     #[test]
     fn builds_nested_values() {
-        let mut arena = ValueArena::new();
+        let mut spec = Spec::new_test();
 
         // Insert some strings
-        let mut interner = StringInterner::default();
-        let hello_str = interner.get_or_intern("hello");
-        let flag_str = interner.get_or_intern("flag");
-        let container_str = interner.get_or_intern("container");
-        let numbers_str = interner.get_or_intern("numbers");
-        let deep_str = interner.get_or_intern("deep");
-        let unused_str = interner.get_or_intern("unused");
-        let value_str = interner.get_or_intern("value");
-        let label_str = interner.get_or_intern("label");
-        let done_str = interner.get_or_intern("done");
-        let nested_str = interner.get_or_intern("nested");
-        let status_str = interner.get_or_intern("status");
-        let ok_str = interner.get_or_intern("ok");
-        let count_str = interner.get_or_intern("count");
-        let active_str = interner.get_or_intern("active");
+        let hello_str = spec.strings.get_or_intern("hello");
+        let flag_str = spec.strings.get_or_intern("flag");
+        let container_str = spec.strings.get_or_intern("container");
+        let numbers_str = spec.strings.get_or_intern("numbers");
+        let deep_str = spec.strings.get_or_intern("deep");
+        let unused_str = spec.strings.get_or_intern("unused");
+        let value_str = spec.strings.get_or_intern("value");
+        let label_str = spec.strings.get_or_intern("label");
+        let done_str = spec.strings.get_or_intern("done");
+        let nested_str = spec.strings.get_or_intern("nested");
+        let status_str = spec.strings.get_or_intern("status");
+        let ok_str = spec.strings.get_or_intern("ok");
+        let count_str = spec.strings.get_or_intern("count");
+        let active_str = spec.strings.get_or_intern("active");
 
-        let null_id = arena.add_primitive(PrimitiveValue::Null);
-        let bool_id = arena.add_primitive(PrimitiveValue::Bool(true));
-        let string_id = arena.add_primitive(PrimitiveValue::String(hello_str));
+        let null_id = spec.values.add_primitive(PrimitiveValue::Null);
+        let bool_id = spec.values.add_primitive(PrimitiveValue::Bool(true));
+        let string_id = spec.values.add_primitive(PrimitiveValue::String(hello_str));
 
         // root object will look like this:
         // {
@@ -631,7 +631,7 @@ mod test {
         //     "active": false
         //   }
         // }
-        let mut root = arena.start_object();
+        let mut root = spec.values.start_object();
         root.add_primitive(flag_str, PrimitiveValue::Integer(7));
 
         let (mut container, container_field_id) = root.start_object(container_str);
@@ -704,30 +704,33 @@ mod test {
             Slot::Primitive(PrimitiveValue::Bool(false)),
         ];
 
-        assert_eq!(arena.data.len(), expected_slots.len());
+        assert_eq!(spec.values.data.len(), expected_slots.len());
         for (idx, expected) in expected_slots.iter().enumerate() {
-            assert_eq!(&arena.data[idx], expected, "slot mismatch at index {idx}");
+            assert_eq!(
+                &spec.values.data[idx], expected,
+                "slot mismatch at index {idx}"
+            );
         }
 
         // Check primitive value getting works
-        assert!(matches!(arena.get(null_id), Value::Null));
-        assert!(matches!(arena.get(bool_id), Value::Bool(true)));
-        assert!(matches!(arena.get(string_id), Value::String(id) if id == hello_str));
+        assert!(matches!(spec.ctx().get_value(null_id), Value::Null));
+        assert!(matches!(spec.ctx().get_value(bool_id), Value::Bool(true)));
+        assert!(matches!(spec.ctx().get_value(string_id), Value::String(id) if id == "hello"));
 
         // Check that getters for nested values work by checking that root
         // object is exactly how it should be
-        let root_object = match arena.get(root_id) {
+        let root_object = match spec.ctx().get_value(root_id) {
             Value::Object(object) => object,
             other => panic!("expected object at root_id, got {other:?}"),
         };
         let mut root_object_fields = root_object.fields();
 
         let flag_field = root_object_fields.next().expect("flag field");
-        assert_eq!(flag_field.name, flag_str);
+        assert_eq!(flag_field.name, "flag");
         assert!(matches!(flag_field.value, Value::Integer(7)));
 
         let container_field = root_object_fields.next().expect("container field");
-        assert_eq!(container_field.name, container_str);
+        assert_eq!(container_field.name, "container");
         let container_object = match container_field.value {
             Value::Object(object) => object,
             other => panic!("expected object for container field, got {other:?}"),
@@ -737,7 +740,7 @@ mod test {
         let mut container_object_fields = container_object.fields();
 
         let numbers_field = container_object_fields.next().expect("numbers field");
-        assert_eq!(numbers_field.name, numbers_str);
+        assert_eq!(numbers_field.name, "numbers");
         let numbers_array = match numbers_field.value {
             Value::Array(array) => array,
             other => panic!("expected array for numbers field, got {other:?}"),
@@ -766,7 +769,7 @@ mod test {
             ArrayItem {
                 id: ValueId(12),
                 value: Value::String(id)
-            } if id == deep_str
+            } if id == "deep"
         ));
         assert!(matches!(
             deep_array_items.next().expect("deep array second item"),
@@ -787,12 +790,12 @@ mod test {
         let mut array_object_fields = array_object.fields();
 
         let value_field = array_object_fields.next().expect("value field");
-        assert_eq!(value_field.name, value_str);
+        assert_eq!(value_field.name, "value");
         assert!(matches!(value_field.value, Value::Float(2.5)));
 
         let label_field = array_object_fields.next().expect("label field");
-        assert_eq!(label_field.name, label_str);
-        assert!(matches!(label_field.value, Value::String(id) if id == done_str));
+        assert_eq!(label_field.name, "label");
+        assert!(matches!(label_field.value, Value::String("done")));
         assert!(array_object_fields.next().is_none());
 
         assert!(numbers_array_items.next().is_none());
@@ -800,7 +803,7 @@ mod test {
         // End of number array, continue with next field in container
 
         let nested_field = container_object_fields.next().expect("nested field");
-        assert_eq!(nested_field.name, nested_str);
+        assert_eq!(nested_field.name, "nested");
         let nested_object = match nested_field.value {
             Value::Object(object) => object,
             other => panic!("expected object for nested field, got {other:?}"),
@@ -810,31 +813,31 @@ mod test {
         let mut nested_object_fields = nested_object.fields();
 
         let status_field = nested_object_fields.next().expect("status field");
-        assert_eq!(status_field.name, status_str);
-        assert!(matches!(status_field.value, Value::String(id) if id == ok_str));
+        assert_eq!(status_field.name, "status");
+        assert!(matches!(status_field.value, Value::String("ok")));
 
         let count_field = nested_object_fields.next().expect("count field");
-        assert_eq!(count_field.name, count_str);
+        assert_eq!(count_field.name, "count");
         assert!(matches!(count_field.value, Value::Integer(2)));
         assert!(nested_object_fields.next().is_none());
 
         // End of nested object, continue with active field
 
         let active_field = container_object_fields.next().expect("active field");
-        assert_eq!(active_field.name, active_str);
+        assert_eq!(active_field.name, "active");
         assert!(matches!(active_field.value, Value::Bool(false)));
         assert!(container_object_fields.next().is_none());
 
         // Check getting container directly by id
-        let container_get = match arena.get(container_id) {
+        let container_get = match spec.ctx().get_value(container_id) {
             Value::Object(object) => object,
             other => panic!("expected object at inner_id, got {other:?}"),
         };
         let inner_field_names: Vec<_> = container_get.fields().map(|f| f.name).collect();
-        assert_eq!(inner_field_names, vec![numbers_str, nested_str, active_str]);
+        assert_eq!(inner_field_names, vec!["numbers", "nested", "active"]);
 
         // Check getting numbers array directly by id
-        let numbers_from_get = match arena.get(numbers_id) {
+        let numbers_from_get = match spec.ctx().get_value(numbers_id) {
             Value::Array(array) => array,
             other => panic!("expected array at numbers_id, got {other:?}"),
         };
@@ -862,8 +865,8 @@ mod test {
             deep_from_get_iter.next().expect("deep via get first"),
             ArrayItem {
                 id: ValueId(12),
-                value: Value::String(id)
-            } if id == deep_str
+                value: Value::String("deep")
+            }
         ));
         assert!(matches!(
             deep_from_get_iter.next().expect("deep via get second"),
@@ -887,19 +890,19 @@ mod test {
         let value_field_get = object_from_get_iter_fields
             .next()
             .expect("nested object via get value field");
-        assert_eq!(value_field_get.name, value_str);
+        assert_eq!(value_field_get.name, "value");
         assert!(matches!(value_field_get.value, Value::Float(2.5)));
 
         let label_field_get = object_from_get_iter_fields
             .next()
             .expect("nested object via get label field");
-        assert_eq!(label_field_get.name, label_str);
-        assert!(matches!(label_field_get.value, Value::String(id) if id == done_str));
+        assert_eq!(label_field_get.name, "label");
+        assert!(matches!(label_field_get.value, Value::String("done")));
         assert!(object_from_get_iter_fields.next().is_none());
         assert!(numbers_from_get_items.next().is_none());
 
         // Check getting deeply nested object directly by id
-        let array_obj_from_get = match arena.get(array_obj_id) {
+        let array_obj_from_get = match spec.ctx().get_value(array_obj_id) {
             Value::Object(object) => object,
             other => panic!("expected object at array_obj_id, got {other:?}"),
         };
@@ -909,25 +912,28 @@ mod test {
         let value_field_direct = array_obj_from_get_fields
             .next()
             .expect("value field via get");
-        assert_eq!(value_field_direct.name, value_str);
+        assert_eq!(value_field_direct.name, "value");
         assert!(matches!(value_field_direct.value, Value::Float(2.5)));
         let label_field_direct = array_obj_from_get_fields
             .next()
             .expect("label field via get");
-        assert_eq!(label_field_direct.name, label_str);
-        assert!(matches!(label_field_direct.value, Value::String(id) if id == done_str));
+        assert_eq!(label_field_direct.name, "label");
+        assert!(matches!(label_field_direct.value, Value::String("done")));
         assert!(array_obj_from_get_fields.next().is_none());
 
         // Check getting nested object directly by id
-        let nested_from_get = match arena.get(nested_obj_id) {
+        let nested_from_get = match spec.ctx().get_value(nested_obj_id) {
             Value::Object(object) => object,
             other => panic!("expected object at nested_obj_id, got {other:?}"),
         };
         let mut nested_from_get_fields = nested_from_get.fields();
 
         assert!(matches!(
-            nested_from_get_fields.next().expect("nested via get status").value,
-            Value::String(id) if id == ok_str
+            nested_from_get_fields
+                .next()
+                .expect("nested via get status")
+                .value,
+            Value::String("ok")
         ));
         assert!(matches!(
             nested_from_get_fields

@@ -8,7 +8,7 @@ use better_api_syntax::ast;
 use crate::spec::endpoint::EndpointArena;
 use crate::spec::typ::TypeArena;
 use crate::spec::value::ValueArena;
-use crate::spec::{Metadata, SymbolTable};
+use crate::spec::{Metadata, SpecContext, SymbolTable};
 use crate::string::{StringId, StringInterner};
 
 mod metadata;
@@ -73,6 +73,17 @@ impl<'a> Oracle<'a> {
     /// Get semantic problems.
     pub fn reports(&self) -> &[Report] {
         &self.reports
+    }
+
+    /// Get [view](SpecContext) over a spec.
+    fn spec_ctx<'s>(&'s self) -> SpecContext<'s> {
+        SpecContext {
+            strings: &self.strings,
+            symbol_table: &self.spec_symbol_table,
+            values: &self.values,
+            types: &self.types,
+            endpoints: &self.endpoints,
+        }
     }
 
     /// Analyzes the complete syntax tree and populates the analyzer arenas.

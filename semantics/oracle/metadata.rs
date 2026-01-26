@@ -3,7 +3,6 @@ use better_api_syntax::ast::AstNode;
 use better_api_syntax::{TextRange, ast};
 
 use crate::spec;
-use crate::string::StringId;
 use crate::text::{lower_name, parse_string};
 
 use super::Oracle;
@@ -89,7 +88,7 @@ impl<'a> Oracle<'a> {
         &mut self,
         value_node: &ast::Value,
         directive: &str,
-    ) -> Option<StringId> {
+    ) -> Option<String> {
         let ast::Value::String(str_node) = value_node else {
             let range = value_node.syntax().text_range();
             self.reports.push(
@@ -104,8 +103,7 @@ impl<'a> Oracle<'a> {
 
         let token = str_node.string();
         let parsed = parse_string(&token, &mut self.reports);
-        let id = self.strings.get_or_intern(parsed);
-        Some(id)
+        Some(parsed.to_string())
     }
 
     /// Emits report for repeated directive (`version`, `name` or `betterApi`)
@@ -160,7 +158,7 @@ impl<'a> Oracle<'a> {
         }
     }
 
-    fn get_server_field(&mut self, server: &ast::Object, field_name: &str) -> Option<StringId> {
+    fn get_server_field(&mut self, server: &ast::Object, field_name: &str) -> Option<String> {
         let mut count = 0;
         let mut res = None;
         for field in server.fields() {
@@ -200,8 +198,7 @@ impl<'a> Oracle<'a> {
 
             let token = str_node.string();
             let parsed = parse_string(&token, &mut self.reports);
-            let id = self.strings.get_or_intern(parsed);
-            res = Some(id)
+            res = Some(parsed.to_string())
         }
 
         if count == 0 {
@@ -263,19 +260,13 @@ mod test {
         insta::assert_debug_snapshot!(oracle.reports());
 
         let metadata = oracle.metadata.as_ref().expect("metadata should be set");
-        assert_eq!(oracle.strings.resolve(metadata.version), "1.2");
-        assert_eq!(oracle.strings.resolve(metadata.name), "test");
-        assert_eq!(oracle.strings.resolve(metadata.better_api_version), "0.1");
+        assert_eq!(metadata.version, "1.2");
+        assert_eq!(metadata.name, "test");
+        assert_eq!(metadata.better_api_version, "0.1");
         assert_eq!(metadata.servers.len(), 2);
-        assert_eq!(oracle.strings.resolve(metadata.servers[0].name), "prod");
-        assert_eq!(
-            oracle.strings.resolve(metadata.servers[0].url),
-            "https://api.example.com"
-        );
-        assert_eq!(oracle.strings.resolve(metadata.servers[1].name), "staging");
-        assert_eq!(
-            oracle.strings.resolve(metadata.servers[1].url),
-            "https://staging.example.com"
-        );
+        assert_eq!(metadata.servers[0].name, "prod");
+        assert_eq!(metadata.servers[0].url, "https://api.example.com");
+        assert_eq!(metadata.servers[1].name, "staging");
+        assert_eq!(metadata.servers[1].url, "https://staging.example.com");
     }
 }
