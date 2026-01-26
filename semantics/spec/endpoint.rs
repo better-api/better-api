@@ -538,7 +538,7 @@ mod test {
     use super::{EndpointArena, EndpointFields, ResponseData, ResponseStatus};
 
     use crate::path::PathPart;
-    use crate::spec::typ::{PrimitiveType, TypeArena};
+    use crate::spec::typ::{PrimitiveTy, TypeArena};
     use crate::string::StringInterner;
 
     use http::{Method, StatusCode};
@@ -546,9 +546,9 @@ mod test {
     #[test]
     fn builds_endpoint_arena() {
         let mut types = TypeArena::new();
-        let string_type = types.add_primitive(PrimitiveType::String);
-        let bool_type = types.add_primitive(PrimitiveType::Bool);
-        let i64_type = types.add_primitive(PrimitiveType::I64);
+        let string_type = types.add_primitive(PrimitiveTy::String);
+        let bool_type = types.add_primitive(PrimitiveTy::Bool);
+        let i64_type = types.add_primitive(PrimitiveTy::I64);
 
         let mut interner = StringInterner::default();
         let status_name = interner.get_or_intern("status");

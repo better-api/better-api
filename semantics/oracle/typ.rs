@@ -6,7 +6,8 @@ use crate::oracle::SymbolMap;
 use crate::oracle::symbols::{ResolvedSymbol, deref, report_missing, resolve};
 use crate::oracle::value::{lower_mime_types, lower_value};
 use crate::spec::typ::{
-    EnumMember, FieldBuilder, OptionArrayBuilder, PrimitiveType, TypeDef, TypeId,
+    EnumTy, FieldBuilder, OptionArrayBuilder, PrimitiveTy, ResponseId, RootTypeId, SimpleRecordId,
+    TypeDef, TypeId,
 };
 use crate::spec::value::ValueId;
 use crate::string::{StringId, StringInterner};
@@ -27,7 +28,7 @@ struct InternedField {
 
 /// Helper type for handling primitive types separately from composite ones.
 enum ParsedType<'a> {
-    Primitive(PrimitiveType),
+    Primitive(PrimitiveTy),
     Reference { name: StringId, range: TextRange },
     Enum(&'a ast::Enum),
     Response(&'a ast::TypeResponse),
@@ -55,17 +56,17 @@ impl<'a> ParsedType<'a> {
                     range: typ.syntax().text_range(),
                 }
             }
-            ast::Type::TypeI32(_) => Self::Primitive(PrimitiveType::I32),
-            ast::Type::TypeI64(_) => Self::Primitive(PrimitiveType::I64),
-            ast::Type::TypeU32(_) => Self::Primitive(PrimitiveType::U32),
-            ast::Type::TypeU64(_) => Self::Primitive(PrimitiveType::U64),
-            ast::Type::TypeF32(_) => Self::Primitive(PrimitiveType::F32),
-            ast::Type::TypeF64(_) => Self::Primitive(PrimitiveType::F64),
-            ast::Type::TypeDate(_) => Self::Primitive(PrimitiveType::Date),
-            ast::Type::TypeTimestamp(_) => Self::Primitive(PrimitiveType::Timestamp),
-            ast::Type::TypeBool(_) => Self::Primitive(PrimitiveType::Bool),
-            ast::Type::TypeString(_) => Self::Primitive(PrimitiveType::String),
-            ast::Type::TypeFile(_) => Self::Primitive(PrimitiveType::File),
+            ast::Type::TypeI32(_) => Self::Primitive(PrimitiveTy::I32),
+            ast::Type::TypeI64(_) => Self::Primitive(PrimitiveTy::I64),
+            ast::Type::TypeU32(_) => Self::Primitive(PrimitiveTy::U32),
+            ast::Type::TypeU64(_) => Self::Primitive(PrimitiveTy::U64),
+            ast::Type::TypeF32(_) => Self::Primitive(PrimitiveTy::F32),
+            ast::Type::TypeF64(_) => Self::Primitive(PrimitiveTy::F64),
+            ast::Type::TypeDate(_) => Self::Primitive(PrimitiveTy::Date),
+            ast::Type::TypeTimestamp(_) => Self::Primitive(PrimitiveTy::Timestamp),
+            ast::Type::TypeBool(_) => Self::Primitive(PrimitiveTy::Bool),
+            ast::Type::TypeString(_) => Self::Primitive(PrimitiveTy::String),
+            ast::Type::TypeFile(_) => Self::Primitive(PrimitiveTy::File),
         }
     }
 }
@@ -94,7 +95,8 @@ impl<'a> Oracle<'a> {
         // Insert type to symbol table if not already present.
         // The duplicate type definition error is reported by [`Oracle::validate_symbols`].
         self.spec_symbol_table.entry(name_id).or_insert(TypeDef {
-            type_id,
+            typ: type_id,
+
             // TODO: Extract docs from type definition prologue
             docs: None,
         });
@@ -106,9 +108,9 @@ impl<'a> Oracle<'a> {
     ///
     /// If type was lowered successfully it's not yet completely validated.
     /// This has to be done after _all_ the types have been lowered.
-    pub(crate) fn lower_type(&mut self, typ: &ast::Type) -> Option<TypeId> {
+    pub(crate) fn lower_type(&mut self, typ: &ast::Type) -> Option<RootTypeId> {
         match ParsedType::new(typ, &mut self.strings) {
-            ParsedType::Primitive(primitive) => Some(self.types.add_primitive(primitive)),
+            ParsedType::Primitive(primitive) => Some(self.types.add_primitive(primitive).into()),
             ParsedType::Reference { name, range } => {
                 match validate_reference(
                     &self.strings,
@@ -119,13 +121,13 @@ impl<'a> Oracle<'a> {
                     range,
                 ) {
                     None => None,
-                    Some(typ) => Some(self.types.add_primitive(typ)),
+                    Some(typ) => Some(self.types.add_reference(typ).into()),
                 }
             }
-            ParsedType::Enum(en) => self.lower_enum(en),
-            ParsedType::Response(resp) => self.lower_response(resp),
-            ParsedType::Record(record) => Some(self.lower_record(record)),
-            ParsedType::Union(union) => Some(self.lower_union(union)),
+            ParsedType::Enum(en) => self.lower_enum(en).map(|id| id.into()),
+            ParsedType::Response(resp) => self.lower_response(resp).map(|id| id.into()),
+            ParsedType::Record(record) => Some(self.lower_record(record).into()),
+            ParsedType::Union(union) => Some(self.lower_union(union).into()),
             ParsedType::Array(arr) => {
                 let inner = arr.typ()?;
                 let builder = self.types.start_array();
@@ -138,6 +140,7 @@ impl<'a> Oracle<'a> {
                     self.root,
                     InvalidOuterContext::Array,
                 )
+                .map(|id| id.into())
             }
             ParsedType::Option(opt) => {
                 let inner = opt.typ()?;
@@ -151,6 +154,7 @@ impl<'a> Oracle<'a> {
                     self.root,
                     InvalidOuterContext::Option,
                 )
+                .map(|id| id.into())
             }
         }
     }
@@ -224,17 +228,11 @@ impl<'a> Oracle<'a> {
     /// Lowers enum type and inserts it into arena
     fn lower_enum(&mut self, typ: &ast::Enum) -> Option<TypeId> {
         // Validate enum type
-        let enum_type = typ.typ()?;
-        if !self.is_enum_type_valid(&enum_type) {
-            return None;
-        }
-
-        let type_id = self
-            .lower_type(&enum_type)
-            .expect("valid enum type should lowered");
+        let enum_type_ast = typ.typ()?;
+        let enum_type = self.lower_enum_type(&enum_type_ast)?;
 
         // Parse enum members
-        let mut builder = self.types.start_enum(type_id);
+        let mut builder = self.types.start_enum(enum_type);
         let mut is_valid = true;
         for member in typ.members() {
             let Some(value) = member.value() else {
@@ -246,7 +244,7 @@ impl<'a> Oracle<'a> {
             let deref = |reference: &ast::TypeRef| {
                 deref(&self.strings, &self.symbol_map, self.root, reference)
             };
-            if !ast::value_matches_type(&value, &enum_type, &mut self.reports, &deref) {
+            if !ast::value_matches_type(&value, &enum_type_ast, &mut self.reports, &deref) {
                 is_valid = false;
                 continue;
             }
@@ -257,11 +255,9 @@ impl<'a> Oracle<'a> {
                 &mut self.reports,
                 &value,
             );
-            builder.add_member(EnumMember {
-                value: value_id,
-                // TODO: Extract docs from enum member prologue
-                docs: None,
-            });
+
+            // TODO: Get docs from prologue
+            builder.add_member(value_id, None);
         }
 
         if is_valid {
@@ -272,7 +268,7 @@ impl<'a> Oracle<'a> {
     }
 
     /// Lowers response type and inserts it into arena
-    fn lower_response(&mut self, resp: &ast::TypeResponse) -> Option<TypeId> {
+    fn lower_response(&mut self, resp: &ast::TypeResponse) -> Option<ResponseId> {
         // Is response valid. We don't want to early return, because
         // we want to validate as many things as possible and capture as many
         // errors as possible.
@@ -366,7 +362,9 @@ impl<'a> Oracle<'a> {
         // Finally we can lower the body. This also does basic type validation (ie record fields
         // are valid with correct defaults, ...). Since there are no more validation steps after
         // this, we can early return in case of errors.
-        let body_id = self.lower_type(&body)?;
+        let RootTypeId::Type(body_id) = self.lower_type(&body)? else {
+            unreachable!("we should check that body is not a response");
+        };
 
         // If there were any errors during validation, don't build the final type.
         if !is_valid {
@@ -383,7 +381,7 @@ impl<'a> Oracle<'a> {
     ///
     /// Valid headers are simple record without files. If type is valid,
     /// Some(_) is returned. If any validation fails, reports are generated and None is returned.
-    fn lower_headers(&mut self, headers: &ast::Type) -> Option<TypeId> {
+    fn lower_headers(&mut self, headers: &ast::Type) -> Option<SimpleRecordId> {
         // Are headers valid. We don't want to early return, because we want
         // to validate as many things as possible.
         let mut is_valid = true;
@@ -436,9 +434,17 @@ impl<'a> Oracle<'a> {
             Err(_) => is_valid = false,
         }
 
-        let id = self.lower_type(headers);
+        if !is_valid {
+            return None;
+        }
 
-        if is_valid { id } else { None }
+        let RootTypeId::Type(id) = self.lower_type(headers)? else {
+            unreachable!("we have checked it's a simple record")
+        };
+
+        // Safety: We have checked that it's a simple record.
+        let id = unsafe { SimpleRecordId::new_unchecked(id) };
+        Some(id)
     }
 
     /// Lowers record type and inserts it into arena
@@ -459,8 +465,8 @@ impl<'a> Oracle<'a> {
     /// Lowers union type and inserts it into arena
     fn lower_union(&mut self, union: &ast::Union) -> TypeId {
         let fields = self.parse_type_fields(union.fields(), false);
-        // TODO: Validate fields are valid, response is already here
-        let builder = self.types.start_union(todo!("redefine union"));
+        // TODO: Validate fields are valid, response is already there
+        let builder = self.types.start_union();
         insert_type_fields(
             fields,
             builder,
@@ -474,11 +480,10 @@ impl<'a> Oracle<'a> {
 
     /// Collects type fields into a vector.
     ///
-    /// Only valid fields are collected. Field is valid if it has a valid name and a type.
-    /// Names are interned.
+    /// Only valid fields are collected. Field is valid if it has a valid name and a type that
+    /// isn't a response. Field names are interned.
     ///
-    /// Returned vector is sorted by name, which stabilizes the fields. This is useful for
-    /// type checking.
+    /// Returned vector is sorted by name, which stabilizes the fields.
     fn parse_type_fields(
         &mut self,
         fields: impl Iterator<Item = ast::TypeField>,
@@ -506,7 +511,6 @@ impl<'a> Oracle<'a> {
 
                 // Check typ is valid
                 let typ_valid = self.require_not_response(&typ).is_ok();
-                // Don't
 
                 // Check default matches type. Only check if type is valid, to not have two reports
                 if let Some(val) = &default
@@ -542,13 +546,13 @@ impl<'a> Oracle<'a> {
     ///
     /// When declaring an enum, you do `enum (T) {...}`. This function validates
     /// that `T` is one of the allowed types. If it isn't a report is generated.
-    fn is_enum_type_valid(&mut self, enum_type: &ast::Type) -> bool {
+    fn lower_enum_type(&mut self, enum_type: &ast::Type) -> Option<EnumTy> {
         match enum_type {
-            ast::Type::TypeI32(_)
-            | ast::Type::TypeI64(_)
-            | ast::Type::TypeU32(_)
-            | ast::Type::TypeU64(_)
-            | ast::Type::TypeString(_) => true,
+            ast::Type::TypeI32(_) => Some(EnumTy::I32),
+            ast::Type::TypeI64(_) => Some(EnumTy::I64),
+            ast::Type::TypeU32(_) => Some(EnumTy::U32),
+            ast::Type::TypeU64(_) => Some(EnumTy::U64),
+            ast::Type::TypeString(_) => Some(EnumTy::String),
 
             typ => {
                 let range = enum_type.syntax().text_range();
@@ -564,7 +568,7 @@ impl<'a> Oracle<'a> {
                         ),
                 );
 
-                false
+                None
             }
         }
     }
@@ -836,7 +840,7 @@ fn validate_reference(
     reports: &mut Vec<Report>,
     reference: StringId,
     range: TextRange,
-) -> Option<PrimitiveType> {
+) -> Option<StringId> {
     match resolve(strings, symbol_map, root, reference, range) {
         ResolvedSymbol::Missing { name, range } => {
             let name_str = strings.resolve(name);
@@ -849,7 +853,7 @@ fn validate_reference(
 
         // We don't care to what it resolves to, we just care that it resolves to
         // something
-        ResolvedSymbol::Type(_) => Some(PrimitiveType::Reference(reference)),
+        ResolvedSymbol::Type(_) => Some(reference),
     }
 }
 
@@ -868,14 +872,14 @@ fn lower_array_option(
 ) -> Option<TypeId> {
     match ParsedType::new(inner, strings) {
         ParsedType::Primitive(primitive) => {
-            let res = builder.finish(primitive);
+            let res = builder.finish_primitive(primitive);
             Some(res.container_id)
         }
         ParsedType::Reference { name, range } => {
             match validate_reference(strings, symbol_map, root, reports, name, range) {
                 None => None,
                 Some(typ) => {
-                    let res = builder.finish(typ);
+                    let res = builder.finish_reference(typ);
                     Some(res.container_id)
                 }
             }
@@ -1030,7 +1034,7 @@ fn insert_type_fields(
                 match validate_reference(strings, symbol_map, root, reports, name, range) {
                     None => (),
                     Some(typ) => {
-                        builder.add_primitive(field.name, typ, field.default, field.docs);
+                        builder.add_reference(field.name, typ, field.default, field.docs);
                     }
                 }
             }

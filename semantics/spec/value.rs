@@ -199,6 +199,7 @@ impl<'a> Iterator for ArrayItems<'a> {
 }
 
 /// Helper type for mime types iterator
+#[derive(Debug, Clone)]
 enum MimeTypesInner<'a> {
     String(Option<&'a str>),
     Array(ArrayItems<'a>),
@@ -207,6 +208,7 @@ enum MimeTypesInner<'a> {
 /// Iterator over mime types that a [`MimeTypesId`] points to.
 ///
 /// Returned by [`ValueArena::get_mime_types`].
+#[derive(Debug, Clone)]
 pub struct MimeTypes<'a>(MimeTypesInner<'a>);
 
 impl<'a> Iterator for MimeTypes<'a> {
