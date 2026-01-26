@@ -290,16 +290,16 @@ pub struct NamedReference<'a, T> {
     _data: std::marker::PhantomData<T>,
 }
 
-impl<'a> NamedReference<'a, InlineTy<'a, SimpleTy<'a>>> {
+impl<'a> NamedReference<'a, SimpleTy<'a>> {
     /// Resolve the referenced type.
-    pub fn typ(&self) -> InlineTy<'a, SimpleTy<'a>> {
+    pub fn typ(&self) -> SimpleTy<'a> {
         self.ctx.resolve_from_slot(self.id)
     }
 }
 
-impl<'a> NamedReference<'a, InlineTy<'a, Type<'a>>> {
+impl<'a> NamedReference<'a, Type<'a>> {
     /// Resolve the referenced type.
-    pub fn typ(&self) -> InlineTy<'a, Type<'a>> {
+    pub fn typ(&self) -> Type<'a> {
         self.ctx.resolve_from_slot(self.id)
     }
 }
@@ -413,7 +413,7 @@ impl<'a, T> Iterator for TypeFieldIterator<'a, T> {
         self.current = match &field_type_slot {
             Slot::Option { end } => end.0,
             Slot::Array { end } => end.0,
-            Slot::Primitive(_) => self.current + 2,
+            Slot::Primitive(_) | Slot::Reference(_) => self.current + 2,
             typ => unreachable!("invalid type's field type in arena: {typ:?}"),
         };
 
@@ -1226,7 +1226,10 @@ impl<'a> SpecContext<'a> {
 #[cfg(test)]
 mod test {
     use super::{PrimitiveTy, Slot, Type, TypeFieldId, TypeId};
-    use crate::spec::{Spec, typ::InlineTy};
+    use crate::spec::{
+        Spec,
+        typ::{InlineTy, RootTypeId, TypeDef},
+    };
 
     #[test]
     fn builds_nested_types() {
@@ -1513,5 +1516,56 @@ mod test {
                     slot_idx: 15,
                 }
         );
+    }
+
+    #[test]
+    fn named_refs() {
+        let mut spec = Spec::new_test();
+
+        // Build spec like this:
+        // type Foo: string
+        // type Bar: rec {
+        //   name: Foo
+        // }
+
+        let foo_name = spec.strings.get_or_intern("Foo");
+        let name_field = spec.strings.get_or_intern("name");
+
+        let foo_typ = spec.types.add_primitive(PrimitiveTy::String);
+        spec.symbol_table.insert(
+            foo_name,
+            TypeDef {
+                docs: None,
+                typ: RootTypeId::Type(foo_typ),
+            },
+        );
+
+        let mut bar_builder = spec.types.start_record();
+        bar_builder.add_reference(name_field, foo_name, None, None);
+        let bar_typ = bar_builder.finish();
+
+        // Get Bar type and verify
+        let record = match spec.ctx().get_type(bar_typ) {
+            Type::Record(record) => record,
+            _ => panic!("expected record type for Bar"),
+        };
+
+        // get name field
+        let mut fields = record.fields();
+        let name_field = fields.next().expect("name field should exist");
+
+        // Check no more fields
+        assert!(fields.next().is_none());
+
+        match name_field.typ {
+            InlineTy::NamedReference(reference) => {
+                assert_eq!(reference.name, "Foo");
+                assert!(matches!(
+                    reference.typ(),
+                    Type::Inline(InlineTy::Primitive(PrimitiveTy::String))
+                ))
+            }
+            _ => panic!("expected named reference for name field"),
+        }
     }
 }
