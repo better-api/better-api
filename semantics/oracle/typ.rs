@@ -26,6 +26,11 @@ struct InternedField {
     docs: Option<StringId>,
 }
 
+/// Semantic wrapper for fields parsed by [`Oracle::parse_type_fields`].
+#[derive(Clone)]
+#[repr(transparent)]
+struct ParsedFields(Vec<InternedField>);
+
 /// Helper type for handling primitive types separately from composite ones.
 enum ParsedType<'a> {
     Primitive(PrimitiveTy),
@@ -487,7 +492,7 @@ impl<'a> Oracle<'a> {
         &mut self,
         fields: impl Iterator<Item = ast::TypeField>,
         parse_default: bool,
-    ) -> Vec<InternedField> {
+    ) -> ParsedFields {
         let mut fields: Vec<_> = fields
             .filter_map(|f| {
                 let typ = f.typ()?;
@@ -511,10 +516,13 @@ impl<'a> Oracle<'a> {
                 // Check typ is valid
                 let typ_valid = self.require_not_response(&typ).is_ok();
 
-                // Check default matches type. Only check if type is valid, to not have two reports
-                if let Some(val) = &default
-                    && typ_valid
-                {
+                // If type is invalid we don't have (or want) to check default value
+                // matches the type.
+                if !typ_valid {
+                    return None;
+                }
+
+                if let Some(val) = &default {
                     let deref = |node: &ast::TypeRef| {
                         deref(&self.strings, &self.symbol_map, self.root, node)
                     };
@@ -538,7 +546,7 @@ impl<'a> Oracle<'a> {
         fields.sort_by_key(|f| f.name);
         check_type_fields_unique(&fields, &mut self.reports, &self.strings);
 
-        fields
+        ParsedFields(fields)
     }
 
     /// Validates type of the enum (not enum itself).
@@ -1050,7 +1058,7 @@ fn new_invalid_response(range: TextRange, deref_range: Option<TextRange>) -> Rep
 ///
 /// This must be called on fields returned by [`Oracle::parse_type_fields`].
 fn insert_type_fields(
-    fields: Vec<InternedField>,
+    fields: ParsedFields,
     mut builder: FieldBuilder,
     reports: &mut Vec<Report>,
     strings: &mut StringInterner,
@@ -1058,7 +1066,7 @@ fn insert_type_fields(
     root: &ast::Root,
     outer_type: InvalidOuterContext,
 ) -> TypeId {
-    for field in fields {
+    for field in fields.0 {
         let typ = field
             .field
             .typ()
@@ -1071,11 +1079,8 @@ fn insert_type_fields(
             ParsedType::Reference { name, range } => {
                 match validate_reference(strings, symbol_map, root, reports, name, range) {
                     None => (),
-                    Some(ValidRef::Response {
-                        range: deref_range, ..
-                    }) => {
-                        let report = new_invalid_response(range, Some(deref_range));
-                        reports.push(report);
+                    Some(ValidRef::Response { .. }) => {
+                        unreachable!("fields should be validated by `parse_type_fields`")
                     }
                     Some(ValidRef::Type(reference)) => {
                         builder.add_reference(field.name, reference, field.default, field.docs);
@@ -1123,7 +1128,7 @@ fn insert_type_fields(
                 ));
             }
             ParsedType::Response(_) => {
-                reports.push(new_invalid_response(typ.syntax().text_range(), None));
+                unreachable!("fields should be validated by `parse_type_fields`");
             }
             ParsedType::Record(_) => {
                 reports.push(new_invalid_inner_type(
