@@ -6,8 +6,8 @@ use crate::oracle::SymbolMap;
 use crate::oracle::symbols::{ResolvedSymbol, deref, report_missing, resolve};
 use crate::oracle::value::{lower_mime_types, lower_value};
 use crate::spec::typ::{
-    EnumTy, FieldBuilder, OptionArrayBuilder, PrimitiveTy, ResponseId, RootTypeId, SimpleRecordId,
-    TypeDef, TypeId,
+    EnumTy, FieldBuilder, OptionArrayBuilder, PrimitiveTy, ResponseId, RootRef, RootTypeId,
+    SimpleRecordId, TypeDef, TypeId, TypeRef,
 };
 use crate::spec::value::ValueId;
 use crate::string::{StringId, StringInterner};
@@ -121,7 +121,7 @@ impl<'a> Oracle<'a> {
                     range,
                 ) {
                     None => None,
-                    Some(typ) => Some(self.types.add_reference(typ).into()),
+                    Some(typ) => Some(self.types.add_reference(typ.into())),
                 }
             }
             ParsedType::Enum(en) => self.lower_enum(en).map(|id| id.into()),
@@ -362,14 +362,15 @@ impl<'a> Oracle<'a> {
         // Finally we can lower the body. This also does basic type validation (ie record fields
         // are valid with correct defaults, ...). Since there are no more validation steps after
         // this, we can early return in case of errors.
-        let RootTypeId::Type(body_id) = self.lower_type(&body)? else {
-            unreachable!("we should check that body is not a response");
-        };
+        let body_id = self.lower_type(&body)?;
 
         // If there were any errors during validation, don't build the final type.
         if !is_valid {
             return None;
         }
+
+        // Safety: We checked that body isn't a response or reference to a response.
+        let body_id = unsafe { TypeId::new_unchecked(body_id) };
 
         let id = self
             .types
@@ -438,12 +439,10 @@ impl<'a> Oracle<'a> {
             return None;
         }
 
-        let RootTypeId::Type(id) = self.lower_type(headers)? else {
-            unreachable!("we have checked it's a simple record")
-        };
+        let id = self.lower_type(headers)?;
 
         // Safety: We have checked that it's a simple record.
-        let id = unsafe { SimpleRecordId::new_unchecked(id) };
+        let id = unsafe { SimpleRecordId::new_unchecked(TypeId::new_unchecked(id)) };
         Some(id)
     }
 
@@ -773,20 +772,7 @@ impl<'a> Oracle<'a> {
                 let range = node.syntax().text_range();
                 let deref_range = derefed.syntax().text_range();
 
-                let mut report = Report::error("invalid usage of `response` type".to_string())
-                    .add_label(Label::primary(
-                        "invalid usage of `response` type".to_string(),
-                        range.into(),
-                    ))
-                    .with_note("help: `response` type can't be a child of a type".to_string());
-
-                if range != deref_range {
-                    report = report.add_label(Label::secondary(
-                        "`response` type introduced here".to_string(),
-                        deref_range.into(),
-                    ))
-                }
-
+                let report = new_invalid_response(range, Some(deref_range));
                 Err(report)
             }
         };
@@ -829,6 +815,26 @@ enum SimpleRecordReportType<'a> {
     CompositeField(&'a ast::TypeField),
 }
 
+/// Helper type representing a valid reference.
+#[derive(Debug, Clone, Copy)]
+enum ValidRef {
+    Type(TypeRef),
+    Response {
+        reference: RootRef,
+        /// Range of the dereferenced response
+        range: TextRange,
+    },
+}
+
+impl From<ValidRef> for RootRef {
+    fn from(value: ValidRef) -> Self {
+        match value {
+            ValidRef::Type(reference) => reference.into(),
+            ValidRef::Response { reference, .. } => reference,
+        }
+    }
+}
+
 /// Validates reference is valid.
 ///
 /// Reports are pushed to `reports` on the fly. If reference is valid, [`PrimitiveType`] that can
@@ -840,7 +846,7 @@ fn validate_reference(
     reports: &mut Vec<Report>,
     reference: StringId,
     range: TextRange,
-) -> Option<StringId> {
+) -> Option<ValidRef> {
     match resolve(strings, symbol_map, root, reference, range) {
         ResolvedSymbol::Missing { name, range } => {
             let name_str = strings.resolve(name);
@@ -851,9 +857,11 @@ fn validate_reference(
         // Report created during cycle detection
         ResolvedSymbol::Cycle => None,
 
-        // We don't care to what it resolves to, we just care that it resolves to
-        // something
-        ResolvedSymbol::Type(_) => Some(reference),
+        ResolvedSymbol::Type(ast::Type::TypeResponse(resp)) => Some(ValidRef::Response {
+            reference: RootRef(reference),
+            range: resp.syntax().text_range(),
+        }),
+        ResolvedSymbol::Type(_) => Some(ValidRef::Type(TypeRef(reference))),
     }
 }
 
@@ -878,8 +886,16 @@ fn lower_array_option(
         ParsedType::Reference { name, range } => {
             match validate_reference(strings, symbol_map, root, reports, name, range) {
                 None => None,
-                Some(typ) => {
-                    let res = builder.finish_reference(typ);
+                Some(ValidRef::Response {
+                    range: deref_range, ..
+                }) => {
+                    let report = new_invalid_response(range, Some(deref_range));
+                    reports.push(report);
+
+                    None
+                }
+                Some(ValidRef::Type(reference)) => {
+                    let res = builder.finish_reference(reference);
                     Some(res.container_id)
                 }
             }
@@ -922,11 +938,7 @@ fn lower_array_option(
             None
         }
         ParsedType::Response(_) => {
-            reports.push(new_invalid_inner_type(
-                InvalidInnerContext::Response,
-                outer_type,
-                inner,
-            ));
+            reports.push(new_invalid_response(inner.syntax().text_range(), None));
             None
         }
         ParsedType::Record(_) => {
@@ -960,9 +972,6 @@ enum InvalidInnerContext {
 
     #[display("record")]
     Record,
-
-    #[display("response")]
-    Response,
 }
 
 /// Helper type for passing around the context in which an invalid inner
@@ -997,7 +1006,6 @@ fn new_invalid_inner_type(
         InvalidInnerContext::Enum => "type MyEnum: enum (T) { ... }",
         InvalidInnerContext::Union => "type MyUnion: union (\"discriminator\") { ... }",
         InvalidInnerContext::Record => "type MyRecord: rec { ... }",
-        InvalidInnerContext::Response => "type MyResponse: resp { ... }",
     };
 
     Report::error(format!("inline {inner} not allowed in {outer}"))
@@ -1010,7 +1018,37 @@ fn new_invalid_inner_type(
         ))
 }
 
+/// Constructs a [`Report`] for reporting that a response type is used in invalid context.
+///
+/// For instance, response type can't be used as a child of any type.
+/// The function takes:
+/// - `range`: Range of the node that is invalid. If the node is a reference, this is the range of the reference,
+///   not the range of response the reference points to.
+/// - `deref_range`: If the invalid node is a reference, this is the range of the dereferenced response type.
+///   If the invalid node is not a reference, this is `None`.
+fn new_invalid_response(range: TextRange, deref_range: Option<TextRange>) -> Report {
+    let mut report = Report::error("invalid usage of `response` type".to_string())
+        .add_label(Label::primary(
+            "invalid usage of `response` type".to_string(),
+            range.into(),
+        ))
+        .with_note("help: `response` type can't be a child of a type".to_string());
+
+    if let Some(deref_range) = deref_range
+        && range != deref_range
+    {
+        report = report.add_label(Label::secondary(
+            "`response` type introduced here".to_string(),
+            deref_range.into(),
+        ))
+    }
+
+    report
+}
+
 /// Inserts type fields into the type arena.
+///
+/// This must be called on fields returned by [`Oracle::parse_type_fields`].
 fn insert_type_fields(
     fields: Vec<InternedField>,
     mut builder: FieldBuilder,
@@ -1033,8 +1071,14 @@ fn insert_type_fields(
             ParsedType::Reference { name, range } => {
                 match validate_reference(strings, symbol_map, root, reports, name, range) {
                     None => (),
-                    Some(typ) => {
-                        builder.add_reference(field.name, typ, field.default, field.docs);
+                    Some(ValidRef::Response {
+                        range: deref_range, ..
+                    }) => {
+                        let report = new_invalid_response(range, Some(deref_range));
+                        reports.push(report);
+                    }
+                    Some(ValidRef::Type(reference)) => {
+                        builder.add_reference(field.name, reference, field.default, field.docs);
                     }
                 }
             }
@@ -1079,11 +1123,7 @@ fn insert_type_fields(
                 ));
             }
             ParsedType::Response(_) => {
-                reports.push(new_invalid_inner_type(
-                    InvalidInnerContext::Response,
-                    outer_type,
-                    &typ,
-                ));
+                reports.push(new_invalid_response(typ.syntax().text_range(), None));
             }
             ParsedType::Record(_) => {
                 reports.push(new_invalid_inner_type(

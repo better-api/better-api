@@ -13,7 +13,12 @@
 //!
 //! ## Getting Types
 //!
-//! To retrieve a type, pass a [`TypeId`] to [`TypeArena::get`]. This returns a [`Type`].
+//! To retrieve a type, pass a [`TypeId`] to [`SpecContext::get_type`].
+//! For roots, use [`SpecContext::get_root_type`].
+//!
+//! Within this module, [`Type`] represents the named/composite variants you
+//! typically work with. The full representation, including responses and other
+//! root-only variants, is [`RootType`].
 
 use crate::spec::SpecContext;
 use crate::spec::value::{self, Value, ValueId};
@@ -46,9 +51,9 @@ pub enum PrimitiveTy {
     File,
 }
 
-/// Type that can be inlined with reference to T.
+/// Inline type tree that can reference T.
 ///
-/// For simple inlined types, T will be SimpleTy. For normal types it will be Type
+/// For simple inline trees, T is [`SimpleTy`]. For normal ones, T is [`Type`].
 #[derive(Debug, Clone, derive_more::Display)]
 pub enum InlineTy<'a, T> {
     Primitive(PrimitiveTy),
@@ -68,43 +73,26 @@ impl<T> From<PrimitiveTy> for InlineTy<'_, T> {
 }
 
 impl<'a, T> FromSlot<'a> for InlineTy<'a, T> {
-    fn from_slot(ctx: SpecContext<'a>, id: TypeId, slot: &Slot) -> Self {
+    fn from_slot(ctx: SpecContext<'a>, slot_idx: u32, slot: &Slot) -> Self {
         match slot {
             Slot::Primitive(prim) => (*prim).into(),
             Slot::Array { .. } => Self::Array(Reference {
                 ctx,
-                id: TypeId(id.0 + 1),
+                id: slot_idx + 1,
                 _data: Default::default(),
             }),
             Slot::Option { .. } => Self::Option(Reference {
                 ctx,
-                id: TypeId(id.0 + 1),
+                id: slot_idx + 1,
                 _data: Default::default(),
             }),
-            Slot::Reference(id) => {
-                let typ_def = ctx
-                    .symbol_table
-                    .get(id)
-                    .expect("references in the TypeArena should be resolvable");
-                let type_id = match typ_def.typ {
-                    RootTypeId::Type(id) => id,
-                    RootTypeId::Response(_) => {
-                        unreachable!("invalid reference to Response from InlineTy in TypeArena")
-                    }
-                };
-
-                let name = ctx.strings.resolve(*id);
-
-                Self::NamedReference(NamedReference {
-                    name,
-                    id: type_id,
-                    ctx,
-                    _data: Default::default(),
-                })
+            Slot::Reference(_) => {
+                let reference = NamedReference::from_slot(ctx, slot_idx, slot);
+                Self::NamedReference(reference)
             }
 
-            // The arena and oracle should make it impossible to construct invalid conversion
-            _ => unreachable!("invalid conversion of {slot:?} to InlineTy"),
+            // The arena and oracle should construct a valid arena
+            _ => unreachable!("invalid conversion of slot {slot_idx}: {slot:?} to InlineTy"),
         }
     }
 }
@@ -130,35 +118,38 @@ impl From<PrimitiveTy> for SimpleTy<'_> {
 }
 
 impl<'a> FromSlot<'a> for SimpleTy<'a> {
-    fn from_slot(ctx: SpecContext<'a>, id: TypeId, slot: &Slot) -> Self {
+    fn from_slot(ctx: SpecContext<'a>, slot_idx: u32, slot: &Slot) -> Self {
         match slot {
-            Slot::Primitive(_) | Slot::Array { .. } | Slot::Option { .. } | Slot::Reference(_) => {
-                let inline = InlineTy::from_slot(ctx, id, slot);
+            Slot::Primitive(_)
+            | Slot::Array { .. }
+            | Slot::Option { .. }
+            | Slot::Reference { .. } => {
+                let inline = InlineTy::from_slot(ctx, slot_idx, slot);
                 Self::Inline(inline)
             }
             Slot::Enum { typ, end } => {
                 let enm = Enum {
-                    id,
+                    id: TypeId(slot_idx),
                     typ: *typ,
                     members: EnumMemberIterator {
                         ctx,
-                        current: TypeId(id.0 + 1),
+                        current: TypeId(slot_idx + 1),
                         end: *end,
                     },
                 };
                 Self::Enum(enm)
             }
 
-            // The arena and oracle should make it impossible to construct invalid conversion
-            _ => unreachable!("invalid conversion of {slot:?} to SimpleTy"),
+            // The arena and oracle should construct a valid arena
+            _ => unreachable!("invalid conversion of slot {slot_idx}: {slot:?} to SimpleTy"),
         }
     }
 }
 
-/// Any type without response.
+/// Any non-response type.
 ///
-/// This type doesn't include response, because it can't be a child of any other type.
-/// This way you stay inside valid types when traversing Type.
+/// `Type` is the named/composite subset used in most contexts.
+/// The full set of possible types (including responses) is [`RootType`].
 #[derive(Debug, Clone, derive_more::Display)]
 pub enum Type<'a> {
     Inline(InlineTy<'a, Type<'a>>),
@@ -183,78 +174,59 @@ impl From<PrimitiveTy> for Type<'_> {
     }
 }
 
-/// Any type including response.
-///
-/// Used primarily for type definition.
-#[derive(Debug, Clone)]
-pub(crate) enum RootTypeId {
-    Type(TypeId),
-    Response(ResponseId),
-}
-
-impl From<TypeId> for RootTypeId {
-    fn from(value: TypeId) -> Self {
-        Self::Type(value)
-    }
-}
-
-impl From<ResponseId> for RootTypeId {
-    fn from(value: ResponseId) -> Self {
-        Self::Response(value)
-    }
-}
-
 impl<'a> FromSlot<'a> for Type<'a> {
-    fn from_slot(ctx: SpecContext<'a>, id: TypeId, slot: &Slot) -> Self {
+    fn from_slot(ctx: SpecContext<'a>, slot_idx: u32, slot: &Slot) -> Self {
         match slot {
-            Slot::Primitive(_) | Slot::Array { .. } | Slot::Option { .. } | Slot::Reference(_) => {
-                let inline = InlineTy::from_slot(ctx, id, slot);
+            Slot::Primitive(_)
+            | Slot::Array { .. }
+            | Slot::Option { .. }
+            | Slot::Reference { .. } => {
+                let inline = InlineTy::from_slot(ctx, slot_idx, slot);
                 Self::Inline(inline)
             }
             Slot::Enum { typ, end } => {
                 let enm = Enum {
-                    id,
+                    id: TypeId(slot_idx),
                     typ: *typ,
                     members: EnumMemberIterator {
                         ctx,
-                        current: TypeId(id.0 + 1),
+                        current: TypeId(slot_idx + 1),
                         end: *end,
                     },
                 };
                 Self::Enum(enm)
             }
             Slot::Record { end } => Type::Record(Record {
-                id,
+                id: TypeId(slot_idx),
                 fields: TypeFieldIterator {
                     ctx,
-                    current: id.0 + 1,
+                    current: slot_idx + 1,
                     end: end.0,
-                    id,
+                    id: TypeId(slot_idx),
                     _data: Default::default(),
                 },
             }),
             Slot::Union { end } => Type::Union(Union {
-                id,
+                id: TypeId(slot_idx),
                 fields: TypeFieldIterator {
                     ctx,
-                    current: id.0 + 1,
+                    current: slot_idx + 1,
                     end: end.0,
-                    id,
+                    id: TypeId(slot_idx),
                     _data: Default::default(),
                 },
             }),
 
-            // The arena and oracle should make it impossible to construct invalid conversion
-            _ => unreachable!("invalid conversion of {slot:?} to Type"),
+            // The arena and oracle should construct a valid arena
+            _ => unreachable!("invalid conversion of slot {slot_idx}: {slot:?} to Type"),
         }
     }
 }
 
-/// Reference to [`SimpleTy`] or [`Type`].
+/// Reference to an inline type node within the arena.
 #[derive(derive_more::Debug, Clone)]
 pub struct Reference<'a, T> {
-    /// Id of the type in the arena.
-    pub(crate) id: TypeId,
+    id: u32,
 
     #[debug(skip)]
     ctx: SpecContext<'a>,
@@ -276,18 +248,63 @@ impl<'a> Reference<'a, InlineTy<'a, Type<'a>>> {
     }
 }
 
+/// Reference to a named [`Type`] definition.
+///
+/// Validated by the oracle before insertion into the arena.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub(crate) struct TypeRef(pub StringId);
+
+/// Reference to a named [`RootType`] definition.
+///
+/// Validated by the oracle before insertion into the arena.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub(crate) struct RootRef(pub StringId);
+
+impl From<TypeRef> for RootRef {
+    fn from(value: TypeRef) -> Self {
+        Self(value.0)
+    }
+}
+
 #[derive(Clone, derive_more::Debug, derive_more::Display)]
 #[display("reference `{name}`")]
 pub struct NamedReference<'a, T> {
     pub name: &'a str,
 
-    pub(crate) id: TypeId,
+    id: u32,
 
     #[display(skip)]
     #[debug(skip)]
     ctx: SpecContext<'a>,
 
     _data: std::marker::PhantomData<T>,
+}
+
+impl<'a, T> FromSlot<'a> for NamedReference<'a, T> {
+    fn from_slot(ctx: SpecContext<'a>, slot_idx: u32, slot: &Slot) -> Self {
+        match slot {
+            Slot::Reference(name_id) => {
+                let name = ctx.strings.resolve(*name_id);
+
+                let type_def = ctx
+                    .symbol_table
+                    .get(name_id)
+                    .expect("invalid type arena: missing reference in symbol table");
+
+                NamedReference {
+                    name,
+                    id: type_def.typ.0,
+                    ctx,
+                    _data: Default::default(),
+                }
+            }
+
+            // The arena and oracle should construct a valid arena
+            _ => unreachable!("invalid conversion of slot {slot_idx}: {slot:?} to NamedReference"),
+        }
+    }
 }
 
 impl<'a> NamedReference<'a, SimpleTy<'a>> {
@@ -300,6 +317,13 @@ impl<'a> NamedReference<'a, SimpleTy<'a>> {
 impl<'a> NamedReference<'a, Type<'a>> {
     /// Resolve the referenced type.
     pub fn typ(&self) -> Type<'a> {
+        self.ctx.resolve_from_slot(self.id)
+    }
+}
+
+impl<'a> NamedReference<'a, RootType<'a>> {
+    /// Resolve the referenced type.
+    pub fn typ(&self) -> RootType<'a> {
         self.ctx.resolve_from_slot(self.id)
     }
 }
@@ -380,7 +404,7 @@ impl<'a> From<TypeFieldInner<'a, Type<'a>>> for UnionField<'a> {
 
 /// Iterator returned for composite types.
 ///
-/// Each item is a [`TypeField`].
+/// Each item is a field in the record or union.
 #[derive(derive_more::Debug, Clone)]
 struct TypeFieldIterator<'a, T> {
     #[debug(skip)]
@@ -413,8 +437,8 @@ impl<'a, T> Iterator for TypeFieldIterator<'a, T> {
         self.current = match &field_type_slot {
             Slot::Option { end } => end.0,
             Slot::Array { end } => end.0,
-            Slot::Primitive(_) | Slot::Reference(_) => self.current + 2,
-            typ => unreachable!("invalid type's field type in arena: {typ:?}"),
+            Slot::Primitive(_) | Slot::Reference { .. } => self.current + 2,
+            typ => unreachable!("invalid field type for {field_id:?}: {typ:?}"),
         };
 
         Some(field)
@@ -433,7 +457,7 @@ pub struct Record<'a> {
 }
 
 impl<'a> Record<'a> {
-    /// Returns iterator over [record fields](RecordField)
+    /// Returns iterator over [record fields](RecordField).
     pub fn fields(&self) -> impl Iterator<Item = RecordField<'a>> {
         self.fields.clone().map(|it| it.into())
     }
@@ -451,6 +475,7 @@ pub struct SimpleRecord<'a> {
 }
 
 impl<'a> SimpleRecord<'a> {
+    /// Returns iterator over [simple record fields](SimpleRecordField).
     pub fn fields(&self) -> impl Iterator<Item = SimpleRecordField<'a>> {
         self.fields.clone().map(|it| it.into())
     }
@@ -468,7 +493,7 @@ pub struct Union<'a> {
 }
 
 impl<'a> Union<'a> {
-    /// Returns iterator over [union fields](UnionField)
+    /// Returns iterator over [union fields](UnionField).
     pub fn fields(&self) -> impl Iterator<Item = UnionField<'a>> {
         self.fields.clone().map(|it| it.into())
     }
@@ -494,7 +519,7 @@ pub enum EnumTy {
 /// Field `typ` describes the type of enum values.
 #[derive(Debug, Clone)]
 pub struct Enum<'a> {
-    // Id of the union
+    // Id of the enum
     pub(crate) id: TypeId,
 
     /// Type of the enum members
@@ -540,7 +565,10 @@ impl<'a> Iterator for EnumMemberIterator<'a> {
                 Some(EnumMember { value, docs })
             }
 
-            typ => unreachable!("invalid enum member slot in arena: {typ:?}"),
+            slot => unreachable!(
+                "invalid enum member slot at {current:?}: {slot:?}",
+                current = self.current
+            ),
         }
     }
 }
@@ -558,32 +586,109 @@ pub struct Response<'a> {
     pub content_type: Option<value::MimeTypes<'a>>,
 }
 
+impl<'a> FromSlot<'a> for Response<'a> {
+    fn from_slot(ctx: SpecContext<'a>, slot_idx: u32, slot: &Slot) -> Self {
+        let Slot::Response {
+            body,
+            headers,
+            content_type,
+        } = slot
+        else {
+            unreachable!("invalid ResponseId {slot_idx} that doesn't point to response");
+        };
+
+        let body = ctx.get_type(*body);
+        let headers = headers.map(|id| ctx.get_simple_record(id));
+        let content_type = content_type.map(|id| ctx.get_mime_types(id));
+
+        Response {
+            body,
+            headers,
+            content_type,
+        }
+    }
+}
+
+/// Any type including response.
+#[derive(Debug, Clone, derive_more::Display)]
+pub enum RootType<'a> {
+    #[display("`response`")]
+    Response(Response<'a>),
+    Type(Type<'a>),
+
+    NamedReference(NamedReference<'a, RootType<'a>>),
+}
+
+impl<'a> FromSlot<'a> for RootType<'a> {
+    fn from_slot(ctx: SpecContext<'a>, slot_idx: u32, slot: &Slot) -> Self {
+        match slot {
+            Slot::Response { .. } => {
+                let resp = Response::from_slot(ctx, slot_idx, slot);
+                Self::Response(resp)
+            }
+            Slot::Reference(_) => {
+                let reference = NamedReference::from_slot(ctx, slot_idx, slot);
+                Self::NamedReference(reference)
+            }
+            _ => {
+                let typ = Type::from_slot(ctx, slot_idx, slot);
+                Self::Type(typ)
+            }
+        }
+    }
+}
+
 /// Type definition.
 ///
-/// Used to store doc comment for type id that can be set
-/// during type definition
+/// Stores the doc comment for a named type definition.
 #[derive(Debug, Clone)]
 pub(crate) struct TypeDef {
     pub docs: Option<StringId>,
     pub typ: RootTypeId,
 }
 
+/// Id of any type including response.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct RootTypeId(u32);
+
+impl From<TypeId> for RootTypeId {
+    fn from(value: TypeId) -> Self {
+        Self(value.0)
+    }
+}
+
+impl From<ResponseId> for RootTypeId {
+    fn from(value: ResponseId) -> Self {
+        Self(value.0)
+    }
+}
+
 /// Id of a type stored in the [`TypeArena`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct TypeId(u32);
+
+impl TypeId {
+    /// Treat a [`RootTypeId`] as a [`TypeId`] without validation.
+    ///
+    /// ## Safety
+    ///
+    /// The caller must ensure the id does not refer to a response type.
+    pub(crate) unsafe fn new_unchecked(id: RootTypeId) -> Self {
+        Self(id.0)
+    }
+}
 
 /// Id of a simple record type stored in the [`TypeArena`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct SimpleRecordId(u32);
 
 impl SimpleRecordId {
-    /// Flag given value id as valid simple record type.
+    /// Treat a [`TypeId`] as a [`SimpleRecordId`] without validation.
     ///
     /// ## Safety
     ///
-    /// The caller is responsible for ensuring that type id
-    /// is valid simple record type. That is, it has to be a record where
-    /// all fields have only InlineTy<SimpleTy> types.
+    /// The caller must ensure the id is a record and all fields resolve to
+    /// [`InlineTy<SimpleTy>`].
     pub(crate) unsafe fn new_unchecked(id: TypeId) -> Self {
         Self(id.0)
     }
@@ -595,7 +700,7 @@ pub(crate) struct ResponseId(u32);
 
 /// Id of a field in a record or union.
 ///
-/// Used for getting specific [`TypeField`] with [`TypeArena::get_field`].
+/// Used for getting a specific field through the context.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct TypeFieldId {
     container_id: TypeId,
@@ -618,20 +723,15 @@ impl TypeFieldId {
 
 /// Slot in the type arena.
 ///
-/// Most of the representations are obvious, the two notable that deserve a separate
-/// comment are Array and Option. Array and Option can be intertwined to form a complex
-/// nested type (ie. `[[[i32?]]?]?`). They can also be nested this way inside Record or Union
-/// field, which means we need an efficient way to skip the whole composition.
+/// Array and Option can be nested to form complex inline types
+/// (for example `[[[i32?]]?]?`). They can also appear as record/union
+/// field types, so we need an efficient way to skip the whole nesting
+/// when iterating fields.
 ///
-/// Array and Object work by having the next type in the arena be the type wrapped in them.
-/// For instance `[i32]` in arena is represented as `[Slot::Array, Slot::Primitive(_)]`
-/// This allows us to nest stuff, like example above:
-/// ```text
-/// [Slot::Option, Slot::Array, Slot::Option, Slot::Array, Slot::Array, Slot::Option,
-/// Slot::Primitive(_)]
-/// ```
-/// The `end` property of Array and Option represent the TypeId of the type after the whole nesting
-/// and can be used to skip the whole nested type when doing field iteration.
+/// Array and Option work by storing the wrapped type in the next slot.
+/// For example, `[i32]` is `[Slot::Array, Slot::Primitive(_)]`.
+/// The `end` field marks the slot after the whole nesting so field
+/// iteration can skip the full inline tree.
 #[derive(Debug, Clone, PartialEq)]
 enum Slot {
     Primitive(PrimitiveTy),
@@ -690,7 +790,7 @@ impl From<PrimitiveTy> for Slot {
 }
 
 trait FromSlot<'a> {
-    fn from_slot(ctx: SpecContext<'a>, id: TypeId, slot: &Slot) -> Self;
+    fn from_slot(ctx: SpecContext<'a>, slot_idx: u32, slot: &Slot) -> Self;
 }
 
 /// Helper type for adding records and unions to arena.
@@ -760,7 +860,7 @@ impl<'p> FieldBuilder<'p> {
     pub(crate) fn add_reference(
         &mut self,
         name: StringId,
-        reference: StringId,
+        reference: TypeRef,
         default: Option<value::ValueId>,
         docs: Option<StringId>,
     ) -> TypeFieldId {
@@ -771,7 +871,7 @@ impl<'p> FieldBuilder<'p> {
             default,
             docs,
         });
-        self.data.push(Slot::Reference(reference));
+        self.data.push(Slot::Reference(reference.0));
 
         TypeFieldId {
             container_id: self.start,
@@ -848,7 +948,10 @@ impl<'p> FieldBuilder<'p> {
         match head {
             Slot::Record { end } => *end = idx,
             Slot::Union { end, .. } => *end = idx,
-            _ => unreachable!("invalid FieldBuilder start"),
+            _ => unreachable!(
+                "invalid FieldBuilder start at {start:?}",
+                start = self.start
+            ),
         }
 
         self.start
@@ -870,8 +973,9 @@ impl<'a> Drop for FieldBuilder<'a> {
 ///
 /// This type is constructed with [`TypeArena::start_array`],
 /// [`TypeArena::start_option`] or [`FieldBuilder`] equivalent.
-/// After you are done, you should call [`finish`](OptionArrayBuilder::finish),
-/// which returns the id of the final type in the arena.
+/// After you are done, call [`OptionArrayBuilder::finish_primitive`] or
+/// [`OptionArrayBuilder::finish_reference`], which returns ids for both
+/// the leaf and the container.
 ///
 /// If builder is dropped before calling finish, added types are removed from the arena.
 pub(crate) struct OptionArrayBuilder<'p> {
@@ -889,7 +993,7 @@ pub(crate) struct OptionArrayBuilder<'p> {
 
 /// Result returned when [`OptionArrayBuilder`] is finished.
 pub(crate) struct OptionArray {
-    /// Id of the final primitive type inserted into the builder.
+    /// Id of the final leaf type inserted into the builder.
     pub primitive_id: TypeId,
 
     /// Id of the constructed Option or Array.
@@ -954,7 +1058,7 @@ impl<'p> OptionArrayBuilder<'p> {
             match slot {
                 Slot::Option { end } => *end = end_id,
                 Slot::Array { end } => *end = end_id,
-                _ => unreachable!(),
+                _ => unreachable!("invalid slot while finishing OptionArrayBuilder: {slot:?}"),
             }
         }
 
@@ -971,8 +1075,8 @@ impl<'p> OptionArrayBuilder<'p> {
         self.finish(typ.into())
     }
 
-    pub(crate) fn finish_reference(self, reference: StringId) -> OptionArray {
-        self.finish(Slot::Reference(reference))
+    pub(crate) fn finish_reference(self, reference: TypeRef) -> OptionArray {
+        self.finish(Slot::Reference(reference.0))
     }
 }
 
@@ -990,7 +1094,7 @@ impl<'p> Drop for OptionArrayBuilder<'p> {
 
 /// Helper type for adding enums to arena.
 ///
-/// Constructed via TODO: define constructor funcs
+/// Constructed via [`TypeArena::start_enum`].
 /// Call [`finish`](EnumBuilder::finish) once all members are added.
 ///
 /// Dropping the builder without finishing rolls back any changes.
@@ -1034,7 +1138,7 @@ impl<'p> EnumBuilder<'p> {
         let head = &mut self.data[start];
         match head {
             Slot::Enum { end, .. } => *end = idx,
-            _ => unreachable!("invalid EnumBuilder start"),
+            _ => unreachable!("invalid EnumBuilder start at {start:?}", start = self.start),
         }
 
         self.start
@@ -1076,10 +1180,10 @@ impl TypeArena {
     /// Add a reference to the arena.
     ///
     /// Returns the [`TypeId`] assigned to the new type.
-    pub(crate) fn add_reference(&mut self, reference: StringId) -> TypeId {
+    pub(crate) fn add_reference(&mut self, reference: RootRef) -> RootTypeId {
         let idx = self.data.len();
-        self.data.push(Slot::Reference(reference));
-        TypeId(idx as u32)
+        self.data.push(Slot::Reference(reference.0));
+        RootTypeId(idx as u32)
     }
 
     /// Add a response to the arena.
@@ -1105,7 +1209,7 @@ impl TypeArena {
         ResponseId(idx as u32)
     }
 
-    /// Start building an num
+    /// Start building an enum.
     ///
     /// Parameter `typ` is the type of the values in the enum.
     pub(crate) fn start_enum<'a>(&'a mut self, typ: EnumTy) -> EnumBuilder<'a> {
@@ -1121,7 +1225,7 @@ impl TypeArena {
 
     /// Start building a union type.
     ///
-    /// Returns a [`FieldBuilder`] configured with the provided discriminator.
+    /// Returns a [`FieldBuilder`] rooted at the new union slot.
     pub(crate) fn start_union<'a>(&'a mut self) -> FieldBuilder<'a> {
         FieldBuilder::new_union(self)
     }
@@ -1143,20 +1247,20 @@ impl TypeArena {
 
 impl<'a> SpecContext<'a> {
     /// Helper method for resolving type ids
-    fn resolve_from_slot<T: FromSlot<'a>>(&self, id: TypeId) -> T {
-        let slot = &self.types.data[id.0 as usize];
+    fn resolve_from_slot<T: FromSlot<'a>>(&self, id: u32) -> T {
+        let slot = &self.types.data[id as usize];
         T::from_slot(*self, id, slot)
     }
 
     /// Get [`Type`] by id.
     pub(crate) fn get_type(&self, id: TypeId) -> Type<'a> {
-        self.resolve_from_slot(id)
+        self.resolve_from_slot(id.0)
     }
 
     /// Get [`SimpleRecord`] by id.
     pub(crate) fn get_simple_record(&self, id: SimpleRecordId) -> SimpleRecord<'a> {
         let Slot::Record { end } = &self.types.data[id.0 as usize] else {
-            unreachable!("invalid SimpleRecordId that doesn't point to a simple record");
+            unreachable!("invalid SimpleRecordId {id:?} that doesn't point to a record");
         };
 
         SimpleRecord {
@@ -1173,24 +1277,12 @@ impl<'a> SpecContext<'a> {
 
     /// Get [`Response`] by id.
     pub(crate) fn get_response(&self, id: ResponseId) -> Response<'a> {
-        let Slot::Response {
-            body,
-            headers,
-            content_type,
-        } = &self.types.data[id.0 as usize]
-        else {
-            unreachable!("invalid ResponseId that doesn't point to response");
-        };
+        self.resolve_from_slot(id.0)
+    }
 
-        let body = self.get_type(*body);
-        let headers = headers.map(|id| self.get_simple_record(id));
-        let content_type = content_type.map(|id| self.get_mime_types(id));
-
-        Response {
-            body,
-            headers,
-            content_type,
-        }
+    /// Get [`RootType`] by id.
+    pub(crate) fn get_root_type(&self, id: RootTypeId) -> RootType<'a> {
+        self.resolve_from_slot(id.0)
     }
 
     /// Auxiliary function for getting inner type field representation by id
@@ -1211,7 +1303,7 @@ impl<'a> SpecContext<'a> {
         let default = default_id.map(|id| self.get_value(id));
         let docs = docs_id.map(|id| self.strings.resolve(id));
 
-        let typ = InlineTy::from_slot(*self, TypeId(id.slot_idx + 1), typ_slot);
+        let typ = InlineTy::from_slot(*self, id.slot_idx + 1, typ_slot);
 
         TypeFieldInner {
             id,
@@ -1228,7 +1320,7 @@ mod test {
     use super::{PrimitiveTy, Slot, Type, TypeFieldId, TypeId};
     use crate::spec::{
         Spec,
-        typ::{InlineTy, RootTypeId, TypeDef},
+        typ::{InlineTy, TypeDef, TypeRef},
     };
 
     #[test]
@@ -1536,12 +1628,12 @@ mod test {
             foo_name,
             TypeDef {
                 docs: None,
-                typ: RootTypeId::Type(foo_typ),
+                typ: foo_typ.into(),
             },
         );
 
         let mut bar_builder = spec.types.start_record();
-        bar_builder.add_reference(name_field, foo_name, None, None);
+        bar_builder.add_reference(name_field, TypeRef(foo_name), None, None);
         let bar_typ = bar_builder.finish();
 
         // Get Bar type and verify
