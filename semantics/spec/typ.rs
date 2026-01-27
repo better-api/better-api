@@ -1,24 +1,21 @@
 //! Defines semantic representation of types.
 //!
-//! The main data structure is a [`TypeArena`] that holds semantic types
-//! resolved from syntax. Types in the arena are referenced with [`TypeId`].
+//! ## Querying
 //!
-//! ## Building An Arena
-//!
-//! [Primitive types](PrimitiveType) can be added directly with
-//! [`TypeArena::add_primitive`]. Composite types (records and unions) are built
-//! through the builder API returned by [`TypeArena::start_record`] and
-//! [`TypeArena::start_union`]. Builders allow us to build the composite types
-//! without additional heap allocations.
-//!
-//! ## Getting Types
-//!
-//! To retrieve a type, pass a [`TypeId`] to [`SpecContext::get_type`].
-//! For roots, use [`SpecContext::get_root_type`].
+//! Types are queried from [`Spec`](crate::spec::Spec) through
+//! [`SpecContext`](crate::spec::SpecContext). Use [`SpecContext::get_type`],
+//! [`SpecContext::get_root_type`], and [`SpecContext::get_response_type`] for
+//! lookups, and [`SpecContext::get_simple_record`] for endpoint parameter
+//! records.
 //!
 //! Within this module, [`Type`] represents the named/composite variants you
 //! typically work with. The full representation, including responses and other
 //! root-only variants, is [`RootType`].
+//!
+//! ## Construction
+//!
+//! Construction is handled by [`Oracle`](crate::Oracle). It builds the internal
+//! arenas and performs validation before data is exposed through `SpecContext`.
 
 use crate::spec::SpecContext;
 use crate::spec::value::{self, Value, ValueId};
@@ -1275,8 +1272,8 @@ impl<'a> SpecContext<'a> {
         }
     }
 
-    /// Get [`Response`] by id.
-    pub(crate) fn get_response(&self, id: ResponseId) -> Response<'a> {
+    /// Get [`Response`] type by id.
+    pub(crate) fn get_response_type(&self, id: ResponseId) -> Response<'a> {
         self.resolve_from_slot(id.0)
     }
 

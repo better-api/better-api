@@ -1,40 +1,39 @@
 //! Defines semantic representation of endpoints and route groups.
 //!
-//! The main data structure is an [`EndpointArena`] that holds the semantic
-//! endpoints and routes. Endpoints and routes are referenced with [`EndpointId`]
-//! and [`RouteId`].
+//! ## Querying
 //!
-//! ## Building An Arena
+//! Querying goes through [`Spec`](crate::spec::Spec) by calling [`Spec::ctx`],
+//! which yields a [`SpecContext`](crate::spec::SpecContext). Use
+//! [`SpecContext::get_route`], [`SpecContext::get_endpoint`], and
+//! [`SpecContext::get_response`] to retrieve entries by id. [`Route`] and
+//! [`Endpoint`] provide iterators over nested routes, endpoints, and responses.
 //!
-//! Endpoints are created with [`EndpointArena::add_endpoint`] and route groups
-//! with [`EndpointArena::add_route`]. Builders let us append responses without
-//! extra allocations while preserving a compact arena layout.
+//! ## Construction
 //!
-//! ## Getting Endpoints and Routes
-//!
-//! To retrieve route or endpoint by id, use [`EndpointArena::get_route`] or
-//! [`EndpointArena::get_endpoint`]. [`Route`] and [`Endpoint`] contain methods
-//! for iterating through children (inner routes, endpoints and responses).
-//! See documentation for individual types for more info on available methods.
+//! Construction is handled by [`Oracle`](crate::Oracle). It builds the internal
+//! arenas and performs validation before data is exposed through `SpecContext`.
 
 use crate::path::{Path, PathArena, PathId, PathPart};
-use crate::spec::typ::TypeId;
-use crate::spec::value;
+use crate::spec::SpecContext;
+use crate::spec::typ::{SimpleRecord, SimpleRecordId, Type, TypeId};
+use crate::spec::value::{self, MimeTypes};
 use crate::string::StringId;
 
 /// Route group representation returned by the [`EndpointArena`].
 #[derive(derive_more::Debug, Clone)]
 pub struct Route<'a> {
     /// Id of the route
-    pub id: RouteId,
+    pub(crate) id: RouteId,
+
     /// Route path at this level of the hierarchy.
     pub path: Path<'a>,
-    /// Doc comments
-    pub docs: Option<StringId>,
 
-    /// Arena that holds the route, used to iterate through responses, endpoints and routes
+    /// Doc comments
+    pub docs: Option<&'a str>,
+
     #[debug(skip)]
-    arena: &'a EndpointArena,
+    ctx: SpecContext<'a>,
+
     /// End index of the route in the arena, used to know where to stop
     /// child iteration.
     end: u32,
@@ -44,7 +43,7 @@ impl<'a> Route<'a> {
     /// Returns an iterator over endpoints in this route group.
     pub fn endpoints(&self) -> EndpointIterator<'a> {
         EndpointIterator {
-            arena: self.arena,
+            ctx: self.ctx,
             current: self.id.0 + 1,
             end: self.end,
         }
@@ -53,7 +52,7 @@ impl<'a> Route<'a> {
     /// Returns an iterator over routes in this route group.
     pub fn routes(&self) -> RouteIterator<'a> {
         RouteIterator {
-            arena: self.arena,
+            ctx: self.ctx,
             current: self.id.0 + 1,
             end: self.end,
         }
@@ -62,52 +61,49 @@ impl<'a> Route<'a> {
     /// Returns an iterator over responses defined for this route group.
     pub fn responses(&self) -> ResponseIterator<'a> {
         ResponseIterator {
-            arena: self.arena,
+            ctx: self.ctx,
             current: self.id.0 + 1,
             end: self.end,
         }
     }
 }
 
-/// Core fields used to describe an endpoint.
-#[derive(Clone, Debug)]
-pub struct EndpointFields {
-    /// HTTP method used by the endpoint.
-    pub method: http::Method,
-
-    /// Name assigned to the endpoint.
-    pub name: StringId,
-
-    /// Path parameter type.
-    pub path: Option<TypeId>,
-    /// Query parameter type.
-    pub query: Option<TypeId>,
-    /// Headers type.
-    pub headers: Option<TypeId>,
-
-    /// MIME types the endpoint accepts for the request body.
-    pub accept: Option<value::MimeTypesId>,
-    /// Request body type.
-    pub request_body: Option<TypeId>,
-    /// Additional documentation for request body.
-    pub request_body_docs: Option<StringId>,
-}
-
 /// Endpoint representation returned by the [`EndpointArena`].
 #[derive(derive_more::Debug, Clone)]
 pub struct Endpoint<'a> {
     /// Id of the endpoint
-    pub id: EndpointId,
+    pub(crate) id: EndpointId,
+
     /// Path of the endpoint.
     pub path: Path<'a>,
-    /// Doc comments
-    pub docs: Option<StringId>,
-    /// Endpoint fields.
-    pub fields: &'a EndpointFields,
 
-    /// Arena that holds the endpoint, used to iterate through responses
+    /// Doc comments
+    pub docs: Option<&'a str>,
+
+    /// HTTP method used by the endpoint.
+    pub method: http::Method,
+
+    /// Name assigned to the endpoint.
+    pub name: &'a str,
+
+    /// Path parameter type.
+    pub path_param: Option<SimpleRecord<'a>>,
+    /// Query parameter type.
+    pub query: Option<SimpleRecord<'a>>,
+    /// Headers type.
+    pub headers: Option<SimpleRecord<'a>>,
+
+    /// MIME types the endpoint accepts for the request body.
+    pub accept: Option<MimeTypes<'a>>,
+
+    /// Request body type.
+    pub request_body: Option<Type<'a>>,
+    /// Additional documentation for request body.
+    pub request_body_docs: Option<&'a str>,
+
     #[debug(skip)]
-    arena: &'a EndpointArena,
+    ctx: SpecContext<'a>,
+
     /// End index of the endpoint in the arena, used to know where to stop
     /// response iteration.
     end: u32,
@@ -117,7 +113,7 @@ impl<'a> Endpoint<'a> {
     /// Returns an iterator over responses for this endpoint.
     pub fn responses(&self) -> ResponseIterator<'a> {
         ResponseIterator {
-            arena: self.arena,
+            ctx: self.ctx,
             current: self.id.0 + 1,
             end: self.end,
         }
@@ -126,7 +122,7 @@ impl<'a> Endpoint<'a> {
 
 /// Iterator over endpoints inside a [`Route`].
 pub struct EndpointIterator<'a> {
-    arena: &'a EndpointArena,
+    ctx: SpecContext<'a>,
 
     current: u32,
     end: u32,
@@ -137,13 +133,13 @@ impl<'a> Iterator for EndpointIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.current < self.end {
-            match &self.arena.data[self.current as usize] {
+            match &self.ctx.endpoints.data[self.current as usize] {
                 Slot::Route { end, .. } => self.current = *end,
-                Slot::Response(_) => self.current += 1,
+                Slot::Response { .. } => self.current += 1,
                 Slot::Endpoint { end, .. } => {
                     let id = EndpointId(self.current);
                     self.current = *end;
-                    return Some(self.arena.get_endpoint(id));
+                    return Some(self.ctx.get_endpoint(id));
                 }
             }
         }
@@ -154,7 +150,7 @@ impl<'a> Iterator for EndpointIterator<'a> {
 
 /// Iterator over routes inside a [`Route`]
 pub struct RouteIterator<'a> {
-    arena: &'a EndpointArena,
+    ctx: SpecContext<'a>,
 
     current: u32,
     end: u32,
@@ -165,13 +161,13 @@ impl<'a> Iterator for RouteIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.current < self.end {
-            match &self.arena.data[self.current as usize] {
-                Slot::Response(_) => self.current += 1,
+            match &self.ctx.endpoints.data[self.current as usize] {
+                Slot::Response { .. } => self.current += 1,
                 Slot::Endpoint { end, .. } => self.current = *end,
                 Slot::Route { end, .. } => {
                     let id = RouteId(self.current);
                     self.current = *end;
-                    return Some(self.arena.get_route(id));
+                    return Some(self.ctx.get_route(id));
                 }
             }
         }
@@ -182,24 +178,24 @@ impl<'a> Iterator for RouteIterator<'a> {
 
 /// Iterator over responses inside a [`Route`] or [`Endpoint`]
 pub struct ResponseIterator<'a> {
-    arena: &'a EndpointArena,
+    ctx: SpecContext<'a>,
 
     current: u32,
     end: u32,
 }
 
 impl<'a> Iterator for ResponseIterator<'a> {
-    type Item = Response;
+    type Item = Response<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.current < self.end {
-            match &self.arena.data[self.current as usize] {
+            match &self.ctx.endpoints.data[self.current as usize] {
                 Slot::Endpoint { end, .. } => self.current = *end,
                 Slot::Route { end, .. } => self.current = *end,
-                Slot::Response(resp) => {
+                Slot::Response { .. } => {
                     let id = ResponseId(self.current);
                     self.current += 1;
-                    return Some(Response { id, data: *resp });
+                    return Some(self.ctx.get_response(id));
                 }
             }
         }
@@ -217,38 +213,33 @@ pub enum ResponseStatus {
     Code(http::StatusCode),
 }
 
-/// Core data used to describe a response
-#[derive(Debug, Clone, Copy)]
-pub struct ResponseData {
+/// Response definition
+#[derive(Debug, Clone)]
+pub struct Response<'a> {
+    /// Id of the response
+    pub(crate) id: ResponseId,
+
     /// Status code of the response.
     pub status: ResponseStatus,
+
     /// Response body type.
-    pub type_id: TypeId,
+    pub typ: Type<'a>,
+
     /// Doc comments
-    pub docs: Option<StringId>,
-}
-
-/// Response definition
-#[derive(Debug, Clone, Copy)]
-pub struct Response {
-    /// Id of the response
-    pub id: ResponseId,
-
-    /// Actual data of the response
-    pub data: ResponseData,
+    pub docs: Option<&'a str>,
 }
 
 /// Id of an endpoint stored in the [`EndpointArena`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct EndpointId(u32);
+pub(crate) struct EndpointId(u32);
 
 /// Id of a route stored in the [`EndpointArena`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct RouteId(u32);
+pub(crate) struct RouteId(u32);
 
 /// Id of a response stored in the [`EndpointArena`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ResponseId(u32);
+pub(crate) struct ResponseId(u32);
 
 struct Parent<'p> {
     data: &'p mut Vec<Slot>,
@@ -263,7 +254,7 @@ struct Parent<'p> {
 /// Constructed via [`EndpointArena::add_endpoint`] or [`RouteBuilder::add_endpoint`].
 /// Call [`finish`](EndpointBuilder::finish) once all responses are added.
 /// Dropping the builder without finishing rolls back any changes.
-pub struct EndpointBuilder<'p> {
+pub(crate) struct EndpointBuilder<'p> {
     parent: Parent<'p>,
 
     start: EndpointId,
@@ -272,19 +263,13 @@ pub struct EndpointBuilder<'p> {
 }
 
 impl<'p> EndpointBuilder<'p> {
-    fn new(
-        parent: Parent<'p>,
-        path: PathPart,
-        fields: EndpointFields,
-        docs: Option<StringId>,
-    ) -> Self {
+    fn new(parent: Parent<'p>, path: PathPart, data: EndpointData) -> Self {
         let path_id = parent.paths.insert(parent.path_id, path);
 
         let idx = parent.data.len();
         parent.data.push(Slot::Endpoint {
             path: path_id,
-            fields,
-            docs,
+            data,
             end: 0,
         });
 
@@ -296,14 +281,23 @@ impl<'p> EndpointBuilder<'p> {
     }
 
     /// Add a response to this endpoint.
-    pub fn add_response(&mut self, resp: ResponseData) -> ResponseId {
+    pub(crate) fn add_response(
+        &mut self,
+        status: ResponseStatus,
+        type_id: TypeId,
+        docs: Option<StringId>,
+    ) -> ResponseId {
         let id = self.parent.data.len();
-        self.parent.data.push(Slot::Response(resp));
+        self.parent.data.push(Slot::Response {
+            status,
+            type_id,
+            docs,
+        });
         ResponseId(id as u32)
     }
 
     /// Finalize the endpoint and return its [`EndpointId`].
-    pub fn finish(mut self) -> EndpointId {
+    pub(crate) fn finish(mut self) -> EndpointId {
         self.finished = true;
 
         let idx = self.parent.data.len();
@@ -334,7 +328,7 @@ impl<'p> Drop for EndpointBuilder<'p> {
 /// Constructed via [`EndpointArena::add_route`] or [`RouteBuilder::add_route`]. Call
 /// [`finish`](RouteBuilder::finish) once all nested entries are added.
 /// Dropping the builder without finishing rolls back any changes.
-pub struct RouteBuilder<'p> {
+pub(crate) struct RouteBuilder<'p> {
     parent: Parent<'p>,
 
     /// Path id of the whole route of this path. Used as
@@ -375,29 +369,41 @@ impl<'p> RouteBuilder<'p> {
     }
 
     /// Add a response to this route.
-    pub fn add_response(&mut self, resp: ResponseData) -> ResponseId {
+    pub(crate) fn add_response(
+        &mut self,
+        status: ResponseStatus,
+        type_id: TypeId,
+        docs: Option<StringId>,
+    ) -> ResponseId {
         let id = self.parent.data.len();
-        self.parent.data.push(Slot::Response(resp));
+        self.parent.data.push(Slot::Response {
+            status,
+            type_id,
+            docs,
+        });
         ResponseId(id as u32)
     }
 
     /// Start building an endpoint under this route.
-    pub fn add_endpoint<'a>(
+    pub(crate) fn add_endpoint<'a>(
         &'a mut self,
         path: PathPart,
-        fields: EndpointFields,
-        docs: Option<StringId>,
+        data: EndpointData,
     ) -> EndpointBuilder<'a> {
-        EndpointBuilder::new(self.as_parent(), path, fields, docs)
+        EndpointBuilder::new(self.as_parent(), path, data)
     }
 
     /// Starts building a nested route group under this route.
-    pub fn add_route<'a>(&'a mut self, path: PathPart, docs: Option<StringId>) -> RouteBuilder<'a> {
+    pub(crate) fn add_route<'a>(
+        &'a mut self,
+        path: PathPart,
+        docs: Option<StringId>,
+    ) -> RouteBuilder<'a> {
         RouteBuilder::new(self.as_parent(), path, docs)
     }
 
     /// Finalize the route and return its [`RouteId`].
-    pub fn finish(mut self) -> RouteId {
+    pub(crate) fn finish(mut self) -> RouteId {
         self.finished = true;
 
         let idx = self.parent.data.len();
@@ -423,6 +429,36 @@ impl<'p> Drop for RouteBuilder<'p> {
     }
 }
 
+/// Core fields used to describe an endpoint.
+#[derive(Clone, Debug)]
+pub(crate) struct EndpointData {
+    /// Documentation
+    pub docs: Option<StringId>,
+
+    /// HTTP method used by the endpoint.
+    pub method: http::Method,
+
+    /// Name assigned to the endpoint.
+    pub name: StringId,
+
+    /// Path parameter type.
+    pub path_param: Option<SimpleRecordId>,
+
+    /// Query parameter type.
+    pub query: Option<SimpleRecordId>,
+
+    /// Headers type.
+    pub headers: Option<SimpleRecordId>,
+
+    /// MIME types the endpoint accepts for the request body.
+    pub accept: Option<value::MimeTypesId>,
+
+    /// Request body type.
+    pub request_body: Option<TypeId>,
+    /// Additional documentation for request body.
+    pub request_body_docs: Option<StringId>,
+}
+
 #[derive(Clone, Debug)]
 enum Slot {
     Route {
@@ -434,16 +470,21 @@ enum Slot {
         end: u32,
     },
     Endpoint {
+        /// Path of the endpoint
         path: PathId,
-        docs: Option<StringId>,
-        fields: EndpointFields,
+
+        data: EndpointData,
 
         /// Id after the last response of the endpoint.
         /// Used for knowing when to stop iteration
         end: u32,
     },
 
-    Response(ResponseData),
+    Response {
+        status: ResponseStatus,
+        type_id: TypeId,
+        docs: Option<StringId>,
+    },
 }
 
 /// Arena that holds semantic endpoints and routes.
@@ -455,7 +496,7 @@ pub struct EndpointArena {
 
 impl EndpointArena {
     /// Create a new endpoint arena.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
@@ -468,95 +509,108 @@ impl EndpointArena {
     }
 
     /// Start building an endpoint at the root.
-    pub fn add_endpoint<'a>(
+    pub(crate) fn add_endpoint<'a>(
         &'a mut self,
         path: PathPart,
-        fields: EndpointFields,
-        docs: Option<StringId>,
+        fields: EndpointData,
     ) -> EndpointBuilder<'a> {
-        EndpointBuilder::new(self.parent(), path, fields, docs)
+        EndpointBuilder::new(self.parent(), path, fields)
     }
 
     /// Start building a route at the root.
-    pub fn add_route<'a>(&'a mut self, path: PathPart, docs: Option<StringId>) -> RouteBuilder<'a> {
+    pub(crate) fn add_route<'a>(
+        &'a mut self,
+        path: PathPart,
+        docs: Option<StringId>,
+    ) -> RouteBuilder<'a> {
         RouteBuilder::new(self.parent(), path, docs)
     }
+}
 
+impl<'a> SpecContext<'a> {
     /// Get [`Endpoint`] by id.
-    pub fn get_endpoint<'a>(&'a self, id: EndpointId) -> Endpoint<'a> {
-        match &self.data[id.0 as usize] {
-            Slot::Endpoint {
-                path,
-                fields,
-                docs,
-                end,
-            } => {
-                let path = self.paths.get(*path);
+    pub(crate) fn get_endpoint(&self, id: EndpointId) -> Endpoint<'a> {
+        let Slot::Endpoint { path, data, end } = &self.endpoints.data[id.0 as usize] else {
+            unreachable!("slot at endpoint id should contain an endpoint");
+        };
 
-                Endpoint {
-                    id,
-                    arena: self,
-                    path,
-                    fields,
-                    docs: *docs,
-                    end: *end,
-                }
-            }
-            _ => unreachable!("slot at endpoint id should contain an endpoint"),
+        Endpoint {
+            id,
+            path: self.endpoints.paths.get(*path),
+            docs: data.docs.map(|id| self.strings.resolve(id)),
+            method: data.method.clone(),
+            name: self.strings.resolve(data.name),
+            path_param: data.path_param.map(|id| self.get_simple_record(id)),
+            query: data.query.map(|id| self.get_simple_record(id)),
+            headers: data.headers.map(|id| self.get_simple_record(id)),
+            accept: data.accept.map(|id| self.get_mime_types(id)),
+            request_body: data.request_body.map(|id| self.get_type(id)),
+            request_body_docs: data.request_body_docs.map(|id| self.strings.resolve(id)),
+            ctx: *self,
+            end: *end,
         }
     }
 
     /// Get [`Route`] by id.
-    pub fn get_route<'a>(&'a self, id: RouteId) -> Route<'a> {
-        match &self.data[id.0 as usize] {
-            Slot::Route { path, docs, end } => {
-                let path = self.paths.get(*path);
+    pub(crate) fn get_route(&self, id: RouteId) -> Route<'a> {
+        let Slot::Route { path, docs, end } = &self.endpoints.data[id.0 as usize] else {
+            unreachable!("slot at route id should contain a route");
+        };
 
-                Route {
-                    id,
-                    path,
-                    docs: *docs,
-                    arena: self,
-                    end: *end,
-                }
-            }
-            _ => unreachable!("slot at route id should contain a route"),
+        Route {
+            id,
+            path: self.endpoints.paths.get(*path),
+            docs: docs.map(|id| self.strings.resolve(id)),
+            ctx: *self,
+            end: *end,
         }
     }
 
-    /// Get [`Response`] by id.
-    pub fn get_response(&self, id: ResponseId) -> Response {
-        match &self.data[id.0 as usize] {
-            Slot::Response(resp) => Response { id, data: *resp },
-            _ => unreachable!("slot at response id should contain a response"),
+    /// Get endpoint or route [`Response`] by id.
+    pub(crate) fn get_response(&self, id: ResponseId) -> Response<'a> {
+        let Slot::Response {
+            status,
+            type_id,
+            docs,
+        } = &self.endpoints.data[id.0 as usize]
+        else {
+            unreachable!("slot at response id should contain a response");
+        };
+
+        Response {
+            id,
+            status: *status,
+            typ: self.get_type(*type_id),
+            docs: docs.map(|id| self.strings.resolve(id)),
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{EndpointArena, EndpointFields, ResponseData, ResponseStatus};
+    use super::ResponseStatus;
 
-    use crate::path::PathPart;
-    use crate::spec::typ::{PrimitiveTy, TypeArena};
-    use crate::string::StringInterner;
+    use crate::spec::Spec;
+    use crate::spec::endpoint::EndpointData;
+    use crate::spec::typ::{InlineTy, PrimitiveTy, Type};
+    use crate::{path::PathPart, spec::typ::SimpleRecordId};
 
     use http::{Method, StatusCode};
 
     #[test]
     fn builds_endpoint_arena() {
-        let mut types = TypeArena::new();
-        let string_type = types.add_primitive(PrimitiveTy::String);
-        let bool_type = types.add_primitive(PrimitiveTy::Bool);
-        let i64_type = types.add_primitive(PrimitiveTy::I64);
+        let mut spec = Spec::new_test();
+        let string_type = spec.types.add_primitive(PrimitiveTy::String);
+        let bool_type = spec.types.add_primitive(PrimitiveTy::Bool);
 
-        let mut interner = StringInterner::default();
-        let status_name = interner.get_or_intern("status");
-        let list_name = interner.get_or_intern("list");
-        let create_name = interner.get_or_intern("create");
-        let admin_name = interner.get_or_intern("admin");
+        let builder = spec.types.start_record();
+        // Safety: this is a dummy empty record
+        let simple_record_id = unsafe { SimpleRecordId::new_unchecked(builder.finish()) };
 
-        let mut arena = EndpointArena::new();
+        let status_name = spec.strings.get_or_intern("status");
+        let list_name = spec.strings.get_or_intern("list");
+        let create_name = spec.strings.get_or_intern("create");
+        let admin_name = spec.strings.get_or_intern("admin");
 
         // route {
         //   on default: bool
@@ -597,119 +651,99 @@ mod test {
         //
         // }
 
-        let mut root = arena.add_route(PathPart::Empty, None);
-        root.add_response(ResponseData {
-            status: ResponseStatus::Default,
-            type_id: bool_type,
-            docs: None,
-        });
-        let root_not_found_id = root.add_response(ResponseData {
-            status: ResponseStatus::Code(StatusCode::NOT_FOUND),
-            type_id: string_type,
-            docs: None,
-        });
+        let mut root = spec.endpoints.add_route(PathPart::Empty, None);
+        root.add_response(ResponseStatus::Default, bool_type, None);
+        let root_not_found_id = root.add_response(
+            ResponseStatus::Code(StatusCode::NOT_FOUND),
+            string_type,
+            None,
+        );
 
         let mut status_endpoint = root.add_endpoint(
             PathPart::Segment("/status"),
-            EndpointFields {
+            EndpointData {
+                docs: None,
                 method: Method::GET,
                 name: status_name,
-                path: None,
-                query: Some(i64_type),
+                path_param: None,
+                query: Some(simple_record_id),
                 headers: None,
                 accept: None,
                 request_body: None,
                 request_body_docs: None,
             },
+        );
+        status_endpoint.add_response(ResponseStatus::Code(StatusCode::OK), string_type, None);
+        status_endpoint.add_response(
+            ResponseStatus::Code(StatusCode::BAD_REQUEST),
+            string_type,
             None,
         );
-        status_endpoint.add_response(ResponseData {
-            status: ResponseStatus::Code(StatusCode::OK),
-            type_id: string_type,
-            docs: None,
-        });
-        status_endpoint.add_response(ResponseData {
-            status: ResponseStatus::Code(StatusCode::BAD_REQUEST),
-            type_id: string_type,
-            docs: None,
-        });
         let status_endpoint_id = status_endpoint.finish();
 
         let mut users_route = root.add_route(PathPart::Segment("/users"), None);
-        users_route.add_response(ResponseData {
-            status: ResponseStatus::Default,
-            type_id: string_type,
-            docs: None,
-        });
+        users_route.add_response(ResponseStatus::Default, string_type, None);
 
         let mut list_endpoint = users_route.add_endpoint(
             PathPart::Segment("/list"),
-            EndpointFields {
+            EndpointData {
+                docs: None,
                 method: Method::GET,
                 name: list_name,
-                path: None,
+                path_param: None,
                 query: None,
                 headers: None,
                 accept: None,
                 request_body: None,
                 request_body_docs: None,
             },
-            None,
         );
-        list_endpoint.add_response(ResponseData {
-            status: ResponseStatus::Code(StatusCode::OK),
-            type_id: string_type,
-            docs: None,
-        });
+        list_endpoint.add_response(ResponseStatus::Code(StatusCode::OK), string_type, None);
         let list_endpoint_id = list_endpoint.finish();
 
         let mut create_endpoint = users_route.add_endpoint(
             PathPart::Segment("/create"),
-            EndpointFields {
+            EndpointData {
+                docs: None,
                 method: Method::POST,
                 name: create_name,
-                path: None,
+                path_param: None,
                 query: None,
                 headers: None,
                 accept: None,
                 request_body: Some(string_type),
                 request_body_docs: None,
             },
-            None,
         );
-        create_endpoint.add_response(ResponseData {
-            status: ResponseStatus::Code(StatusCode::CREATED),
-            type_id: bool_type,
-            docs: None,
-        });
+        create_endpoint.add_response(ResponseStatus::Code(StatusCode::CREATED), bool_type, None);
         let create_endpoint_id = create_endpoint.finish();
 
         let mut admin_route = users_route.add_route(PathPart::Segment("/admin"), None);
-        admin_route.add_response(ResponseData {
-            status: ResponseStatus::Code(StatusCode::UNAUTHORIZED),
-            type_id: string_type,
-            docs: None,
-        });
+        admin_route.add_response(
+            ResponseStatus::Code(StatusCode::UNAUTHORIZED),
+            string_type,
+            None,
+        );
 
         let mut admin_endpoint = admin_route.add_endpoint(
             PathPart::Segment("/ban"),
-            EndpointFields {
+            EndpointData {
+                docs: None,
                 method: Method::DELETE,
                 name: admin_name,
-                path: Some(i64_type),
+                path_param: Some(simple_record_id),
                 query: None,
                 headers: None,
                 accept: None,
                 request_body: None,
                 request_body_docs: None,
             },
+        );
+        let admin_no_content_id = admin_endpoint.add_response(
+            ResponseStatus::Code(StatusCode::NO_CONTENT),
+            string_type,
             None,
         );
-        let admin_no_content_id = admin_endpoint.add_response(ResponseData {
-            status: ResponseStatus::Code(StatusCode::NO_CONTENT),
-            type_id: string_type,
-            docs: None,
-        });
         let admin_endpoint_id = admin_endpoint.finish();
 
         let admin_route_id = admin_route.finish();
@@ -717,12 +751,10 @@ mod test {
         let root_route_id = root.finish();
 
         // Check root route
-        let root_route = arena.get_route(root_route_id);
+        let root_route = spec.ctx().get_route(root_route_id);
         assert_eq!(root_route.path.part(), PathPart::Empty);
-        let root_response_statuses: Vec<_> = root_route
-            .responses()
-            .map(|resp| resp.data.status)
-            .collect();
+        let root_response_statuses: Vec<_> =
+            root_route.responses().map(|resp| resp.status).collect();
         assert_eq!(
             root_response_statuses,
             vec![
@@ -739,13 +771,13 @@ mod test {
         assert_eq!(root_routes, vec![users_route_id]);
 
         // Status endpoint
-        let status_endpoint = arena.get_endpoint(status_endpoint_id);
-        assert_eq!(status_endpoint.fields.method, Method::GET);
-        assert_eq!(status_endpoint.fields.name, status_name);
+        let status_endpoint = spec.ctx().get_endpoint(status_endpoint_id);
+        assert_eq!(status_endpoint.method, Method::GET);
+        assert_eq!(status_endpoint.name, "status");
         assert_eq!(status_endpoint.path.segments().as_slice(), &["/status"]);
         let status_responses: Vec<_> = status_endpoint
             .responses()
-            .map(|resp| resp.data.status)
+            .map(|resp| resp.status)
             .collect();
         assert_eq!(
             status_responses,
@@ -756,13 +788,10 @@ mod test {
         );
 
         // Users route
-        let users_route = arena.get_route(users_route_id);
+        let users_route = spec.ctx().get_route(users_route_id);
         assert_eq!(users_route.path.segments().as_slice(), &["/users"]);
         // Users route responses
-        let users_responses: Vec<_> = users_route
-            .responses()
-            .map(|resp| resp.data.status)
-            .collect();
+        let users_responses: Vec<_> = users_route.responses().map(|resp| resp.status).collect();
         assert_eq!(users_responses, vec![ResponseStatus::Default]);
 
         // Users route endpoints
@@ -777,27 +806,27 @@ mod test {
         assert_eq!(users_routes, vec![admin_route_id]);
 
         // Users list endpoint
-        let list_endpoint = arena.get_endpoint(list_endpoint_id);
+        let list_endpoint = spec.ctx().get_endpoint(list_endpoint_id);
         assert_eq!(
             list_endpoint.path.segments().as_slice(),
             &["/users", "/list"]
         );
-        let list_responses: Vec<_> = list_endpoint
-            .responses()
-            .map(|resp| resp.data.status)
-            .collect();
+        let list_responses: Vec<_> = list_endpoint.responses().map(|resp| resp.status).collect();
         assert_eq!(list_responses, vec![ResponseStatus::Code(StatusCode::OK)]);
 
         // Users create endpoint
-        let create_endpoint = arena.get_endpoint(create_endpoint_id);
+        let create_endpoint = spec.ctx().get_endpoint(create_endpoint_id);
         assert_eq!(
             create_endpoint.path.segments().as_slice(),
             &["/users", "/create"]
         );
-        assert_eq!(create_endpoint.fields.request_body, Some(string_type));
+        assert!(matches!(
+            create_endpoint.request_body,
+            Some(Type::Inline(InlineTy::Primitive(PrimitiveTy::String)))
+        ));
         let create_responses: Vec<_> = create_endpoint
             .responses()
-            .map(|resp| resp.data.status)
+            .map(|resp| resp.status)
             .collect();
         assert_eq!(
             create_responses,
@@ -805,17 +834,15 @@ mod test {
         );
 
         // Users admin route
-        let admin_route = arena.get_route(admin_route_id);
+        let admin_route = spec.ctx().get_route(admin_route_id);
         assert_eq!(
             admin_route.path.segments().as_slice(),
             &["/users", "/admin"]
         );
         assert_eq!(admin_route.routes().count(), 0);
         // Admin route responses
-        let admin_route_responses: Vec<_> = admin_route
-            .responses()
-            .map(|resp| resp.data.status)
-            .collect();
+        let admin_route_responses: Vec<_> =
+            admin_route.responses().map(|resp| resp.status).collect();
         assert_eq!(
             admin_route_responses,
             vec![ResponseStatus::Code(StatusCode::UNAUTHORIZED)]
@@ -828,26 +855,30 @@ mod test {
         assert_eq!(admin_endpoints, vec![admin_endpoint_id]);
 
         // Admin ban endpoint
-        let admin_endpoint = arena.get_endpoint(admin_endpoint_id);
+        let admin_endpoint = spec.ctx().get_endpoint(admin_endpoint_id);
         assert_eq!(
             admin_endpoint.path.segments().as_slice(),
             &["/users", "/admin", "/ban"]
         );
-        assert_eq!(admin_endpoint.fields.path, Some(i64_type));
+        assert!(
+            admin_endpoint
+                .path_param
+                .is_some_and(|p| p.id == simple_record_id)
+        );
 
         // Root route 404 response
-        let root_not_found = arena.get_response(root_not_found_id);
+        let root_not_found = spec.ctx().get_response(root_not_found_id);
         assert_eq!(root_not_found.id, root_not_found_id);
         assert_eq!(
-            root_not_found.data.status,
+            root_not_found.status,
             ResponseStatus::Code(StatusCode::NOT_FOUND)
         );
 
         // Admin ban 404 response
-        let admin_no_content = arena.get_response(admin_no_content_id);
+        let admin_no_content = spec.ctx().get_response(admin_no_content_id);
         assert_eq!(admin_no_content.id, admin_no_content_id);
         assert_eq!(
-            admin_no_content.data.status,
+            admin_no_content.status,
             ResponseStatus::Code(StatusCode::NO_CONTENT)
         );
     }

@@ -1,28 +1,19 @@
 //! Defines intermediate representation of values.
 //!
-//! The main data structure is a [`ValueArena`] that holds
-//! the values. Values in the arena are referenced with [`ValueId`].
+//! ## Querying
 //!
-//! Values are valid by construction, unless created through unchecked helpers.
+//! Values are queried from [`Spec`](crate::spec::Spec) through
+//! [`SpecContext::get_value`](crate::spec::SpecContext::get_value). Composite
+//! values are represented by [`Array`] and [`Object`], which expose iterators
+//! over items and fields. For field-level lookups use
+//! [`SpecContext::get_object_field`](crate::spec::SpecContext::get_object_field).
+//! MIME type lists are retrieved with
+//! [`SpecContext::get_mime_types`](crate::spec::SpecContext::get_mime_types).
 //!
-//! ## Building An Arena
+//! ## Construction
 //!
-//! [Primitive values](`PrimitiveValue`) can be added
-//! to the arena directly. For composite values (arrays and objects) you need
-//! to use the builder API - [`ArrayBuilder`] and [`ObjectBuilder`].
-//! Builder APIs also support building a nested composite values.
-//!
-//! Once you add a value to the arena, you get a [`ValueId`] which can
-//! later be used to retrieve the value.
-//!
-//! ## Getting Values
-//!
-//! To retrieve the value, you pass [`ValueId`] to [`SpecContext::get_value`].
-//! This will give you a [`Value`]. Primitive values are represented directly
-//! with Rust types.
-//!
-//! Composite types are represented with [`Array`] and [`Object`]. These two types
-//! allow you to iterate through the values inside the composite type.
+//! Construction is handled by [`Oracle`](crate::Oracle). It builds the internal
+//! arenas and performs validation before data is exposed through `SpecContext`.
 
 use crate::{spec::SpecContext, string::StringId};
 
