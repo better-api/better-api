@@ -17,8 +17,8 @@
 //! Construction is handled by [`Oracle`](crate::Oracle). It builds the internal
 //! arenas and performs validation before data is exposed through `SpecContext`.
 
-use crate::spec::SpecContext;
 use crate::spec::value::{self, Value, ValueId};
+use crate::spec::SpecContext;
 use crate::string::StringId;
 
 /// Primitive types.
@@ -455,7 +455,7 @@ pub struct Record<'a> {
 
 impl<'a> Record<'a> {
     /// Returns iterator over [record fields](RecordField).
-    pub fn fields(&self) -> impl Iterator<Item = RecordField<'a>> {
+    pub fn fields(&self) -> impl Iterator<Item = RecordField<'a>> + use<'a> {
         self.fields.clone().map(|it| it.into())
     }
 }
@@ -473,7 +473,7 @@ pub struct SimpleRecord<'a> {
 
 impl<'a> SimpleRecord<'a> {
     /// Returns iterator over [simple record fields](SimpleRecordField).
-    pub fn fields(&self) -> impl Iterator<Item = SimpleRecordField<'a>> {
+    pub fn fields(&self) -> impl Iterator<Item = SimpleRecordField<'a>> + use<'a> {
         self.fields.clone().map(|it| it.into())
     }
 }
@@ -491,7 +491,7 @@ pub struct Union<'a> {
 
 impl<'a> Union<'a> {
     /// Returns iterator over [union fields](UnionField).
-    pub fn fields(&self) -> impl Iterator<Item = UnionField<'a>> {
+    pub fn fields(&self) -> impl Iterator<Item = UnionField<'a>> + use<'a> {
         self.fields.clone().map(|it| it.into())
     }
 }
@@ -559,7 +559,9 @@ impl<'a> Iterator for EnumMemberIterator<'a> {
             Slot::EnumMember { value, docs } => {
                 let value = self.ctx.get_value(*value);
                 let docs = docs.map(|id| self.ctx.strings.resolve(id));
-                Some(EnumMember { value, docs })
+                let member = EnumMember { value, docs };
+                self.current = TypeId(self.current.0 + 1);
+                Some(member)
             }
 
             slot => unreachable!(
@@ -1314,10 +1316,14 @@ impl<'a> SpecContext<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::{PrimitiveTy, Slot, Type, TypeFieldId, TypeId};
+    use super::{
+        EnumTy, PrimitiveTy, RootRef, RootType, SimpleRecordId, SimpleTy, Slot, Type, TypeFieldId,
+        TypeId,
+    };
+    use crate::spec::value::{PrimitiveValue, Value};
     use crate::spec::{
-        Spec,
         typ::{InlineTy, TypeDef, TypeRef},
+        Spec,
     };
 
     #[test]
@@ -1527,7 +1533,7 @@ mod test {
         // Test getting the union directly
         let union_type = spec.ctx().get_type(union_id);
         let mut union_fields = match union_type {
-            Type::Union(u) => u.fields,
+            Type::Union(u) => u.fields(),
             other => panic!("expected union at union_id, got {other:?}"),
         };
 
@@ -1656,5 +1662,147 @@ mod test {
             }
             _ => panic!("expected named reference for name field"),
         }
+    }
+
+    #[test]
+    fn simple_record_with_enum_option() {
+        let mut spec = Spec::new_test();
+
+        let status_name = spec.strings.get_or_intern("Status");
+        let open_str = spec.strings.get_or_intern("open");
+        let closed_str = spec.strings.get_or_intern("closed");
+        let id_str = spec.strings.get_or_intern("id");
+        let title_str = spec.strings.get_or_intern("title");
+        let status_str = spec.strings.get_or_intern("status");
+
+        let open_value = spec.values.add_primitive(PrimitiveValue::String(open_str));
+        let closed_value = spec
+            .values
+            .add_primitive(PrimitiveValue::String(closed_str));
+
+        let mut enum_builder = spec.types.start_enum(EnumTy::String);
+        enum_builder.add_member(open_value, None);
+        enum_builder.add_member(closed_value, None);
+        let enum_id = enum_builder.finish();
+
+        spec.symbol_table.insert(
+            status_name,
+            TypeDef {
+                docs: None,
+                typ: enum_id.into(),
+            },
+        );
+
+        let mut record_builder = spec.types.start_record();
+        record_builder.add_primitive(id_str, PrimitiveTy::I64, None, None);
+        record_builder.add_primitive(title_str, PrimitiveTy::String, None, None);
+        let (status_builder, _) = record_builder.start_option(status_str, None, None);
+        status_builder.finish_reference(TypeRef(status_name));
+        let record_id = record_builder.finish();
+
+        let simple_record_id = unsafe { SimpleRecordId::new_unchecked(record_id) };
+        let record = spec.ctx().get_simple_record(simple_record_id);
+
+        let mut fields = record.fields();
+
+        let id_field = fields.next().expect("id field");
+        assert_eq!(id_field.name, "id");
+        assert!(matches!(
+            id_field.typ,
+            InlineTy::Primitive(PrimitiveTy::I64)
+        ));
+
+        let title_field = fields.next().expect("title field");
+        assert_eq!(title_field.name, "title");
+        assert!(matches!(
+            title_field.typ,
+            InlineTy::Primitive(PrimitiveTy::String)
+        ));
+
+        let status_field = fields.next().expect("status field");
+        assert_eq!(status_field.name, "status");
+        let option_inner = match status_field.typ {
+            InlineTy::Option(ref inner) => inner.typ(),
+            other => panic!("expected option for status field, got {other:?}"),
+        };
+
+        let status_enum = match option_inner {
+            InlineTy::NamedReference(reference) => {
+                assert_eq!(reference.name, "Status");
+                match reference.typ() {
+                    SimpleTy::Enum(enm) => enm,
+                    other => panic!("expected enum for status reference, got {other:?}"),
+                }
+            }
+            other => panic!("expected named reference for status field, got {other:?}"),
+        };
+
+        let mut members = status_enum.members();
+        let open_member = members.next().expect("open enum member");
+        assert!(matches!(open_member.value, Value::String("open")));
+        let closed_member = members.next().expect("closed enum member");
+        assert!(matches!(closed_member.value, Value::String("closed")));
+        assert!(members.next().is_none());
+
+        assert!(fields.next().is_none());
+    }
+
+    #[test]
+    fn root_reference_response_enum_body() {
+        let mut spec = Spec::new_test();
+
+        let response_name = spec.strings.get_or_intern("StatusResponse");
+        let ok_str = spec.strings.get_or_intern("ok");
+        let error_str = spec.strings.get_or_intern("error");
+
+        let ok_value = spec.values.add_primitive(PrimitiveValue::String(ok_str));
+        let error_value = spec.values.add_primitive(PrimitiveValue::String(error_str));
+
+        let mut enum_builder = spec.types.start_enum(EnumTy::String);
+        enum_builder.add_member(ok_value, None);
+        enum_builder.add_member(error_value, None);
+        let enum_id = enum_builder.finish();
+
+        let response_id = spec.types.add_response(enum_id, None, None);
+
+        spec.symbol_table.insert(
+            response_name,
+            TypeDef {
+                docs: None,
+                typ: response_id.into(),
+            },
+        );
+
+        let response_ref_id = spec.types.add_reference(RootRef(response_name));
+        let root = spec.ctx().get_root_type(response_ref_id);
+
+        let response_root = match root {
+            RootType::NamedReference(reference) => {
+                assert_eq!(reference.name, "StatusResponse");
+                reference.typ()
+            }
+            other => panic!("expected named reference to response, got {other:?}"),
+        };
+
+        let response = match response_root {
+            RootType::Response(response) => response,
+            other => panic!("expected response type, got {other:?}"),
+        };
+
+        assert!(response.headers.is_none());
+        assert!(response.content_type.is_none());
+
+        let status_enum = match response.body {
+            Type::Enum(enm) => enm,
+            other => panic!("expected enum response body, got {other:?}"),
+        };
+        assert_eq!(status_enum.typ, EnumTy::String);
+
+        let mut members = status_enum.members();
+        let ok_member = members.next().expect("ok enum member");
+        assert!(matches!(ok_member.value, Value::String("ok")));
+        let error_member = members.next().expect("error enum member");
+        assert!(matches!(error_member.value, Value::String("error")));
+        assert!(members.next().is_none());
     }
 }
