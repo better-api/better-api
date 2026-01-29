@@ -132,7 +132,7 @@ impl<'a> Oracle<'a> {
             ParsedType::Enum(en) => self.lower_enum(en).map(|id| id.into()),
             ParsedType::Response(resp) => self.lower_response(resp).map(|id| id.into()),
             ParsedType::Record(record) => Some(self.lower_record(record).into()),
-            ParsedType::Union(union) => Some(self.lower_union(union).into()),
+            ParsedType::Union(union) => self.lower_union(union).map(|id| id.into()),
             ParsedType::Array(arr) => {
                 let inner = arr.typ()?;
                 let builder = self.types.start_array();
@@ -399,7 +399,7 @@ impl<'a> Oracle<'a> {
                     headers.syntax().text_range().into(),
                 ))
                 .add_label(Label::secondary(
-                    "file introduced here".to_string(),
+                    "`file` introduced here".to_string(),
                     range.into(),
                 ))
         };
@@ -467,11 +467,34 @@ impl<'a> Oracle<'a> {
     }
 
     /// Lowers union type and inserts it into arena
-    fn lower_union(&mut self, union: &ast::Union) -> TypeId {
+    fn lower_union(&mut self, union: &ast::Union) -> Option<TypeId> {
+        let mut is_valid = true;
         let fields = self.parse_type_fields(union.fields(), false);
-        // TODO: Validate fields are valid, response is already there
+
+        // Validate the fields - they must not contain a `file`
+        let report_builder = |range: TextRange| {
+            Report::error("invalid type of union field".to_string())
+                .add_label(Label::primary(
+                    "union must not contain a `file`".to_string(),
+                    union.syntax().text_range().into(),
+                ))
+                .add_label(Label::secondary(
+                    "`file` introduced here".to_string(),
+                    range.into(),
+                ))
+        };
+
+        for field in &fields.0 {
+            let typ = field.field.typ().expect("parsed field should have a type");
+            let res = self.require_no_file(&typ, &report_builder);
+            if res.is_err() {
+                is_valid = false;
+            }
+        }
+
+        // Build the union
         let builder = self.types.start_union();
-        insert_type_fields(
+        let id = insert_type_fields(
             fields,
             builder,
             &mut self.reports,
@@ -479,7 +502,9 @@ impl<'a> Oracle<'a> {
             &self.symbol_map,
             self.root,
             InvalidOuterContext::UnionField,
-        )
+        );
+
+        if is_valid { Some(id) } else { None }
     }
 
     /// Collects type fields into a vector.
@@ -513,7 +538,7 @@ impl<'a> Oracle<'a> {
                     None
                 };
 
-                // Check typ is valid
+                // Check type is valid
                 let typ_valid = self.require_not_response(&typ).is_ok();
 
                 // If type is invalid we don't have (or want) to check default value
@@ -627,11 +652,13 @@ impl<'a> Oracle<'a> {
 
     /// Requires that node is not a file and it does not contain any children that are `file`.
     ///
-    /// and if it's a composite type (like record) does
-    /// not contain a file. It also resolves references.
-    ///
     /// The check is recursive. If a node is a composite type (like record) and one of the fields
     /// is a `file`, the method does report errors. It also resolves references.
+    ///
+    /// Union is a special case. Union can _never_ contain a file. Each field is verified
+    /// `lower_union`. To not report errors multiple times per union, this check stops with
+    /// `Ok(())` on `ast::TypeUnion`. This also means that `lower_union` needs to call the
+    /// check per field, instead of the whole union node.
     ///
     /// Reports are added to self.reports on the fly.
     ///
@@ -673,15 +700,10 @@ impl<'a> Oracle<'a> {
 
                 if valid { Ok(()) } else { Err(()) }
             }
-            ast::Type::Union(union) => {
-                let valid = union.fields().all(|field| {
-                    field
-                        .typ()
-                        .is_none_or(|typ| self.require_no_file(&typ, build_report).is_ok())
-                });
 
-                if valid { Ok(()) } else { Err(()) }
-            }
+            // Union can _never_ contain a file. This is checked in `lower_union`. Because
+            // we don't want to report an error multiple times, we do an early return here.
+            ast::Type::Union(_) => Ok(()),
 
             // There are only two ways to get here:
             // - call this method directly on a response: we have a bug in `lower_response`
