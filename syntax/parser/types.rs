@@ -217,12 +217,6 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.eat(TOKEN_KW_UNION);
 
         self.skip_whitespace();
-        self.expect(TOKEN_PAREN_LEFT);
-        self.skip_whitespace();
-        self.parse_value(|token| token == TOKEN_PAREN_RIGHT || token == TOKEN_CURLY_LEFT);
-        self.skip_whitespace();
-        self.expect(TOKEN_PAREN_RIGHT);
-        self.skip_whitespace();
         self.expect(TOKEN_CURLY_LEFT);
 
         self.parse_type_fields(PrologueBehavior::NoDefault);
@@ -527,7 +521,7 @@ mod test {
     #[test]
     fn parse_union_type() {
         let text = indoc! {r#"
-            type Foo: union("type") {
+            type Foo: union {
                 bar: Bar
                 "baz str": Baz
                 
@@ -536,11 +530,11 @@ mod test {
             }
 
             // Very invalid union
-            type Bar: union "type" {bar: Bar}
+            type Bar: union {bar: Bar}
             // Should parse correctly!
             
-            type Empty: union("type") {}
-            type Empty: union("type") {
+            type Empty: union {}
+            type Empty: union {
 
             }
         "#};

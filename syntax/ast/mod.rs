@@ -663,11 +663,6 @@ ast_node! {
 }
 
 impl Union {
-    /// Returns discriminator value of the union
-    pub fn discriminator(&self) -> Option<Value> {
-        self.0.children().find_map(Value::cast)
-    }
-
     /// Returns iterator over fields in the union
     pub fn fields(&self) -> impl Iterator<Item = TypeField> {
         self.0.children().filter_map(TypeField::cast)
