@@ -117,9 +117,18 @@ type Bar: enum(i32) {
 
 #### Sum Types
 
-Sum types, also known as tagged unions, are a way to create an object
-that can be one of many objects based on a discriminator. Since everything is serialized into JSON,
-the types must be [records](#records). This is best described with an example:
+Sum types, also known as tagged unions, are a way to create a value
+that can be one of many types. They are always serialized into JSON as an adjacent tag:
+
+```json
+{
+  "type": "foo",
+  "data": ...
+}
+```
+
+Union members can be any type (primitive, record, union, enum, ...), except `file` and `resp`.
+This is best described with an example:
 
 ```text
 type FooRecord: rec {
@@ -130,9 +139,10 @@ type BarRecord: rec {
   bar_property: i32
 }
 
-type SumType: union("type") {
+type SumType: union {
   foo: FooRecord
   bar: BarRecord
+  baz: string
 }
 ```
 
@@ -141,7 +151,9 @@ This example can be serialized into:
 ```json
 {
   "type": "foo",
-  "foo_property": "string value"
+  "data": {
+    "foo_property": "string value"
+  }
 }
 ```
 
@@ -150,16 +162,18 @@ or
 ```json
 {
   "type": "bar",
-  "bar_property": 10
+  "data": {
+    "bar_property": 10
+  }
 }
 ```
 
-You can change the name of the discriminator field by swapping the `"type"` in the
-brackets with something else:
+or
 
-```text
-type SumType: union("my_discriminator") {
-  // ...
+```json
+{
+  "type": "baz",
+  "data": "hello"
 }
 ```
 
