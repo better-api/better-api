@@ -12,7 +12,7 @@ test:
 
 .PHONY: check
 check:
-	cargo clippy --all-targets --all-features
+	cargo clippy --all-targets --all-features -- -D warnings
 
 .PHONY: cov
 cov:
@@ -25,4 +25,3 @@ cov-html:
 .PHONY: cov-open
 cov-open:
 	LLVM_COV_FLAGS="-coverage-watermark=80,50" cargo llvm-cov nextest --open
-
