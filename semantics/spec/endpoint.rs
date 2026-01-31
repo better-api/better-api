@@ -15,7 +15,10 @@
 
 use crate::path::{Path, PathArena, PathId, PathPart};
 use crate::spec::SpecContext;
-use crate::spec::typ::{SimpleRecord, SimpleRecordId, Type, TypeId};
+use crate::spec::typ::{
+    InlineTy, InlineTyId, NamedReference, ResponseReference, ResponseReferenceId,
+    SimpleRecordReference, SimpleRecordReferenceId, Type,
+};
 use crate::spec::value::{self, MimeTypes};
 use crate::string::StringId;
 
@@ -87,17 +90,17 @@ pub struct Endpoint<'a> {
     pub name: &'a str,
 
     /// Path parameter type.
-    pub path_param: Option<SimpleRecord<'a>>,
+    pub path_param: Option<NamedReference<'a, SimpleRecordReference<'a>>>,
     /// Query parameter type.
-    pub query: Option<SimpleRecord<'a>>,
+    pub query: Option<NamedReference<'a, SimpleRecordReference<'a>>>,
     /// Headers type.
-    pub headers: Option<SimpleRecord<'a>>,
+    pub headers: Option<NamedReference<'a, SimpleRecordReference<'a>>>,
 
     /// MIME types the endpoint accepts for the request body.
     pub accept: Option<MimeTypes<'a>>,
 
     /// Request body type.
-    pub request_body: Option<Type<'a>>,
+    pub request_body: Option<InlineTy<'a, Type<'a>>>,
     /// Additional documentation for request body.
     pub request_body_docs: Option<&'a str>,
 
@@ -185,7 +188,7 @@ pub struct ResponseIterator<'a> {
 }
 
 impl<'a> Iterator for ResponseIterator<'a> {
-    type Item = Response<'a>;
+    type Item = EndpointResponse<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.current < self.end {
@@ -193,9 +196,9 @@ impl<'a> Iterator for ResponseIterator<'a> {
                 Slot::Endpoint { end, .. } => self.current = *end,
                 Slot::Route { end, .. } => self.current = *end,
                 Slot::Response { .. } => {
-                    let id = ResponseId(self.current);
+                    let id = EndpointResponseId(self.current);
                     self.current += 1;
-                    return Some(self.ctx.get_response(id));
+                    return Some(self.ctx.get_endpoint_response(id));
                 }
             }
         }
@@ -213,17 +216,24 @@ pub enum ResponseStatus {
     Code(http::StatusCode),
 }
 
+/// Type used in endpoint response  
+#[derive(Debug, Clone)]
+pub enum EndpointResponseType<'a> {
+    Response(NamedReference<'a, ResponseReference<'a>>),
+    InlineType(InlineTy<'a, Type<'a>>),
+}
+
 /// Response definition
 #[derive(Debug, Clone)]
-pub struct Response<'a> {
+pub struct EndpointResponse<'a> {
     /// Id of the response
-    pub(crate) id: ResponseId,
+    pub(crate) id: EndpointResponseId,
 
     /// Status code of the response.
     pub status: ResponseStatus,
 
     /// Response body type.
-    pub typ: Type<'a>,
+    pub typ: EndpointResponseType<'a>,
 
     /// Doc comments
     pub docs: Option<&'a str>,
@@ -239,7 +249,7 @@ pub(crate) struct RouteId(u32);
 
 /// Id of a response stored in the [`EndpointArena`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct ResponseId(u32);
+pub(crate) struct EndpointResponseId(u32);
 
 struct Parent<'p> {
     data: &'p mut Vec<Slot>,
@@ -284,16 +294,16 @@ impl<'p> EndpointBuilder<'p> {
     pub(crate) fn add_response(
         &mut self,
         status: ResponseStatus,
-        type_id: TypeId,
+        type_id: EndpointResponseTypeId,
         docs: Option<StringId>,
-    ) -> ResponseId {
+    ) -> EndpointResponseId {
         let id = self.parent.data.len();
         self.parent.data.push(Slot::Response {
             status,
             type_id,
             docs,
         });
-        ResponseId(id as u32)
+        EndpointResponseId(id as u32)
     }
 
     /// Finalize the endpoint and return its [`EndpointId`].
@@ -372,16 +382,16 @@ impl<'p> RouteBuilder<'p> {
     pub(crate) fn add_response(
         &mut self,
         status: ResponseStatus,
-        type_id: TypeId,
+        type_id: EndpointResponseTypeId,
         docs: Option<StringId>,
-    ) -> ResponseId {
+    ) -> EndpointResponseId {
         let id = self.parent.data.len();
         self.parent.data.push(Slot::Response {
             status,
             type_id,
             docs,
         });
-        ResponseId(id as u32)
+        EndpointResponseId(id as u32)
     }
 
     /// Start building an endpoint under this route.
@@ -442,21 +452,28 @@ pub(crate) struct EndpointData {
     pub name: StringId,
 
     /// Path parameter type.
-    pub path_param: Option<SimpleRecordId>,
+    pub path_param: Option<SimpleRecordReferenceId>,
 
     /// Query parameter type.
-    pub query: Option<SimpleRecordId>,
+    pub query: Option<SimpleRecordReferenceId>,
 
     /// Headers type.
-    pub headers: Option<SimpleRecordId>,
+    pub headers: Option<SimpleRecordReferenceId>,
 
     /// MIME types the endpoint accepts for the request body.
     pub accept: Option<value::MimeTypesId>,
 
     /// Request body type.
-    pub request_body: Option<TypeId>,
+    pub request_body: Option<InlineTyId>,
     /// Additional documentation for request body.
     pub request_body_docs: Option<StringId>,
+}
+
+/// Id of the type used in [`EndpointResponse`]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum EndpointResponseTypeId {
+    Response(ResponseReferenceId),
+    InlineType(InlineTyId),
 }
 
 #[derive(Clone, Debug)]
@@ -482,7 +499,7 @@ enum Slot {
 
     Response {
         status: ResponseStatus,
-        type_id: TypeId,
+        type_id: EndpointResponseTypeId,
         docs: Option<StringId>,
     },
 }
@@ -540,11 +557,13 @@ impl<'a> SpecContext<'a> {
             docs: data.docs.map(|id| self.strings.resolve(id)),
             method: data.method.clone(),
             name: self.strings.resolve(data.name),
-            path_param: data.path_param.map(|id| self.get_simple_record(id)),
-            query: data.query.map(|id| self.get_simple_record(id)),
-            headers: data.headers.map(|id| self.get_simple_record(id)),
+            path_param: data
+                .path_param
+                .map(|id| self.get_simple_record_reference(id)),
+            query: data.query.map(|id| self.get_simple_record_reference(id)),
+            headers: data.headers.map(|id| self.get_simple_record_reference(id)),
             accept: data.accept.map(|id| self.get_mime_types(id)),
-            request_body: data.request_body.map(|id| self.get_type(id)),
+            request_body: data.request_body.map(|id| self.get_inline_type(id)),
             request_body_docs: data.request_body_docs.map(|id| self.strings.resolve(id)),
             ctx: *self,
             end: *end,
@@ -567,7 +586,7 @@ impl<'a> SpecContext<'a> {
     }
 
     /// Get endpoint or route [`Response`] by id.
-    pub(crate) fn get_response(&self, id: ResponseId) -> Response<'a> {
+    pub(crate) fn get_endpoint_response(&self, id: EndpointResponseId) -> EndpointResponse<'a> {
         let Slot::Response {
             status,
             type_id,
@@ -577,10 +596,19 @@ impl<'a> SpecContext<'a> {
             unreachable!("slot at response id should contain a response");
         };
 
-        Response {
+        let typ = match type_id {
+            EndpointResponseTypeId::Response(id) => {
+                EndpointResponseType::Response(self.get_response_reference(*id))
+            }
+            EndpointResponseTypeId::InlineType(id) => {
+                EndpointResponseType::InlineType(self.get_inline_type(*id))
+            }
+        };
+
+        EndpointResponse {
             id,
             status: *status,
-            typ: self.get_type(*type_id),
+            typ,
             docs: docs.map(|id| self.strings.resolve(id)),
         }
     }
@@ -590,10 +618,13 @@ impl<'a> SpecContext<'a> {
 mod test {
     use super::ResponseStatus;
 
+    use crate::path::PathPart;
     use crate::spec::Spec;
-    use crate::spec::endpoint::EndpointData;
-    use crate::spec::typ::{InlineTy, PrimitiveTy, Type};
-    use crate::{path::PathPart, spec::typ::SimpleRecordId};
+    use crate::spec::endpoint::{EndpointData, EndpointResponseTypeId};
+    use crate::spec::typ::{
+        InlineTy, InlineTyId, PrimitiveTy, RootRef, SimpleRecordReference, SimpleRecordReferenceId,
+        TypeDefData,
+    };
 
     use http::{Method, StatusCode};
 
@@ -605,7 +636,22 @@ mod test {
 
         let builder = spec.types.start_record();
         // Safety: this is a dummy empty record
-        let simple_record_id = unsafe { SimpleRecordId::new_unchecked(builder.finish()) };
+        let record_id = builder.finish();
+
+        let simple_record_name = spec.strings.get_or_intern("SimpleRec");
+        spec.symbol_table.insert(
+            simple_record_name,
+            TypeDefData {
+                docs: None,
+                typ: record_id.into(),
+                name: simple_record_name,
+            },
+        );
+        let simple_rec_ref_id = unsafe {
+            SimpleRecordReferenceId::new_unchecked(
+                spec.types.add_reference(RootRef(simple_record_name)),
+            )
+        };
 
         let status_name = spec.strings.get_or_intern("status");
         let list_name = spec.strings.get_or_intern("list");
@@ -615,18 +661,20 @@ mod test {
         // route {
         //   on default: bool
         //
-        //   on 404:
+        //   on 404: string
         //
         //   /// status endpoint
         //   GET "/status" {
         //     name: "status"
         //
+        //     query: {}
+        //
         //     on 200: string
-        //     on 400:
+        //     on 400: string
         //   }
         //
         //   route "/users" {
-        //     on default:
+        //     on default: string
         //
         //     /// list endpoint
         //     GET "/list" {
@@ -639,23 +687,34 @@ mod test {
         //     POST "/create" {
         //       name: create
         //
+        //       requestBody: string
+        //
         //       on 201: bool
         //     }
         //
         //     route "/admin" {
+        //       on 401: string
+        //
         //       DELETE "/ban" {
-        //         on 404:
+        //         on 204: string
         //       }
         //     }
         //   }
-        //
         // }
 
         let mut root = spec.endpoints.add_route(PathPart::Empty, None);
-        root.add_response(ResponseStatus::Default, bool_type, None);
+        root.add_response(
+            ResponseStatus::Default,
+            EndpointResponseTypeId::InlineType(unsafe {
+                InlineTyId::new_unchecked(bool_type.into())
+            }),
+            None,
+        );
         let root_not_found_id = root.add_response(
             ResponseStatus::Code(StatusCode::NOT_FOUND),
-            string_type,
+            EndpointResponseTypeId::InlineType(unsafe {
+                InlineTyId::new_unchecked(string_type.into())
+            }),
             None,
         );
 
@@ -666,23 +725,37 @@ mod test {
                 method: Method::GET,
                 name: status_name,
                 path_param: None,
-                query: Some(simple_record_id),
+                query: Some(simple_rec_ref_id),
                 headers: None,
                 accept: None,
                 request_body: None,
                 request_body_docs: None,
             },
         );
-        status_endpoint.add_response(ResponseStatus::Code(StatusCode::OK), string_type, None);
+        status_endpoint.add_response(
+            ResponseStatus::Code(StatusCode::OK),
+            EndpointResponseTypeId::InlineType(unsafe {
+                InlineTyId::new_unchecked(string_type.into())
+            }),
+            None,
+        );
         status_endpoint.add_response(
             ResponseStatus::Code(StatusCode::BAD_REQUEST),
-            string_type,
+            EndpointResponseTypeId::InlineType(unsafe {
+                InlineTyId::new_unchecked(string_type.into())
+            }),
             None,
         );
         let status_endpoint_id = status_endpoint.finish();
 
         let mut users_route = root.add_route(PathPart::Segment("/users"), None);
-        users_route.add_response(ResponseStatus::Default, string_type, None);
+        users_route.add_response(
+            ResponseStatus::Default,
+            EndpointResponseTypeId::InlineType(unsafe {
+                InlineTyId::new_unchecked(string_type.into())
+            }),
+            None,
+        );
 
         let mut list_endpoint = users_route.add_endpoint(
             PathPart::Segment("/list"),
@@ -698,7 +771,13 @@ mod test {
                 request_body_docs: None,
             },
         );
-        list_endpoint.add_response(ResponseStatus::Code(StatusCode::OK), string_type, None);
+        list_endpoint.add_response(
+            ResponseStatus::Code(StatusCode::OK),
+            EndpointResponseTypeId::InlineType(unsafe {
+                InlineTyId::new_unchecked(string_type.into())
+            }),
+            None,
+        );
         let list_endpoint_id = list_endpoint.finish();
 
         let mut create_endpoint = users_route.add_endpoint(
@@ -711,17 +790,25 @@ mod test {
                 query: None,
                 headers: None,
                 accept: None,
-                request_body: Some(string_type),
+                request_body: Some(unsafe { InlineTyId::new_unchecked(string_type.into()) }),
                 request_body_docs: None,
             },
         );
-        create_endpoint.add_response(ResponseStatus::Code(StatusCode::CREATED), bool_type, None);
+        create_endpoint.add_response(
+            ResponseStatus::Code(StatusCode::CREATED),
+            EndpointResponseTypeId::InlineType(unsafe {
+                InlineTyId::new_unchecked(bool_type.into())
+            }),
+            None,
+        );
         let create_endpoint_id = create_endpoint.finish();
 
         let mut admin_route = users_route.add_route(PathPart::Segment("/admin"), None);
         admin_route.add_response(
             ResponseStatus::Code(StatusCode::UNAUTHORIZED),
-            string_type,
+            EndpointResponseTypeId::InlineType(unsafe {
+                InlineTyId::new_unchecked(string_type.into())
+            }),
             None,
         );
 
@@ -731,7 +818,7 @@ mod test {
                 docs: None,
                 method: Method::DELETE,
                 name: admin_name,
-                path_param: Some(simple_record_id),
+                path_param: Some(simple_rec_ref_id),
                 query: None,
                 headers: None,
                 accept: None,
@@ -741,7 +828,9 @@ mod test {
         );
         let admin_no_content_id = admin_endpoint.add_response(
             ResponseStatus::Code(StatusCode::NO_CONTENT),
-            string_type,
+            EndpointResponseTypeId::InlineType(unsafe {
+                InlineTyId::new_unchecked(string_type.into())
+            }),
             None,
         );
         let admin_endpoint_id = admin_endpoint.finish();
@@ -822,7 +911,7 @@ mod test {
         );
         assert!(matches!(
             create_endpoint.request_body,
-            Some(Type::Inline(InlineTy::Primitive(PrimitiveTy::String)))
+            Some(InlineTy::Primitive(PrimitiveTy::String))
         ));
         let create_responses: Vec<_> = create_endpoint
             .responses()
@@ -863,11 +952,16 @@ mod test {
         assert!(
             admin_endpoint
                 .path_param
-                .is_some_and(|p| p.id == simple_record_id)
+                .as_ref()
+                .is_some_and(|p| p.name == "SimpleRec")
         );
+        assert!(matches!(
+            admin_endpoint.path_param.as_ref().unwrap().typ(),
+            SimpleRecordReference::SimpleRecord(_)
+        ));
 
         // Root route 404 response
-        let root_not_found = spec.ctx().get_response(root_not_found_id);
+        let root_not_found = spec.ctx().get_endpoint_response(root_not_found_id);
         assert_eq!(root_not_found.id, root_not_found_id);
         assert_eq!(
             root_not_found.status,
@@ -875,7 +969,7 @@ mod test {
         );
 
         // Admin ban 404 response
-        let admin_no_content = spec.ctx().get_response(admin_no_content_id);
+        let admin_no_content = spec.ctx().get_endpoint_response(admin_no_content_id);
         assert_eq!(admin_no_content.id, admin_no_content_id);
         assert_eq!(
             admin_no_content.status,

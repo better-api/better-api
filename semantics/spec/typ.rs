@@ -17,8 +17,8 @@
 //! Construction is handled by [`Oracle`](crate::Oracle). It builds the internal
 //! arenas and performs validation before data is exposed through `SpecContext`.
 
-use crate::spec::value::{self, Value, ValueId};
 use crate::spec::SpecContext;
+use crate::spec::value::{self, Value, ValueId};
 use crate::string::StringId;
 
 /// Primitive types.
@@ -318,6 +318,20 @@ impl<'a> NamedReference<'a, Type<'a>> {
     }
 }
 
+impl<'a> NamedReference<'a, SimpleRecordReference<'a>> {
+    /// Resolve the referenced type.
+    pub fn typ(&self) -> SimpleRecordReference<'a> {
+        self.ctx.resolve_from_slot(self.id)
+    }
+}
+
+impl<'a> NamedReference<'a, ResponseReference<'a>> {
+    /// Resolve the referenced type.
+    pub fn typ(&self) -> ResponseReference<'a> {
+        self.ctx.resolve_from_slot(self.id)
+    }
+}
+
 impl<'a> NamedReference<'a, RootType<'a>> {
     /// Resolve the referenced type.
     pub fn typ(&self) -> RootType<'a> {
@@ -465,10 +479,26 @@ impl<'a> Record<'a> {
 /// Fields are exposed through [`SimpleRecord::fields`].
 #[derive(Debug, Clone)]
 pub struct SimpleRecord<'a> {
-    // Id of the record
-    pub(crate) id: SimpleRecordId,
-
     fields: TypeFieldIterator<'a, SimpleTy<'a>>,
+}
+
+impl<'a> FromSlot<'a> for SimpleRecord<'a> {
+    fn from_slot(ctx: SpecContext<'a>, slot_idx: u32, slot: &Slot) -> Self {
+        match slot {
+            Slot::Record { end } => Self {
+                fields: TypeFieldIterator {
+                    ctx,
+                    current: slot_idx + 1,
+                    end: end.0,
+                    id: TypeId(slot_idx),
+                    _data: Default::default(),
+                },
+            },
+
+            // The arena and oracle should construct a valid arena
+            _ => unreachable!("invalid conversion of slot {slot_idx}: {slot:?} to SimpleRecord"),
+        }
+    }
 }
 
 impl<'a> SimpleRecord<'a> {
@@ -574,18 +604,18 @@ impl<'a> Iterator for EnumMemberIterator<'a> {
 
 /// Semantic information about a response type.
 #[derive(Debug, Clone)]
-pub struct Response<'a> {
+pub struct ResponseTy<'a> {
     /// Type of response body
-    pub body: Type<'a>,
+    pub body: InlineTy<'a, Type<'a>>,
 
     /// Optional headers
-    pub headers: Option<SimpleRecord<'a>>,
+    pub headers: Option<NamedReference<'a, SimpleRecordReference<'a>>>,
 
     /// Possible Content-Type header values.
     pub content_type: Option<value::MimeTypes<'a>>,
 }
 
-impl<'a> FromSlot<'a> for Response<'a> {
+impl<'a> FromSlot<'a> for ResponseTy<'a> {
     fn from_slot(ctx: SpecContext<'a>, slot_idx: u32, slot: &Slot) -> Self {
         let Slot::Response {
             body,
@@ -596,11 +626,11 @@ impl<'a> FromSlot<'a> for Response<'a> {
             unreachable!("invalid ResponseId {slot_idx} that doesn't point to response");
         };
 
-        let body = ctx.get_type(*body);
-        let headers = headers.map(|id| ctx.get_simple_record(id));
+        let body = ctx.get_inline_type(*body);
+        let headers = headers.map(|id| ctx.get_simple_record_reference(id));
         let content_type = content_type.map(|id| ctx.get_mime_types(id));
 
-        Response {
+        ResponseTy {
             body,
             headers,
             content_type,
@@ -612,7 +642,7 @@ impl<'a> FromSlot<'a> for Response<'a> {
 #[derive(Debug, Clone, derive_more::Display)]
 pub enum RootType<'a> {
     #[display("`response`")]
-    Response(Response<'a>),
+    Response(ResponseTy<'a>),
     Type(Type<'a>),
 
     NamedReference(NamedReference<'a, RootType<'a>>),
@@ -622,7 +652,7 @@ impl<'a> FromSlot<'a> for RootType<'a> {
     fn from_slot(ctx: SpecContext<'a>, slot_idx: u32, slot: &Slot) -> Self {
         match slot {
             Slot::Response { .. } => {
-                let resp = Response::from_slot(ctx, slot_idx, slot);
+                let resp = ResponseTy::from_slot(ctx, slot_idx, slot);
                 Self::Response(resp)
             }
             Slot::Reference(_) => {
@@ -637,13 +667,87 @@ impl<'a> FromSlot<'a> for RootType<'a> {
     }
 }
 
+/// Reference that terminates with response type.
+///
+/// This type accommodates deep references as well, like Foo -> Bar -> Baz -> resp
+/// Usually it's wrapped in a `NamedReference`, ie `NamedReference<ResponseReference>`. This
+/// way types guarantee that you don't have a direct ResponseTy without a reference in between.
+#[derive(Debug, Clone, derive_more::Display)]
+pub enum ResponseReference<'a> {
+    #[display("`response`")]
+    Response(ResponseTy<'a>),
+    NamedReference(NamedReference<'a, ResponseReference<'a>>),
+}
+
+impl<'a> FromSlot<'a> for ResponseReference<'a> {
+    fn from_slot(ctx: SpecContext<'a>, slot_idx: u32, slot: &Slot) -> Self {
+        match slot {
+            Slot::Response { .. } => {
+                let resp = ResponseTy::from_slot(ctx, slot_idx, slot);
+                Self::Response(resp)
+            }
+            Slot::Reference(_) => {
+                let reference = NamedReference::from_slot(ctx, slot_idx, slot);
+                Self::NamedReference(reference)
+            }
+
+            // The arena and oracle should construct a valid arena
+            _ => {
+                unreachable!("invalid conversion of slot {slot_idx}: {slot:?} to ResponseReference")
+            }
+        }
+    }
+}
+
+/// Reference that terminates with simple record type.
+///
+/// This type accommodates deep references as well, like Foo -> Bar -> Baz -> simple record
+/// Usually it's wrapped in a `NamedReference`, ie `NamedReference<SimpleRecordReference>`. This
+/// way types guarantee that you don't have a direct SimpleRecord without a reference in between.
+#[derive(Debug, Clone, derive_more::Display)]
+pub enum SimpleRecordReference<'a> {
+    #[display("`record`")]
+    SimpleRecord(SimpleRecord<'a>),
+    NamedReference(NamedReference<'a, SimpleRecordReference<'a>>),
+}
+
+impl<'a> FromSlot<'a> for SimpleRecordReference<'a> {
+    fn from_slot(ctx: SpecContext<'a>, slot_idx: u32, slot: &Slot) -> Self {
+        match slot {
+            Slot::Record { .. } => {
+                let simple_rec = SimpleRecord::from_slot(ctx, slot_idx, slot);
+                Self::SimpleRecord(simple_rec)
+            }
+            Slot::Reference(_) => {
+                let reference = NamedReference::from_slot(ctx, slot_idx, slot);
+                Self::NamedReference(reference)
+            }
+
+            // The arena and oracle should construct a valid arena
+            _ => {
+                unreachable!(
+                    "invalid conversion of slot {slot_idx}: {slot:?} to SimpleRecordReference"
+                )
+            }
+        }
+    }
+}
+
+/// Type definition.
+pub struct TypeDef<'a> {
+    pub docs: Option<&'a str>,
+    pub typ: RootType<'a>,
+    pub name: &'a str,
+}
+
 /// Type definition.
 ///
 /// Stores the doc comment for a named type definition.
 #[derive(Debug, Clone)]
-pub(crate) struct TypeDef {
+pub(crate) struct TypeDefData {
     pub docs: Option<StringId>,
     pub typ: RootTypeId,
+    pub name: StringId,
 }
 
 /// Id of any type including response.
@@ -656,8 +760,8 @@ impl From<TypeId> for RootTypeId {
     }
 }
 
-impl From<ResponseId> for RootTypeId {
-    fn from(value: ResponseId) -> Self {
+impl From<ResponseTyId> for RootTypeId {
+    fn from(value: ResponseTyId) -> Self {
         Self(value.0)
     }
 }
@@ -677,25 +781,57 @@ impl TypeId {
     }
 }
 
-/// Id of a simple record type stored in the [`TypeArena`].
+/// Id of a inline type stored in the [`TypeArena`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct SimpleRecordId(u32);
+pub(crate) struct InlineTyId(u32);
 
-impl SimpleRecordId {
-    /// Treat a [`TypeId`] as a [`SimpleRecordId`] without validation.
+impl InlineTyId {
+    /// Treat a [`RootTypeId`] as a [`InlineTyId`] without validation.
     ///
     /// ## Safety
     ///
-    /// The caller must ensure the id is a record and all fields resolve to
-    /// [`InlineTy<SimpleTy>`].
-    pub(crate) unsafe fn new_unchecked(id: TypeId) -> Self {
+    /// The caller must ensure the id does not refer to a inline type
+    pub(crate) unsafe fn new_unchecked(id: RootTypeId) -> Self {
+        Self(id.0)
+    }
+}
+
+/// Id of a named reference to stored in the [`TypeArena`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct SimpleRecordReferenceId(u32);
+
+impl SimpleRecordReferenceId {
+    /// Treat a [`RootTypeId`] as a [`SimpleRecordReferenceId`] without validation.
+    ///
+    /// ## Safety
+    ///
+    /// The caller must ensure the id refers to a named reference that terminates
+    /// with a [`SimpleRecord`]. That is, id must be a valid
+    /// `NamedReference<SimpleRecordReference>`
+    pub(crate) unsafe fn new_unchecked(id: RootTypeId) -> Self {
+        Self(id.0)
+    }
+}
+
+/// Id of a named reference to stored in the [`TypeArena`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct ResponseReferenceId(u32);
+
+impl ResponseReferenceId {
+    /// Treat a [`RootTypeId`] as a [`ResponseReferenceId`] without validation.
+    ///
+    /// ## Safety
+    ///
+    /// The caller must ensure the id refers to a named reference that terminates
+    /// with a [`ResponseTy`]. That is, id must be a valid `NamedReference<ResponseReference>`.
+    pub(crate) unsafe fn new_unchecked(id: RootTypeId) -> Self {
         Self(id.0)
     }
 }
 
 /// Id of a response type stored in the [`TypeArena`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct ResponseId(u32);
+pub(crate) struct ResponseTyId(u32);
 
 /// Id of a field in a record or union.
 ///
@@ -758,8 +894,8 @@ enum Slot {
         docs: Option<StringId>,
     },
     Response {
-        body: TypeId,
-        headers: Option<SimpleRecordId>,
+        body: InlineTyId,
+        headers: Option<SimpleRecordReferenceId>,
         content_type: Option<value::MimeTypesId>,
     },
     Record {
@@ -1195,17 +1331,17 @@ impl TypeArena {
     /// Returns the [`TypeId`] assigned to the response.
     pub(crate) fn add_response(
         &mut self,
-        body: TypeId,
-        headers: Option<SimpleRecordId>,
+        body: InlineTyId,
+        headers: Option<SimpleRecordReferenceId>,
         content_type: Option<value::MimeTypesId>,
-    ) -> ResponseId {
+    ) -> ResponseTyId {
         let idx = self.data.len();
         self.data.push(Slot::Response {
             body,
             headers,
             content_type,
         });
-        ResponseId(idx as u32)
+        ResponseTyId(idx as u32)
     }
 
     /// Start building an enum.
@@ -1256,26 +1392,29 @@ impl<'a> SpecContext<'a> {
         self.resolve_from_slot(id.0)
     }
 
-    /// Get [`SimpleRecord`] by id.
-    pub(crate) fn get_simple_record(&self, id: SimpleRecordId) -> SimpleRecord<'a> {
-        let Slot::Record { end } = &self.types.data[id.0 as usize] else {
-            unreachable!("invalid SimpleRecordId {id:?} that doesn't point to a record");
-        };
-
-        SimpleRecord {
-            id,
-            fields: TypeFieldIterator {
-                ctx: *self,
-                current: id.0 + 1,
-                end: end.0,
-                id: TypeId(id.0),
-                _data: Default::default(),
-            },
-        }
+    /// Get [`InlineTy`] type by id.
+    pub(crate) fn get_inline_type(&self, id: InlineTyId) -> InlineTy<'a, Type<'a>> {
+        self.resolve_from_slot(id.0)
     }
 
-    /// Get [`Response`] type by id.
-    pub(crate) fn get_response_type(&self, id: ResponseId) -> Response<'a> {
+    /// Get [`SimpleRecordReference`] type by id.
+    pub(crate) fn get_simple_record_reference(
+        &self,
+        id: SimpleRecordReferenceId,
+    ) -> NamedReference<'a, SimpleRecordReference<'a>> {
+        self.resolve_from_slot(id.0)
+    }
+
+    /// Get [`ResponseReference`] type by id.
+    pub(crate) fn get_response_reference(
+        &self,
+        id: ResponseReferenceId,
+    ) -> NamedReference<'a, ResponseReference<'a>> {
+        self.resolve_from_slot(id.0)
+    }
+
+    /// Get [`ResponseTy`] type by id.
+    pub(crate) fn get_response_type(&self, id: ResponseTyId) -> ResponseTy<'a> {
         self.resolve_from_slot(id.0)
     }
 
@@ -1317,13 +1456,13 @@ impl<'a> SpecContext<'a> {
 #[cfg(test)]
 mod test {
     use super::{
-        EnumTy, PrimitiveTy, RootRef, RootType, SimpleRecordId, SimpleTy, Slot, Type, TypeFieldId,
-        TypeId,
+        EnumTy, PrimitiveTy, RootRef, RootType, SimpleTy, Slot, Type, TypeFieldId, TypeId,
     };
+    use crate::spec::typ::{InlineTyId, SimpleRecordReference, SimpleRecordReferenceId};
     use crate::spec::value::{PrimitiveValue, Value};
     use crate::spec::{
-        typ::{InlineTy, TypeDef, TypeRef},
         Spec,
+        typ::{InlineTy, TypeDefData, TypeRef},
     };
 
     #[test]
@@ -1629,9 +1768,10 @@ mod test {
         let foo_typ = spec.types.add_primitive(PrimitiveTy::String);
         spec.symbol_table.insert(
             foo_name,
-            TypeDef {
+            TypeDefData {
                 docs: None,
                 typ: foo_typ.into(),
+                name: foo_name,
             },
         );
 
@@ -1668,6 +1808,7 @@ mod test {
     fn simple_record_with_enum_option() {
         let mut spec = Spec::new_test();
 
+        let record_name = spec.strings.get_or_intern("SimpleRec");
         let status_name = spec.strings.get_or_intern("Status");
         let open_str = spec.strings.get_or_intern("open");
         let closed_str = spec.strings.get_or_intern("closed");
@@ -1687,9 +1828,10 @@ mod test {
 
         spec.symbol_table.insert(
             status_name,
-            TypeDef {
+            TypeDefData {
                 docs: None,
                 typ: enum_id.into(),
+                name: status_name,
             },
         );
 
@@ -1700,8 +1842,26 @@ mod test {
         status_builder.finish_reference(TypeRef(status_name));
         let record_id = record_builder.finish();
 
-        let simple_record_id = unsafe { SimpleRecordId::new_unchecked(record_id) };
-        let record = spec.ctx().get_simple_record(simple_record_id);
+        spec.symbol_table.insert(
+            record_name,
+            TypeDefData {
+                docs: None,
+                typ: record_id.into(),
+                name: record_name,
+            },
+        );
+
+        let ref_id = unsafe {
+            SimpleRecordReferenceId::new_unchecked(spec.types.add_reference(RootRef(record_name)))
+        };
+
+        let simple_rec_ref = spec.ctx().get_simple_record_reference(ref_id);
+        let record = match simple_rec_ref.typ() {
+            SimpleRecordReference::SimpleRecord(record) => record,
+            SimpleRecordReference::NamedReference(_) => {
+                panic!("expected simple record, got named reference")
+            }
+        };
 
         let mut fields = record.fields();
 
@@ -1751,6 +1911,7 @@ mod test {
     fn root_reference_response_enum_body() {
         let mut spec = Spec::new_test();
 
+        let enum_name = spec.strings.get_or_intern("Enum");
         let response_name = spec.strings.get_or_intern("StatusResponse");
         let ok_str = spec.strings.get_or_intern("ok");
         let error_str = spec.strings.get_or_intern("error");
@@ -1763,38 +1924,49 @@ mod test {
         enum_builder.add_member(error_value, None);
         let enum_id = enum_builder.finish();
 
-        let response_id = spec.types.add_response(enum_id, None, None);
+        spec.symbol_table.insert(
+            enum_name,
+            TypeDefData {
+                docs: None,
+                typ: enum_id.into(),
+                name: enum_name,
+            },
+        );
+        let enum_ref =
+            unsafe { InlineTyId::new_unchecked(spec.types.add_reference(RootRef(enum_name))) };
+
+        let response_id = spec.types.add_response(enum_ref, None, None);
 
         spec.symbol_table.insert(
             response_name,
-            TypeDef {
+            TypeDefData {
                 docs: None,
                 typ: response_id.into(),
+                name: response_name,
             },
         );
 
         let response_ref_id = spec.types.add_reference(RootRef(response_name));
-        let root = spec.ctx().get_root_type(response_ref_id);
-
-        let response_root = match root {
-            RootType::NamedReference(reference) => {
-                assert_eq!(reference.name, "StatusResponse");
-                reference.typ()
-            }
-            other => panic!("expected named reference to response, got {other:?}"),
-        };
+        let response_root = spec.ctx().get_root_type(response_ref_id);
 
         let response = match response_root {
-            RootType::Response(response) => response,
-            other => panic!("expected response type, got {other:?}"),
+            RootType::NamedReference(reference) => match reference.typ() {
+                RootType::Response(response) => response,
+                other => panic!("expected response type, got {other:?}"),
+            },
+
+            other => panic!("expected reference to response, got {other:?}"),
         };
 
         assert!(response.headers.is_none());
         assert!(response.content_type.is_none());
 
         let status_enum = match response.body {
-            Type::Enum(enm) => enm,
-            other => panic!("expected enum response body, got {other:?}"),
+            InlineTy::NamedReference(reference) => match reference.typ() {
+                Type::Enum(enm) => enm,
+                other => panic!("expected enum response body, got {other:?}"),
+            },
+            other => panic!("expected named reference response body, got {other:?}"),
         };
         assert_eq!(status_enum.typ, EnumTy::String);
 

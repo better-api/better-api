@@ -8,7 +8,7 @@ pub mod endpoint;
 pub mod typ;
 pub mod value;
 
-pub(crate) type SymbolTable = HashMap<StringId, typ::TypeDef>;
+pub(crate) type SymbolTable = HashMap<StringId, typ::TypeDefData>;
 
 /// Valid semantic specification
 ///

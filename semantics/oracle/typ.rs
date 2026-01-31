@@ -6,8 +6,8 @@ use crate::oracle::SymbolMap;
 use crate::oracle::symbols::{ResolvedSymbol, deref, report_missing, resolve};
 use crate::oracle::value::{lower_mime_types, lower_value};
 use crate::spec::typ::{
-    EnumTy, FieldBuilder, OptionArrayBuilder, PrimitiveTy, ResponseId, RootRef, RootTypeId,
-    SimpleRecordId, TypeDef, TypeId, TypeRef,
+    EnumTy, FieldBuilder, OptionArrayBuilder, PrimitiveTy, ResponseTyId, RootRef, RootTypeId,
+    SimpleRecordReferenceId, TypeDefData, TypeId, TypeRef,
 };
 use crate::spec::value::ValueId;
 use crate::string::{StringId, StringInterner};
@@ -99,12 +99,15 @@ impl<'a> Oracle<'a> {
 
         // Insert type to symbol table if not already present.
         // The duplicate type definition error is reported by [`Oracle::validate_symbols`].
-        self.spec_symbol_table.entry(name_id).or_insert(TypeDef {
-            typ: type_id,
+        self.spec_symbol_table
+            .entry(name_id)
+            .or_insert(TypeDefData {
+                typ: type_id,
+                name: name_id,
 
-            // TODO: Extract docs from type definition prologue
-            docs: None,
-        });
+                // TODO: Extract docs from type definition prologue
+                docs: None,
+            });
     }
 
     /// Lower a syntactical type and store it into the type arena and source map.
@@ -273,7 +276,7 @@ impl<'a> Oracle<'a> {
     }
 
     /// Lowers response type and inserts it into arena
-    fn lower_response(&mut self, resp: &ast::TypeResponse) -> Option<ResponseId> {
+    fn lower_response(&mut self, resp: &ast::TypeResponse) -> Option<ResponseTyId> {
         // Is response valid. We don't want to early return, because
         // we want to validate as many things as possible and capture as many
         // errors as possible.
@@ -377,9 +380,11 @@ impl<'a> Oracle<'a> {
         // Safety: We checked that body isn't a response or reference to a response.
         let body_id = unsafe { TypeId::new_unchecked(body_id) };
 
+        // TODO: Convert body to inline type. If it's not inline already, we have to name it.
+
         let id = self
             .types
-            .add_response(body_id, headers_id, content_type_id);
+            .add_response(todo!(), headers_id, content_type_id);
         Some(id)
     }
 
@@ -387,7 +392,7 @@ impl<'a> Oracle<'a> {
     ///
     /// Valid headers are simple record without files. If type is valid,
     /// Some(_) is returned. If any validation fails, reports are generated and None is returned.
-    fn lower_headers(&mut self, headers: &ast::Type) -> Option<SimpleRecordId> {
+    fn lower_headers(&mut self, headers: &ast::Type) -> Option<SimpleRecordReferenceId> {
         // Are headers valid. We don't want to early return, because we want
         // to validate as many things as possible.
         let mut is_valid = true;
@@ -447,7 +452,10 @@ impl<'a> Oracle<'a> {
         let id = self.lower_type(headers)?;
 
         // Safety: We have checked that it's a simple record.
-        let id = unsafe { SimpleRecordId::new_unchecked(TypeId::new_unchecked(id)) };
+        // TODO: We have to check if it's actually a reference. If it's not, we have to move it
+        // behind a reference
+        let id = unsafe { SimpleRecordReferenceId::new_unchecked(id) };
+        todo!();
         Some(id)
     }
 
