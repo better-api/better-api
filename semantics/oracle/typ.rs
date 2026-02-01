@@ -6,8 +6,8 @@ use crate::oracle::SymbolMap;
 use crate::oracle::symbols::{ResolvedSymbol, deref, report_missing, resolve};
 use crate::oracle::value::{lower_mime_types, lower_value};
 use crate::spec::typ::{
-    EnumTy, FieldBuilder, OptionArrayBuilder, PrimitiveTy, ResponseTyId, RootRef, RootTypeId,
-    SimpleRecordReferenceId, TypeDefData, TypeId, TypeRef,
+    EnumTy, FieldBuilder, InlineTyId, OptionArrayBuilder, PrimitiveTy, ResponseTyId, RootRef,
+    RootTypeId, SimpleRecordReferenceId, TypeDefData, TypeId, TypeRef,
 };
 use crate::spec::value::ValueId;
 use crate::string::{StringId, StringInterner};
@@ -316,7 +316,7 @@ impl<'a> Oracle<'a> {
         // Parse and validate header type
         let mut headers_id = None;
         if let Some(headers) = resp.headers().and_then(|h| h.typ()) {
-            match self.lower_headers(&headers) {
+            match self.lower_headers(&headers, &format!("{name}Headers")) {
                 res @ Some(_) => headers_id = res,
                 None => is_valid = false,
             }
@@ -399,22 +399,28 @@ impl<'a> Oracle<'a> {
             return None;
         }
 
-        // Safety: We checked that body isn't a response or reference to a response.
-        let body_id = unsafe { TypeId::new_unchecked(body_id) };
+        let body_id = self.ensure_inline(&body, body_id, &format!("{name}Body"))?;
 
-        // TODO: Convert body to inline type. If it's not inline already, we have to name it.
+        // Safety: We checked that body is not a response, and that it's inlined.
+        let body_id = unsafe { InlineTyId::new_unchecked(body_id) };
 
         let id = self
             .types
-            .add_response(todo!(), headers_id, content_type_id);
+            .add_response(body_id, headers_id, content_type_id);
         Some(id)
     }
 
     /// Checks that given type represents valid headers and lowers it.
     ///
+    /// If necessary headers are put behind a new type definition, with provided name.
+    ///
     /// Valid headers are simple record without files. If type is valid,
     /// Some(_) is returned. If any validation fails, reports are generated and None is returned.
-    fn lower_headers(&mut self, headers: &ast::Type) -> Option<SimpleRecordReferenceId> {
+    fn lower_headers(
+        &mut self,
+        headers: &ast::Type,
+        name: &str,
+    ) -> Option<SimpleRecordReferenceId> {
         // Are headers valid. We don't want to early return, because we want
         // to validate as many things as possible.
         let mut is_valid = true;
@@ -474,12 +480,10 @@ impl<'a> Oracle<'a> {
         }
 
         let id = self.lower_type(headers)?;
+        let id = self.ensure_inline(headers, id, name)?;
 
-        // Safety: We have checked that it's a simple record.
-        // TODO: We have to check if it's actually a reference. If it's not, we have to move it
-        // behind a reference
+        // Safety: We have checked that it's a simple record, and that it's behind a reference.
         let id = unsafe { SimpleRecordReferenceId::new_unchecked(id) };
-        todo!();
         Some(id)
     }
 
@@ -863,6 +867,87 @@ impl<'a> Oracle<'a> {
 
             _ => check(node).map_err(Some),
         }
+    }
+
+    /// Ensures the type is an inline type.
+    ///
+    /// If type behind `node` is not already an inline type, its assigned a new type definition
+    /// with name `name`. Parameter `id` should be the id of the lowered type behind `node`.
+    ///
+    /// If type can't be inlined (usually because `name` already exists), None is returned.
+    fn ensure_inline(
+        &mut self,
+        node: &ast::Type,
+        id: RootTypeId,
+        name: &str,
+    ) -> Option<RootTypeId> {
+        // If type is already inline, there's nothing to do.
+        match node {
+            ast::Type::TypeOption(_)
+            | ast::Type::TypeArray(_)
+            | ast::Type::TypeRef(_)
+            | ast::Type::TypeI32(_)
+            | ast::Type::TypeI64(_)
+            | ast::Type::TypeU32(_)
+            | ast::Type::TypeU64(_)
+            | ast::Type::TypeF32(_)
+            | ast::Type::TypeF64(_)
+            | ast::Type::TypeDate(_)
+            | ast::Type::TypeTimestamp(_)
+            | ast::Type::TypeBool(_)
+            | ast::Type::TypeString(_)
+            | ast::Type::TypeFile(_) => return Some(id),
+
+            ast::Type::Record(_)
+            | ast::Type::Enum(_)
+            | ast::Type::Union(_)
+            | ast::Type::TypeResponse(_) => (),
+        }
+
+        // Check if name already exists
+        let name_id = self.strings.get_or_intern(name);
+        if let Some(original_def_ptr) = self.symbol_map.get(&name_id) {
+            let original_def = original_def_ptr.to_node(self.root.syntax());
+
+            // If symbol table contains the name already, we should also have a valid type def
+            // node, so expects should be fine.
+            let original_range = original_def
+                .name()
+                .expect("name of original type def should exist")
+                .text_range();
+
+            self.reports.push(
+                Report::error(format!("name `{name}` collides with auto generated name"))
+                    .add_label(Label::primary(
+                        format!("name `{name}` collides with auto generated name"),
+                        original_range.into(),
+                    ))
+                    .add_label(Label::secondary(
+                        "autogenerated name for this type".to_string(),
+                        node.syntax().text_range().into(),
+                    )),
+            );
+
+            return None;
+        }
+
+        // Insert into symbol tables. We don't have to update `symbol_map`,
+        // because we are not modifying the AST. We are only modifying semantic representation.
+        // Also, symbol_map is used primarily for tracking/resolving AST references. This is not
+        // an AST reference, only a semantic one and it will never tried to be resolved on the
+        // AST level.
+        self.spec_symbol_table.insert(
+            name_id,
+            TypeDefData {
+                typ: id,
+                name: name_id,
+                docs: None,
+            },
+        );
+
+        // Create a new reference and return it.
+        let ref_id = self.types.add_reference(RootRef(name_id));
+        Some(ref_id)
     }
 }
 
