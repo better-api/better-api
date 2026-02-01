@@ -36,7 +36,7 @@ enum ParsedType<'a> {
     Primitive(PrimitiveTy),
     Reference { name: StringId, range: TextRange },
     Enum(&'a ast::Enum),
-    Response(&'a ast::TypeResponse),
+    Response,
     Record(&'a ast::Record),
     Union(&'a ast::Union),
     Array(&'a ast::TypeArray),
@@ -51,7 +51,7 @@ impl<'a> ParsedType<'a> {
             ast::Type::Record(rec) => Self::Record(rec),
             ast::Type::Enum(en) => Self::Enum(en),
             ast::Type::Union(union) => Self::Union(union),
-            ast::Type::TypeResponse(resp) => Self::Response(resp),
+            ast::Type::TypeResponse(_) => Self::Response,
             ast::Type::TypeRef(typ_ref) => {
                 let token = typ_ref.name();
                 let str_id = strings.get_or_intern(token.text());
@@ -90,10 +90,14 @@ impl<'a> Oracle<'a> {
         let Some(name_token) = def.name() else {
             return;
         };
-        let name_id = self.strings.get_or_intern(name_token.text());
+        let name = name_token.text();
+        let name_id = self.strings.get_or_intern(name);
 
         // Missing type report is handled by parser. Other errors are handled in lower_type.
-        let Some(type_id) = def.typ().and_then(|t| self.lower_type(&t)) else {
+        let Some(type_id) = def.typ().and_then(|t| match t {
+            ast::Type::TypeResponse(resp) => self.lower_response(&resp, name).map(|id| id.into()),
+            _ => self.lower_type(&t),
+        }) else {
             return;
         };
 
@@ -110,12 +114,18 @@ impl<'a> Oracle<'a> {
             });
     }
 
-    /// Lower a syntactical type and store it into the type arena and source map.
+    /// Lower a type that isn't a response.
     ///
-    /// Returns [`TypeId`] if type could be parsed, and `None` otherwise.
+    /// Returns [`RootTypeId`] if type could be parsed, and `None` otherwise.
     ///
-    /// If type was lowered successfully it's not yet completely validated.
-    /// This has to be done after _all_ the types have been lowered.
+    /// ## Panics
+    ///
+    /// This method mustn't be called on [`ast::TypeResponse`]. If it's called
+    /// on `ast::TypeResponse`, it will panic.
+    ///
+    /// Use [`Oracle::lower_response`] for lowering response.
+    ///
+    /// **Note:** You can should use this method to lower a _reference_ to a response.
     pub(crate) fn lower_type(&mut self, typ: &ast::Type) -> Option<RootTypeId> {
         match ParsedType::new(typ, &mut self.strings) {
             ParsedType::Primitive(primitive) => Some(self.types.add_primitive(primitive).into()),
@@ -133,7 +143,6 @@ impl<'a> Oracle<'a> {
                 }
             }
             ParsedType::Enum(en) => self.lower_enum(en).map(|id| id.into()),
-            ParsedType::Response(resp) => self.lower_response(resp).map(|id| id.into()),
             ParsedType::Record(record) => Some(self.lower_record(record).into()),
             ParsedType::Union(union) => self.lower_union(union).map(|id| id.into()),
             ParsedType::Array(arr) => {
@@ -163,6 +172,10 @@ impl<'a> Oracle<'a> {
                     InvalidOuterContext::Option,
                 )
                 .map(|id| id.into())
+            }
+
+            ParsedType::Response => {
+                panic!("trying to lower response with `lower_type`. Use lower_response instead")
             }
         }
     }
@@ -275,8 +288,17 @@ impl<'a> Oracle<'a> {
         }
     }
 
-    /// Lowers response type and inserts it into arena
-    fn lower_response(&mut self, resp: &ast::TypeResponse) -> Option<ResponseTyId> {
+    /// Lowers response type.
+    ///
+    /// Returns [`RootTypeId`] if type could be parsed, and `None` otherwise.
+    ///
+    /// Parameter `name` is the name of the response type being lowered. It's used to generate
+    /// header and body names.
+    pub(crate) fn lower_response(
+        &mut self,
+        resp: &ast::TypeResponse,
+        name: &str,
+    ) -> Option<ResponseTyId> {
         // Is response valid. We don't want to early return, because
         // we want to validate as many things as possible and capture as many
         // errors as possible.
@@ -445,6 +467,8 @@ impl<'a> Oracle<'a> {
             Err(_) => is_valid = false,
         }
 
+        // We don't lower type if it isn't a simple record. We don't want to report things
+        // like union errors _and_ "it's not a simple record". This would be confusing.
         if !is_valid {
             return None;
         }
@@ -975,7 +999,7 @@ fn lower_array_option(
             ));
             None
         }
-        ParsedType::Response(_) => {
+        ParsedType::Response => {
             reports.push(new_invalid_response(inner.syntax().text_range(), None));
             None
         }
@@ -1157,7 +1181,7 @@ fn insert_type_fields(
                     &typ,
                 ));
             }
-            ParsedType::Response(_) => {
+            ParsedType::Response => {
                 unreachable!("fields should be validated by `parse_type_fields`");
             }
             ParsedType::Record(_) => {
