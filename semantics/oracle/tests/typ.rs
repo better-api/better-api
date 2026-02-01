@@ -6,7 +6,10 @@ use indoc::indoc;
 
 use crate::{
     Oracle,
-    spec::typ::{InlineTy, PrimitiveTy, RootType, Type},
+    spec::{
+        typ::{InlineTy, PrimitiveTy, RootType, Type},
+        value::Value,
+    },
 };
 
 #[test]
@@ -84,338 +87,310 @@ fn lower_reference() {
         _ => panic!("epxected PrimitiveTy::String, got {actual:?}"),
     }
 }
-//
-// #[test]
-// fn parse_simple_array() {
-//     let text = indoc! {r#"
-//             type Foo: [i32]
-//         "#};
-//
-//     let mut diagnostics = vec![];
-//     let tokens = tokenize(text, &mut diagnostics);
-//     let res = parse(tokens);
-//
-//     let mut oracle = Oracle::new_raw(&res.root);
-//
-//     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-//     let id = oracle.lower_type(&typ).unwrap();
-//
-//     assert_eq!(oracle.reports(), vec![]);
-//
-//     let arr = match oracle.types.get(id) {
-//         Type::Array(arr) => arr,
-//         _ => panic!(),
-//     };
-//     assert!(matches!(arr.typ(), Type::I32));
-//
-//     oracle.source_map.get_type(id);
-//     oracle.source_map.get_type(arr.id);
-// }
-//
-// #[test]
-// fn parse_nested_array() {
-//     let text = indoc! {r#"
-//             type Foo: [[i32]]
-//         "#};
-//
-//     let mut diagnostics = vec![];
-//     let tokens = tokenize(text, &mut diagnostics);
-//     let res = parse(tokens);
-//
-//     let mut oracle = Oracle::new_raw(&res.root);
-//
-//     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-//     let id = oracle.lower_type(&typ).unwrap();
-//
-//     assert_eq!(oracle.reports(), vec![]);
-//
-//     let arr = match oracle.types.get(id) {
-//         Type::Array(arr) => arr,
-//         _ => panic!(),
-//     };
-//     let arr_inner = match arr.typ() {
-//         Type::Array(arr) => arr,
-//         _ => panic!(),
-//     };
-//     assert!(matches!(arr_inner.typ(), Type::I32));
-//
-//     oracle.source_map.get_type(id);
-//     oracle.source_map.get_type(arr.id);
-//     oracle.source_map.get_type(arr_inner.id);
-// }
-//
-// #[test]
-// fn parse_empty_array() {
-//     let text = indoc! {r#"
-//             type Foo: []
-//         "#};
-//
-//     let mut diagnostics = vec![];
-//     let tokens = tokenize(text, &mut diagnostics);
-//     let res = parse(tokens);
-//
-//     let mut oracle = Oracle::new_raw(&res.root);
-//
-//     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-//     let id = oracle.lower_type(&typ);
-//     assert_eq!(id, None);
-//
-//     assert_eq!(oracle.reports(), vec![]);
-// }
-//
-// #[test]
-// fn parse_invalid_array() {
-//     let text = indoc! {r#"
-//             type Foo: [union (string) {}]
-//         "#};
-//
-//     let mut diagnostics = vec![];
-//     let tokens = tokenize(text, &mut diagnostics);
-//     let res = parse(tokens);
-//
-//     let mut oracle = Oracle::new_raw(&res.root);
-//
-//     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-//     let id = oracle.lower_type(&typ);
-//     assert_eq!(id, None);
-//
-//     assert_eq!(
-//             oracle.reports(),
-//             vec![
-//                 Report::error("inline union not allowed in array".to_string()).add_label(
-//                     Label::primary("inline union type not allowed".to_string(), Span::new(11, 28))
-//                 ).with_note("help: define a named type first, then reference it\n      example: `type MyUnion: union (\"discriminator\") { ... }`".to_string())
-//             ]
-//         );
-// }
-//
-// #[test]
-// fn parse_simple_option() {
-//     let text = indoc! {r#"
-//             type Foo: i32?
-//         "#};
-//
-//     let mut diagnostics = vec![];
-//     let tokens = tokenize(text, &mut diagnostics);
-//     let res = parse(tokens);
-//
-//     let mut oracle = Oracle::new_raw(&res.root);
-//
-//     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-//     let id = oracle.lower_type(&typ).unwrap();
-//
-//     assert_eq!(oracle.reports(), vec![]);
-//
-//     let opt = match oracle.types.get(id) {
-//         Type::Option(opt) => opt,
-//         _ => panic!(),
-//     };
-//     assert!(matches!(opt.typ(), Type::I32));
-//
-//     oracle.source_map.get_type(id);
-//     oracle.source_map.get_type(opt.id);
-// }
-//
-// #[test]
-// fn parse_nested_option() {
-//     // This contains errors reported by parser. We don't care about them here.
-//     // We are interested that there is a semantic Option<i32> type.
-//     let text = indoc! {r#"
-//             type Foo: i32??
-//         "#};
-//
-//     let mut diagnostics = vec![];
-//     let tokens = tokenize(text, &mut diagnostics);
-//     let res = parse(tokens);
-//
-//     let mut oracle = Oracle::new_raw(&res.root);
-//
-//     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-//     let id = oracle.lower_type(&typ).unwrap();
-//
-//     assert_eq!(oracle.reports(), vec![]);
-//
-//     let opt = match oracle.types.get(id) {
-//         Type::Option(opt) => opt,
-//         _ => panic!(),
-//     };
-//     assert!(matches!(opt.typ(), Type::I32));
-//
-//     oracle.source_map.get_type(id);
-//     oracle.source_map.get_type(opt.id);
-// }
-//
-// #[test]
-// fn parse_invalid_option() {
-//     let text = indoc! {r#"
-//             type Foo: rec {}?
-//         "#};
-//
-//     let mut diagnostics = vec![];
-//     let tokens = tokenize(text, &mut diagnostics);
-//     let res = parse(tokens);
-//
-//     assert!(diagnostics.is_empty());
-//     assert!(res.reports.is_empty());
-//
-//     let mut oracle = Oracle::new_raw(&res.root);
-//
-//     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-//     let id = oracle.lower_type(&typ);
-//     assert_eq!(id, None);
-//
-//     assert_eq!(
-//             oracle.reports(),
-//             vec![
-//                 Report::error("inline record not allowed in option".to_string())
-//                     .add_label(Label::primary(
-//                         "inline record type not allowed".to_string(),
-//                         Span::new(10, 16)
-//                     ))
-//                     .with_note(
-//                         "help: define a named type first, then reference it\n      example: `type MyRecord: rec { ... }`"
-//                             .to_string()
-//                     )
-//             ]
-//         );
-// }
-//
-// #[test]
-// fn parse_simple_record() {
-//     // Test parsing of simple records.
-//     // We have two records that are the same, but with different field ordering.
-//     // This test also checks that ordering of parsed is the same, which means we have
-//     // stable ordering.
-//     let text = indoc! {r#"
-//             type Foo: rec {
-//                 foo: string
-//                 bar: [i32]
-//
-//                 @default(69420)
-//                 baz: u32
-//             }
-//
-//             type Foo: rec {
-//                 @default(69420)
-//                 baz: u32
-//                 bar: [i32]
-//                 foo: string
-//             }
-//         "#};
-//
-//     let mut diagnostics = vec![];
-//     let tokens = tokenize(text, &mut diagnostics);
-//     let res = parse(tokens);
-//
-//     let mut oracle = Oracle::new_raw(&res.root);
-//
-//     assert_eq!(res.root.type_definitions().count(), 2);
-//
-//     for typ in res.root.type_definitions() {
-//         let typ = typ.typ().unwrap();
-//         let id = oracle.lower_type(&typ).unwrap();
-//
-//         assert_eq!(oracle.reports(), vec![]);
-//
-//         // Check record was inserted and is in source map
-//         let rec = match oracle.types.get(id) {
-//             Type::Record(rec) => rec,
-//             _ => panic!(),
-//         };
-//         oracle.source_map.get_type(id);
-//
-//         let fields: Vec<_> = rec.fields().collect();
-//
-//         // Check field names are correct
-//         let names: Vec<_> = fields
-//             .iter()
-//             .map(|field| oracle.strings.get(field.name))
-//             .collect();
-//         assert_eq!(names, vec!["foo", "bar", "baz"]);
-//
-//         // Check field @default's are correct
-//         let defaults: Vec<_> = fields
-//             .iter()
-//             .map(|field| field.default.map(|id| oracle.values.get(id)))
-//             .collect();
-//         assert_eq!(defaults.len(), 3);
-//         assert!(defaults[0].is_none());
-//         assert!(defaults[1].is_none());
-//         assert!(matches!(defaults[2], Some(Value::Integer(69420))));
-//
-//         // Check default values are in source map
-//         for default_id in fields.iter().filter_map(|field| field.default) {
-//             oracle.source_map.get_value(default_id);
-//         }
-//
-//         // Check fields and field types are in source map
-//         for field in &fields {
-//             oracle.source_map.get_type(field.id.type_id());
-//         }
-//     }
-// }
-//
-// #[test]
-// fn parse_empty_record() {
-//     let text = indoc! {r#"
-//             type Foo: rec {}
-//         "#};
-//
-//     let mut diagnostics = vec![];
-//     let tokens = tokenize(text, &mut diagnostics);
-//     let res = parse(tokens);
-//
-//     let mut oracle = Oracle::new_raw(&res.root);
-//
-//     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-//     let id = oracle.lower_type(&typ).unwrap();
-//
-//     assert_eq!(oracle.reports(), vec![]);
-//
-//     let rec = match oracle.types.get(id) {
-//         Type::Record(rec) => rec,
-//         _ => panic!(),
-//     };
-//     oracle.source_map.get_type(id);
-//
-//     assert_eq!(rec.fields().count(), 0);
-// }
-//
-// #[test]
-// fn parse_invalid_record() {
-//     let text = indoc! {r#"
-//             type Foo: rec {
-//                 invalid: rec {}
-//             }
-//         "#};
-//
-//     let mut diagnostics = vec![];
-//     let tokens = tokenize(text, &mut diagnostics);
-//     let res = parse(tokens);
-//
-//     let mut oracle = Oracle::new_raw(&res.root);
-//
-//     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-//     let id = oracle.lower_type(&typ).unwrap();
-//
-//     assert_eq!(
-//             oracle.reports(),
-//             vec![
-//                 Report::error("inline record not allowed in record field".to_string()).add_label(
-//                     Label::primary("inline record type not allowed".to_string(), Span::new(29, 35))
-//                 ).with_note("help: define a named type first, then reference it\n      example: `type MyRecord: rec { ... }`".to_string())
-//             ]
-//         );
-//
-//     let rec = match oracle.types.get(id) {
-//         Type::Record(rec) => rec,
-//         _ => panic!(),
-//     };
-//     oracle.source_map.get_type(id);
-//
-//     assert_eq!(rec.fields().count(), 0);
-// }
-//
+
+#[test]
+fn lower_simple_array() {
+    let text = indoc! {r#"
+        type Foo: [i32]
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let mut oracle = Oracle::new_raw(&res.root);
+
+    let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
+
+    assert_eq!(oracle.reports(), vec![]);
+
+    let arr = match oracle.spec_ctx().get_root_type(id) {
+        RootType::Type(Type::Inline(InlineTy::Array(arr))) => arr,
+        typ => panic!("expected array, got: {typ:?}"),
+    };
+    assert!(matches!(arr.typ(), InlineTy::Primitive(PrimitiveTy::I32)));
+}
+
+#[test]
+fn lower_nested_array() {
+    let text = indoc! {r#"
+        type Foo: [[i32]]
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let mut oracle = Oracle::new_raw(&res.root);
+
+    let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
+
+    assert_eq!(oracle.reports(), vec![]);
+
+    let arr = match oracle.spec_ctx().get_root_type(id) {
+        RootType::Type(Type::Inline(InlineTy::Array(arr))) => arr,
+        typ => panic!("expected array, got: {typ:?}"),
+    };
+
+    let arr_inner = match arr.typ() {
+        InlineTy::Array(arr) => arr,
+        typ => panic!("expected array, got: {typ:?}"),
+    };
+    assert!(matches!(
+        arr_inner.typ(),
+        InlineTy::Primitive(PrimitiveTy::I32)
+    ));
+}
+
+#[test]
+fn lower_empty_array() {
+    let text = indoc! {r#"
+        type Foo: []
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let mut oracle = Oracle::new_raw(&res.root);
+
+    let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+    let id = oracle.lower_type(&typ);
+    assert_eq!(id, None);
+
+    assert_eq!(oracle.reports(), vec![]);
+}
+
+#[test]
+fn lower_invalid_array() {
+    let text = indoc! {r#"
+        type Foo: [union {}]
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let mut oracle = Oracle::new_raw(&res.root);
+
+    let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+    let id = oracle.lower_type(&typ);
+    assert_eq!(id, None);
+
+    assert_eq!(
+            oracle.reports(),
+            vec![
+                Report::error("inline union not allowed in array".to_string()).add_label(
+                    Label::primary("inline union type not allowed".to_string(), Span::new(11, 19))
+                ).with_note("help: define a named type first, then reference it\n      example: `type MyUnion: union { ... }`".to_string())
+            ]
+        );
+}
+
+#[test]
+fn lower_simple_option() {
+    let text = indoc! {r#"
+        type Foo: i32?
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let mut oracle = Oracle::new_raw(&res.root);
+
+    let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
+
+    assert_eq!(oracle.reports(), vec![]);
+
+    let opt = match oracle.spec_ctx().get_root_type(id) {
+        RootType::Type(Type::Inline(InlineTy::Option(opt))) => opt,
+        _ => panic!(),
+    };
+    assert!(matches!(opt.typ(), InlineTy::Primitive(PrimitiveTy::I32)));
+}
+
+#[test]
+fn lower_nested_option() {
+    // This contains errors reported by parser. We don't care about them here.
+    // We are interested that there is a semantic Option<i32> type.
+    let text = indoc! {r#"
+            type Foo: i32??
+        "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let mut oracle = Oracle::new_raw(&res.root);
+
+    let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
+
+    assert_eq!(oracle.reports(), vec![]);
+
+    let opt = match oracle.spec_ctx().get_root_type(id) {
+        RootType::Type(Type::Inline(InlineTy::Option(opt))) => opt,
+        _ => panic!(),
+    };
+    assert!(matches!(opt.typ(), InlineTy::Primitive(PrimitiveTy::I32)));
+}
+
+#[test]
+fn lower_invalid_option() {
+    let text = indoc! {r#"
+        type Foo: rec {}?
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    assert!(diagnostics.is_empty());
+    assert!(res.reports.is_empty());
+
+    let mut oracle = Oracle::new_raw(&res.root);
+
+    let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+    let id = oracle.lower_type(&typ);
+    assert_eq!(id, None);
+
+    assert_eq!(
+            oracle.reports(),
+            vec![
+                Report::error("inline record not allowed in option".to_string())
+                    .add_label(Label::primary(
+                        "inline record type not allowed".to_string(),
+                        Span::new(10, 16)
+                    ))
+                    .with_note(
+                        "help: define a named type first, then reference it\n      example: `type MyRecord: rec { ... }`"
+                            .to_string()
+                    )
+            ]
+        );
+}
+
+#[test]
+fn lower_basic_record() {
+    // Test parsing of basic records.
+    // We have two records that are the same, but with different field ordering.
+    // This test also checks that ordering of parsed is the same, which means we have
+    // stable ordering.
+    let text = indoc! {r#"
+        type Foo: rec {
+            foo: string
+            bar: [i32]
+
+            @default(69420)
+            baz: u32
+        }
+
+        type Foo: rec {
+            @default(69420)
+            baz: u32
+            bar: [i32]
+            foo: string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let mut oracle = Oracle::new_raw(&res.root);
+
+    assert_eq!(res.root.type_definitions().count(), 2);
+
+    for typ in res.root.type_definitions() {
+        let typ = typ.typ().unwrap();
+        let id = oracle.lower_type(&typ).unwrap();
+
+        assert_eq!(oracle.reports(), vec![]);
+
+        // Check record was inserted
+        let rec = match oracle.spec_ctx().get_root_type(id) {
+            RootType::Type(Type::Record(rec)) => rec,
+            _ => panic!(),
+        };
+
+        let fields: Vec<_> = rec.fields().collect();
+
+        // Check field names are correct
+        let names: Vec<_> = fields.iter().map(|field| field.name).collect();
+        assert_eq!(names, vec!["foo", "bar", "baz"]);
+
+        // Check field @default's are correct
+        let defaults: Vec<_> = fields.iter().map(|field| field.default.clone()).collect();
+        assert_eq!(defaults.len(), 3);
+        assert!(defaults[0].is_none());
+        assert!(defaults[1].is_none());
+        assert!(matches!(defaults[2], Some(Value::Integer(69420))));
+    }
+}
+
+#[test]
+fn lower_empty_record() {
+    let text = indoc! {r#"
+        type Foo: rec {}
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let mut oracle = Oracle::new_raw(&res.root);
+
+    let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
+
+    assert_eq!(oracle.reports(), vec![]);
+
+    let rec = match oracle.spec_ctx().get_root_type(id) {
+        RootType::Type(Type::Record(rec)) => rec,
+        _ => panic!(),
+    };
+
+    assert_eq!(rec.fields().count(), 0);
+}
+
+#[test]
+fn parse_invalid_record() {
+    let text = indoc! {r#"
+        type Foo: rec {
+            invalid: rec {}
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let mut oracle = Oracle::new_raw(&res.root);
+
+    let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
+
+    assert_eq!(
+        oracle.reports(),
+        vec![
+            Report::error("inline record not allowed in record field".to_string()).add_label(
+                Label::primary("inline record type not allowed".to_string(), Span::new(29, 35))
+            ).with_note("help: define a named type first, then reference it\n      example: `type MyRecord: rec { ... }`".to_string())
+        ]
+    );
+
+    let rec = match oracle.spec_ctx().get_root_type(id) {
+        RootType::Type(Type::Record(rec)) => rec,
+        _ => panic!(),
+    };
+
+    assert_eq!(rec.fields().count(), 0);
+}
+
 // #[test]
 // fn parse_simple_enum() {
 //     let text = indoc! {r#"

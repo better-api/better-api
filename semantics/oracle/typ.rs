@@ -1151,7 +1151,7 @@ fn new_invalid_inner_type(
 
     let syntax_example = match inner {
         InvalidInnerContext::Enum => "type MyEnum: enum (T) { ... }",
-        InvalidInnerContext::Union => "type MyUnion: union (\"discriminator\") { ... }",
+        InvalidInnerContext::Union => "type MyUnion: union { ... }",
         InvalidInnerContext::Record => "type MyRecord: rec { ... }",
     };
 
