@@ -253,6 +253,12 @@ impl<'a> Oracle<'a> {
         let enum_type = self.lower_enum_type(&enum_type_ast)?;
 
         // Parse enum members
+
+        // Deref is used by a more generic value matches type function. We already checked that
+        // enum_type (which we are matching) is one of the valid types. Since reference is not a
+        // valid type, `deref` closure should never be called.
+        let deref = |_: &ast::TypeRef| unreachable!("enum type should not be a reference");
+
         let mut builder = self.types.start_enum(enum_type);
         let mut is_valid = true;
         for member in typ.members() {
@@ -262,9 +268,6 @@ impl<'a> Oracle<'a> {
                 continue;
             };
 
-            let deref = |reference: &ast::TypeRef| {
-                deref(&self.strings, &self.symbol_map, self.root, reference)
-            };
             if !ast::value_matches_type(&value, &enum_type_ast, &mut self.reports, &deref) {
                 is_valid = false;
                 continue;
@@ -508,20 +511,27 @@ impl<'a> Oracle<'a> {
         let fields = self.parse_type_fields(union.fields(), false);
 
         // Validate the fields - they must not contain a `file`
-        let report_builder = |range: TextRange| {
-            Report::error("invalid type of union field".to_string())
-                .add_label(Label::primary(
-                    "union must not contain a `file`".to_string(),
-                    union.syntax().text_range().into(),
-                ))
-                .add_label(Label::secondary(
-                    "`file` introduced here".to_string(),
-                    range.into(),
-                ))
-        };
-
         for field in &fields.0 {
             let typ = field.field.typ().expect("parsed field should have a type");
+            let typ_range = typ.syntax().text_range();
+
+            let report_builder = |range: TextRange| {
+                let mut report = Report::error("invalid type of union field".to_string())
+                    .add_label(Label::primary(
+                        "union must not contain a `file`".to_string(),
+                        typ_range.into(),
+                    ));
+
+                if typ_range != range {
+                    report = report.add_label(Label::secondary(
+                        "`file` introduced here".to_string(),
+                        range.into(),
+                    ))
+                }
+
+                report
+            };
+
             let res = self.require_no_file(&typ, &report_builder);
             if res.is_err() {
                 is_valid = false;
@@ -577,21 +587,19 @@ impl<'a> Oracle<'a> {
                 // Check type is valid
                 let typ_valid = self.require_not_response(&typ).is_ok();
 
-                // If type is invalid we don't have (or want) to check default value
-                // matches the type.
-                if !typ_valid {
-                    return None;
-                }
+                // We only check that default value is valid when type is valid.
+                let mut default_id = None;
+                if typ_valid {
+                    if let Some(val) = &default {
+                        let deref = |node: &ast::TypeRef| {
+                            deref(&self.strings, &self.symbol_map, self.root, node)
+                        };
+                        ast::value_matches_type(val, &typ, &mut self.reports, &deref);
+                    }
 
-                if let Some(val) = &default {
-                    let deref = |node: &ast::TypeRef| {
-                        deref(&self.strings, &self.symbol_map, self.root, node)
-                    };
-                    ast::value_matches_type(val, &typ, &mut self.reports, &deref);
+                    // Lower default value
+                    default_id = default.map(|val| self.lower_value(&val));
                 }
-
-                // Lower default value
-                let default_id = default.map(|val| self.lower_value(&val));
 
                 Some(InternedField {
                     name: name_id,
@@ -625,9 +633,9 @@ impl<'a> Oracle<'a> {
             typ => {
                 let range = enum_type.syntax().text_range();
                 self.reports.push(
-                    Report::error(format!("invalid enum type {typ}"))
+                    Report::error(format!("invalid enum type `{typ}`"))
                         .add_label(Label::primary(
-                            format!("invalid enum type {typ}"),
+                            format!("invalid enum type `{typ}`"),
                             range.into(),
                         ))
                         .with_note(
@@ -1218,9 +1226,8 @@ fn insert_type_fields(
             ParsedType::Reference { name, range } => {
                 match validate_reference(strings, symbol_map, root, reports, name, range) {
                     None => (),
-                    Some(ValidRef::Response { .. }) => {
-                        unreachable!("fields should be validated by `parse_type_fields`")
-                    }
+                    // On response we do nothing. Report was generated in `parse_type_fields`.
+                    Some(ValidRef::Response { .. }) => (),
                     Some(ValidRef::Type(reference)) => {
                         builder.add_reference(field.name, reference, field.default, field.docs);
                     }
@@ -1266,9 +1273,8 @@ fn insert_type_fields(
                     &typ,
                 ));
             }
-            ParsedType::Response => {
-                unreachable!("fields should be validated by `parse_type_fields`");
-            }
+            // On response we do nothing. Report was generated in `parse_type_fields`.
+            ParsedType::Response => (),
             ParsedType::Record(_) => {
                 reports.push(new_invalid_inner_type(
                     InvalidInnerContext::Record,

@@ -7,7 +7,7 @@ use indoc::indoc;
 use crate::{
     Oracle,
     spec::{
-        typ::{InlineTy, PrimitiveTy, RootType, Type},
+        typ::{EnumTy, InlineTy, PrimitiveTy, RootType, Type},
         value::Value,
     },
 };
@@ -358,7 +358,7 @@ fn lower_empty_record() {
 }
 
 #[test]
-fn parse_invalid_record() {
+fn lower_invalid_record() {
     let text = indoc! {r#"
         type Foo: rec {
             invalid: rec {}
@@ -391,255 +391,194 @@ fn parse_invalid_record() {
     assert_eq!(rec.fields().count(), 0);
 }
 
-// #[test]
-// fn parse_simple_enum() {
-//     let text = indoc! {r#"
-//             type Foo: enum (i32) {
-//                 1
-//                 2
-//                 3
-//             }
-//         "#};
-//
-//     let mut diagnostics = vec![];
-//     let tokens = tokenize(text, &mut diagnostics);
-//     let res = parse(tokens);
-//
-//     let mut oracle = Oracle::new_raw(&res.root);
-//
-//     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-//     let id = oracle.lower_type(&typ).unwrap();
-//
-//     assert_eq!(oracle.reports(), vec![]);
-//
-//     // Check enum was inserted and is in source map
-//     let enum_type = match oracle.types.get(id) {
-//         Type::Enum(e) => e,
-//         _ => panic!(),
-//     };
-//     oracle.source_map.get_type(id);
-//
-//     // Check enum type is i32
-//     let enum_type_inner = enum_type.typ.unwrap();
-//     assert!(matches!(enum_type_inner.typ(), Type::I32));
-//
-//     // Check enum type is inside of source map
-//     oracle.source_map.get_type(enum_type_inner.id);
-//
-//     // Check enum members
-//     let members: Vec<_> = match oracle.values.get(enum_type.values) {
-//         Value::Array(arr) => arr.items().collect(),
-//         _ => panic!(),
-//     };
-//
-//     let member_vals: Vec<_> = members.iter().map(|m| m.value.clone()).collect();
-//
-//     assert_eq!(member_vals.len(), 3);
-//     assert!(matches!(member_vals[0], Value::Integer(1)));
-//     assert!(matches!(member_vals[1], Value::Integer(2)));
-//     assert!(matches!(member_vals[2], Value::Integer(3)));
-//
-//     // Check enum members are in source map
-//     for member in members {
-//         oracle.source_map.get_value(member.id);
-//     }
-// }
-//
-// #[test]
-// fn parse_empty_enum() {
-//     let text = indoc! {r#"
-//             type Foo: enum (string) {}
-//         "#};
-//
-//     let mut diagnostics = vec![];
-//     let tokens = tokenize(text, &mut diagnostics);
-//     let res = parse(tokens);
-//
-//     let mut oracle = Oracle::new_raw(&res.root);
-//
-//     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-//     let id = oracle.lower_type(&typ).unwrap();
-//
-//     assert_eq!(oracle.reports(), vec![]);
-//
-//     let enum_type = match oracle.types.get(id) {
-//         Type::Enum(e) => e,
-//         _ => panic!(),
-//     };
-//     oracle.source_map.get_type(id);
-//
-//     // Check enum members array is empty
-//     let members = match oracle.values.get(enum_type.values) {
-//         Value::Array(arr) => arr,
-//         _ => panic!(),
-//     };
-//
-//     assert_eq!(members.items().count(), 0);
-// }
-//
-// #[test]
-// fn parse_invalid_enum() {
-//     let text = indoc! {r#"
-//             type Foo: enum ([i32]) {
-//                 [1, 2, 3]
-//             }
-//         "#};
-//
-//     let mut diagnostics = vec![];
-//     let tokens = tokenize(text, &mut diagnostics);
-//     let res = parse(tokens);
-//
-//     let mut oracle = Oracle::new_raw(&res.root);
-//
-//     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-//     let id = oracle.lower_type(&typ).unwrap();
-//
-//     let enum_type = match oracle.types.get(id) {
-//         Type::Enum(e) => e,
-//         _ => panic!(),
-//     };
-//     oracle.source_map.get_type(id);
-//
-//     assert_eq!(
-//         oracle.reports(),
-//         vec![
-//             Report::error("invalid enum type `array`".to_string())
-//                 .add_label(Label::primary(
-//                     "invalid enum type `array`".to_string(),
-//                     Span::new(16, 21)
-//                 ))
-//                 .with_note(
-//                     "help: enum must have a type `i32`, `i64`, `u32`, `u64`, or `string`"
-//                         .to_string()
-//                 )
-//         ]
-//     );
-//
-//     let members: Vec<_> = match oracle.values.get(enum_type.values) {
-//         Value::Array(arr) => arr.items().collect(),
-//         _ => panic!(),
-//     };
-//
-//     assert_eq!(members.len(), 1);
-// }
-//
-// #[test]
-// fn parse_simple_union() {
-//     let text = indoc! {r#"
-//             type Foo: union ("type") {
-//                 foo: Foo
-//
-//                 // Default should be ignored
-//                 @default(69420)
-//                 bar: Bar
-//             }
-//         "#};
-//
-//     let mut diagnostics = vec![];
-//     let tokens = tokenize(text, &mut diagnostics);
-//     let res = parse(tokens);
-//
-//     let mut oracle = Oracle::new_raw(&res.root);
-//
-//     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-//     let id = oracle.lower_type(&typ).unwrap();
-//
-//     assert_eq!(oracle.reports(), vec![]);
-//
-//     // Check union was inserted and is in source map
-//     let union = match oracle.types.get(id) {
-//         Type::Union(u) => u,
-//         _ => panic!(),
-//     };
-//     oracle.source_map.get_type(id);
-//
-//     // Check discriminator
-//     let discriminator = union.disriminator.unwrap();
-//     assert_eq!(oracle.strings.get(discriminator), "type");
-//
-//     let fields: Vec<_> = union.fields().collect();
-//
-//     // Check field names are correct
-//     let names: Vec<_> = fields
-//         .iter()
-//         .map(|field| oracle.strings.get(field.name))
-//         .collect();
-//     assert_eq!(names, vec!["foo", "bar"]);
-//
-//     // Check field @default's are correct
-//     assert!(fields.iter().all(|field| field.default.is_none()));
-//
-//     // Check fields and field types are in source map
-//     for field in &fields {
-//         oracle.source_map.get_type(field.id.type_id());
-//     }
-// }
-//
-// #[test]
-// fn parse_empty_union() {
-//     let text = indoc! {r#"
-//             type Foo: union ("kind") {}
-//         "#};
-//
-//     let mut diagnostics = vec![];
-//     let tokens = tokenize(text, &mut diagnostics);
-//     let res = parse(tokens);
-//
-//     let mut oracle = Oracle::new_raw(&res.root);
-//
-//     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-//     let id = oracle.lower_type(&typ).unwrap();
-//
-//     assert_eq!(oracle.reports(), vec![]);
-//
-//     let union = match oracle.types.get(id) {
-//         Type::Union(u) => u,
-//         _ => panic!(),
-//     };
-//     oracle.source_map.get_type(id);
-//
-//     // Check discriminator
-//     let discriminator = union.disriminator.unwrap();
-//     assert_eq!(oracle.strings.get(discriminator), "kind");
-//
-//     assert_eq!(union.fields().count(), 0);
-// }
-//
-// #[test]
-// fn parse_invalid_union() {
-//     let text = indoc! {r#"
-//             type Foo: union (42) {
-//                 invalid: rec {}
-//             }
-//         "#};
-//
-//     let mut diagnostics = vec![];
-//     let tokens = tokenize(text, &mut diagnostics);
-//     let res = parse(tokens);
-//
-//     let mut oracle = Oracle::new_raw(&res.root);
-//
-//     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-//     let id = oracle.lower_type(&typ).unwrap();
-//
-//     assert_eq!(
-//             oracle.reports(),
-//             vec![
-//                 Report::error("union discriminator must be a string, got integer".to_string()).add_label(Label::primary("invalid union discriminator".to_string(), Span::new(17, 19))).with_note("help: union discrminator must be a string".to_string()),
-//                 Report::error("inline record not allowed in union field".to_string()).add_label(
-//                     Label::primary("inline record type not allowed".to_string(), Span::new(36, 42))
-//                 ).with_note("help: define a named type first, then reference it\n      example: `type MyRecord: rec { ... }`".to_string())
-//             ]
-//         );
-//
-//     let union = match oracle.types.get(id) {
-//         Type::Union(u) => u,
-//         _ => panic!(),
-//     };
-//     oracle.source_map.get_type(id);
-//
-//     // Check discriminator
-//     assert!(union.disriminator.is_none());
-//
-//     assert_eq!(union.fields().count(), 0);
-// }
+#[test]
+fn lower_simple_enum() {
+    let text = indoc! {r#"
+        type Foo: enum (i32) {
+            1
+            2
+            3
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let mut oracle = Oracle::new_raw(&res.root);
+
+    let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
+
+    assert_eq!(oracle.reports(), vec![]);
+
+    // Check enum was inserted and is in source map
+    let enum_type = match oracle.spec_ctx().get_root_type(id) {
+        RootType::Type(Type::Enum(e)) => e,
+        _ => panic!(),
+    };
+
+    // Check enum type is i32
+    assert!(matches!(enum_type.typ, EnumTy::I32));
+
+    // Check enum members
+    let member_vals: Vec<_> = enum_type.members().map(|mem| mem.value).collect();
+
+    assert_eq!(member_vals.len(), 3);
+    assert!(matches!(member_vals[0], Value::Integer(1)));
+    assert!(matches!(member_vals[1], Value::Integer(2)));
+    assert!(matches!(member_vals[2], Value::Integer(3)));
+}
+
+#[test]
+fn lower_empty_enum() {
+    let text = indoc! {r#"
+        type Foo: enum (string) {}
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let mut oracle = Oracle::new_raw(&res.root);
+
+    let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
+
+    assert_eq!(oracle.reports(), vec![]);
+
+    let enum_type = match oracle.spec_ctx().get_root_type(id) {
+        RootType::Type(Type::Enum(e)) => e,
+        _ => panic!(),
+    };
+
+    // Check enum members array is empty
+    assert_eq!(enum_type.members().count(), 0);
+}
+
+#[test]
+fn lower_invalid_enum() {
+    let text = indoc! {r#"
+        type Foo: enum ([i32]) {
+            [1, 2, 3]
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let mut oracle = Oracle::new_raw(&res.root);
+
+    let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+    let id = oracle.lower_type(&typ);
+    assert!(id.is_none());
+
+    assert_eq!(
+        oracle.reports(),
+        vec![
+            Report::error("invalid enum type `array`".to_string())
+                .add_label(Label::primary(
+                    "invalid enum type `array`".to_string(),
+                    Span::new(16, 21)
+                ))
+                .with_note(
+                    "help: enum must have a type `i32`, `i64`, `u32`, `u64`, or `string`"
+                        .to_string()
+                )
+        ]
+    );
+}
+
+#[test]
+fn lower_simple_union() {
+    let text = indoc! {r#"
+        type Foo: union {
+            foo: i32
+
+            // Default should be ignored
+            @default(69420)
+            bar: string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let mut oracle = Oracle::new_raw(&res.root);
+
+    let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
+
+    assert!(oracle.reports().is_empty());
+
+    // Check union was inserted
+    let union = match oracle.spec_ctx().get_root_type(id) {
+        RootType::Type(Type::Union(u)) => u,
+        _ => panic!(),
+    };
+
+    let fields: Vec<_> = union.fields().collect();
+
+    // Check field names are correct
+    let names: Vec<_> = fields.iter().map(|field| field.name).collect();
+    assert_eq!(names, vec!["foo", "bar"]);
+
+    // Check field types are correct
+    assert!(matches!(
+        fields[0].typ,
+        InlineTy::Primitive(PrimitiveTy::I32)
+    ));
+    assert!(matches!(
+        fields[1].typ,
+        InlineTy::Primitive(PrimitiveTy::String)
+    ));
+}
+
+#[test]
+fn lower_empty_union() {
+    let text = indoc! {r#"
+        type Foo: union {}
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let mut oracle = Oracle::new_raw(&res.root);
+
+    let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+    let id = oracle.lower_type(&typ).unwrap();
+
+    assert_eq!(oracle.reports(), vec![]);
+
+    let union = match oracle.spec_ctx().get_root_type(id) {
+        RootType::Type(Type::Union(u)) => u,
+        _ => panic!(),
+    };
+
+    assert_eq!(union.fields().count(), 0);
+}
+
+#[test]
+fn lower_invalid_union() {
+    let text = indoc! {r#"
+        type Foo: union {
+            invalid: rec {}
+            invalid2: file
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let mut oracle = Oracle::new_raw(&res.root);
+
+    let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+    let id = oracle.lower_type(&typ);
+    assert!(id.is_none());
+
+    insta::assert_debug_snapshot!(oracle.reports());
+}

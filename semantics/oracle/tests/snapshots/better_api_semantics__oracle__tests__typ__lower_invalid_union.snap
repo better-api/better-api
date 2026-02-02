@@ -1,0 +1,38 @@
+---
+source: semantics/oracle/tests/typ.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "invalid type of union field",
+        labels: [
+            Label {
+                style: Primary,
+                message: "union must not contain a `file`",
+                span: Span {
+                    start: 52,
+                    end: 56,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "inline record not allowed in union field",
+        labels: [
+            Label {
+                style: Primary,
+                message: "inline record type not allowed",
+                span: Span {
+                    start: 31,
+                    end: 37,
+                },
+            },
+        ],
+        note: Some(
+            "help: define a named type first, then reference it\n      example: `type MyRecord: rec { ... }`",
+        ),
+    },
+]
