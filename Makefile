@@ -8,20 +8,20 @@ help:
 
 .PHONY: test
 test:
-	cargo nextest run
+	cargo nextest run --workspace
 
 .PHONY: check
 check:
-	cargo clippy --all-targets --all-features -- -D warnings
+	cargo clippy --all-targets --all-features --workspace -- -D warnings
 
 .PHONY: cov
 cov:
-	cargo llvm-cov nextest
+	cargo llvm-cov --workspace nextest
 
 .PHONY: cov-html
 cov-html:
-	LLVM_COV_FLAGS="-coverage-watermark=80,50" cargo llvm-cov nextest --html
+	LLVM_COV_FLAGS="-coverage-watermark=80,50" cargo llvm-cov --workspace nextest --html
 
 .PHONY: cov-open
 cov-open:
-	LLVM_COV_FLAGS="-coverage-watermark=80,50" cargo llvm-cov nextest --open
+	LLVM_COV_FLAGS="-coverage-watermark=80,50" cargo llvm-cov --workspace nextest --open
