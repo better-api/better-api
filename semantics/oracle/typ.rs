@@ -446,10 +446,10 @@ impl<'a> Oracle<'a> {
         }
 
         let simple_report_builder = |typ: SimpleRecordReportType| match typ {
-            SimpleRecordReportType::NotStruct(resolved) => {
+            SimpleRecordReportType::NotRecord(resolved) => {
                 Report::error("invalid header type".to_string())
                     .add_label(Label::primary(
-                        format!("expected struct, got {resolved}"),
+                        format!("expected record, got {resolved}"),
                         headers.syntax().text_range().into(),
                     ))
                     .with_note("help: headers must be a simple record".to_string())
@@ -461,7 +461,7 @@ impl<'a> Oracle<'a> {
 
                 Report::error("invalid header type".to_string())
                     .add_label(Label::primary(
-                        "header fields can only be simple types or option".to_string(),
+                        "header fields can only be primitive types or option".to_string(),
                         headers.syntax().text_range().into(),
                     ))
                     .add_label(Label::secondary(
@@ -669,7 +669,7 @@ impl<'a> Oracle<'a> {
                         node.syntax().text_range().into(),
                     ))
                     .with_note(
-                        "help: non `application/json` responses must use `file` as body"
+                        "help: none `application/json` responses must use `file` as body"
                             .to_string(),
                     );
 
@@ -790,14 +790,14 @@ impl<'a> Oracle<'a> {
                 None => return Err(()),
                 Some(ast::Type::Record(rec)) => rec.fields(),
                 Some(typ) => {
-                    let report = build_report(SimpleRecordReportType::NotStruct(&typ));
+                    let report = build_report(SimpleRecordReportType::NotRecord(&typ));
                     self.reports.push(report);
                     return Err(());
                 }
             },
 
             typ => {
-                let report = build_report(SimpleRecordReportType::NotStruct(typ));
+                let report = build_report(SimpleRecordReportType::NotRecord(typ));
                 self.reports.push(report);
                 return Err(());
             }
@@ -964,7 +964,7 @@ impl<'a> Oracle<'a> {
 /// Used by [`Oracle::require_simple_record`].
 enum SimpleRecordReportType<'a> {
     /// Given type is not a record
-    NotStruct(&'a ast::Type),
+    NotRecord(&'a ast::Type),
 
     /// Given record has a composite field (not simple)
     CompositeField(&'a ast::TypeField),
