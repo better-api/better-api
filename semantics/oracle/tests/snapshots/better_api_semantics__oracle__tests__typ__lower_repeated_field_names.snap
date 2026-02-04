@@ -1,0 +1,21 @@
+---
+source: semantics/oracle/tests/typ.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "repeated field name `foo`",
+        labels: [
+            Label {
+                style: Primary,
+                message: "repeated field name",
+                span: Span {
+                    start: 36,
+                    end: 39,
+                },
+            },
+        ],
+        note: None,
+    },
+]

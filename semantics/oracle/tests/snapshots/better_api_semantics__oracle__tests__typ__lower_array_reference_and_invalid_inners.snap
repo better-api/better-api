@@ -1,0 +1,40 @@
+---
+source: semantics/oracle/tests/typ.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "inline enum not allowed in array",
+        labels: [
+            Label {
+                style: Primary,
+                message: "inline enum type not allowed",
+                span: Span {
+                    start: 56,
+                    end: 77,
+                },
+            },
+        ],
+        note: Some(
+            "help: define a named type first, then reference it\n      example: `type MyEnum: enum (T) { ... }`",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "invalid usage of `response` type",
+        labels: [
+            Label {
+                style: Primary,
+                message: "invalid usage of `response` type",
+                span: Span {
+                    start: 94,
+                    end: 115,
+                },
+            },
+        ],
+        note: Some(
+            "help: `response` type can't be a child of a type",
+        ),
+    },
+]

@@ -1,0 +1,39 @@
+---
+source: semantics/oracle/tests/typ.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "invalid response body type",
+        labels: [
+            Label {
+                style: Primary,
+                message: "content type requires that no `file` is present in body",
+                span: Span {
+                    start: 68,
+                    end: 97,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "file introduced here",
+                span: Span {
+                    start: 87,
+                    end: 91,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "content type defined here",
+                span: Span {
+                    start: 26,
+                    end: 58,
+                },
+            },
+        ],
+        note: Some(
+            "help: `application/json` response must not use `file` in body",
+        ),
+    },
+]

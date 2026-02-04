@@ -1400,6 +1400,383 @@ fn lower_response_headers_with_enum_reference() {
     ));
 }
 
+#[test]
+fn lower_enum_type_variants() {
+    let text = indoc! {r#"
+        type E64: enum (i64) {
+            1
+        }
+
+        type EU32: enum (u32) {
+            1
+        }
+
+        type EU64: enum (u64) {
+            1
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let mut oracle = Oracle::new_raw(&res.root);
+
+    for def in res.root.type_definitions() {
+        let typ = def.typ().unwrap();
+        let id = oracle.lower_type(&typ).unwrap();
+
+        let enum_type = match oracle.spec_ctx().get_root_type(id) {
+            RootType::Type(Type::Enum(enm)) => enm,
+            other => panic!("expected enum, got {other:?}"),
+        };
+
+        let expected = match def.name().unwrap().text() {
+            "E64" => EnumTy::I64,
+            "EU32" => EnumTy::U32,
+            "EU64" => EnumTy::U64,
+            name => panic!("unexpected enum name: {name}"),
+        };
+
+        assert_eq!(enum_type.typ, expected);
+    }
+
+    assert!(oracle.reports().is_empty());
+}
+
+#[test]
+fn lower_response_content_type_label_and_union_body() {
+    let text = indoc! {r#"
+        type RespJson: resp {
+            contentType: "application/json"
+            body: rec {
+                foo: file
+            }
+        }
+
+        type RespUnion: resp {
+            body: union {
+                foo: i32
+                bar: string
+            }
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+
+    insta::assert_debug_snapshot!(oracle.reports());
+
+    let name_id = oracle.strings.get("RespJson").unwrap();
+    assert!(!oracle.spec_symbol_table.contains_key(&name_id));
+
+    let resp = match get_root_type(&oracle, "RespUnion") {
+        RootType::Response(resp) => resp,
+        typ => panic!("expected response, got {typ:?}"),
+    };
+
+    let body_ref = match resp.body {
+        InlineTy::NamedReference(reference) => reference,
+        typ => panic!("expected named reference, got {typ:?}"),
+    };
+
+    assert_eq!(body_ref.name, "RespUnionBody");
+
+    let union = match body_ref.typ() {
+        Type::Union(union) => union,
+        typ => panic!("expected union, got {typ:?}"),
+    };
+
+    let fields: Vec<_> = union.fields().collect();
+    assert_eq!(fields.len(), 2);
+    let mut names: Vec<_> = fields.iter().map(|field| field.name).collect();
+    names.sort();
+    assert_eq!(names, vec!["bar", "foo"]);
+}
+
+#[test]
+fn lower_union_nested_file_reference() {
+    let text = indoc! {r#"
+        type FileRec: rec {
+            foo: file
+        }
+
+        type Foo: union {
+            bad: FileRec
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+
+    insta::assert_debug_snapshot!(oracle.reports());
+
+    let name_id = oracle.strings.get("Foo").unwrap();
+    assert!(!oracle.spec_symbol_table.contains_key(&name_id));
+}
+
+#[test]
+fn lower_record_default_value_reference() {
+    let text = indoc! {r#"
+        type Alias: i32
+
+        type Rec: rec {
+            @default(1)
+            foo: Alias
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+    assert!(oracle.reports().is_empty());
+
+    let record = match get_root_type(&oracle, "Rec") {
+        RootType::Type(Type::Record(record)) => record,
+        typ => panic!("expected record, got {typ:?}"),
+    };
+
+    let fields: Vec<_> = record.fields().collect();
+    assert_eq!(fields.len(), 1);
+    assert_eq!(fields[0].name, "foo");
+    assert!(matches!(fields[0].default, Some(Value::Integer(1))));
+}
+
+#[test]
+fn lower_array_reference_and_invalid_inners() {
+    let text = indoc! {r#"
+        type Alias: string
+
+        type ArrRef: [Alias]
+        type ArrEnum: [enum (string) { "a" }]
+        type ArrResp: [resp { body: string }]
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+
+    insta::assert_debug_snapshot!(oracle.reports());
+
+    let arr = match get_root_type(&oracle, "ArrRef") {
+        RootType::Type(Type::Inline(InlineTy::Array(arr))) => arr,
+        typ => panic!("expected array, got: {typ:?}"),
+    };
+
+    let inner = match arr.typ() {
+        InlineTy::NamedReference(reference) => reference,
+        typ => panic!("expected named reference, got {typ:?}"),
+    };
+
+    assert_eq!(inner.name, "Alias");
+    assert!(matches!(
+        inner.typ(),
+        Type::Inline(InlineTy::Primitive(PrimitiveTy::String))
+    ));
+}
+
+#[test]
+fn lower_cycle_reference_handling() {
+    let text = indoc! {r#"
+        type Foo: Bar
+        type Bar: Foo
+
+        type Rec: rec {
+            field: Foo
+        }
+
+        type Arr: [Foo]
+
+        type Resp: resp {
+            contentType: "image/png"
+            body: Foo
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let mut oracle = setup_oracle(&res.root);
+
+    oracle.reports.sort_by_key(|rep| rep.labels[0].span.start);
+    insta::assert_debug_snapshot!(oracle.reports());
+}
+
+#[test]
+fn lower_headers_reference_response() {
+    let text = indoc! {r#"
+        type Resp: resp {
+            body: string
+        }
+
+        type Alias: Resp
+
+        type Out: resp {
+            headers: Alias
+            body: string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+
+    insta::assert_debug_snapshot!(oracle.reports());
+
+    let name_id = oracle.strings.get("Out").unwrap();
+    assert!(!oracle.spec_symbol_table.contains_key(&name_id));
+}
+
+#[test]
+fn lower_record_invalid_inline_types_and_response_reference() {
+    let text = indoc! {r#"
+        type Resp: resp {
+            body: string
+        }
+
+        type Rec: rec {
+            enum_field: enum (string) {
+                "a"
+            }
+
+            union_field: union {
+                foo: i32
+            }
+
+            resp_inline: resp {
+                body: string
+            }
+
+            resp_ref: Resp
+            empty_array: []
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+
+    insta::assert_debug_snapshot!(oracle.reports());
+}
+
+#[test]
+fn lower_reference_to_response() {
+    let text = indoc! {r#"
+        type Resp: resp {
+            body: string
+        }
+
+        type Alias: Resp
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+    assert!(oracle.reports().is_empty());
+
+    let alias = match get_root_type(&oracle, "Alias") {
+        RootType::NamedReference(reference) => reference,
+        typ => panic!("expected named reference, got {typ:?}"),
+    };
+
+    match alias.typ() {
+        RootType::Response(_) => (),
+        typ => panic!("expected response reference, got {typ:?}"),
+    }
+}
+
+#[test]
+fn lower_repeated_field_names() {
+    let text = indoc! {r#"
+        type Rec: rec {
+            foo: string
+            foo: i32
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let mut oracle = Oracle::new_raw(&res.root);
+
+    let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
+    let _ = oracle.lower_type(&typ).unwrap();
+
+    insta::assert_debug_snapshot!(oracle.reports());
+}
+
+#[test]
+fn is_simple_type_edges() {
+    let text = indoc! {r#"
+        type Opt: i32?
+        type Arr: [string]
+        type EmptyArr: []
+        type MissingRef: Missing
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let mut oracle = Oracle::new_raw(&res.root);
+    oracle.validate_symbols();
+
+    let opt = res
+        .root
+        .type_definitions()
+        .find(|def| def.name().unwrap().text() == "Opt")
+        .unwrap()
+        .typ()
+        .unwrap();
+
+    let arr = res
+        .root
+        .type_definitions()
+        .find(|def| def.name().unwrap().text() == "Arr")
+        .unwrap()
+        .typ()
+        .unwrap();
+
+    let empty_arr = res
+        .root
+        .type_definitions()
+        .find(|def| def.name().unwrap().text() == "EmptyArr")
+        .unwrap()
+        .typ()
+        .unwrap();
+
+    let missing = res
+        .root
+        .type_definitions()
+        .find(|def| def.name().unwrap().text() == "MissingRef")
+        .unwrap()
+        .typ()
+        .unwrap();
+
+    assert!(!oracle.is_simple_type(&opt, false, false).unwrap());
+    assert!(oracle.is_simple_type(&arr, true, true).unwrap());
+    assert!(oracle.is_simple_type(&empty_arr, true, true).unwrap());
+    assert!(oracle.is_simple_type(&missing, true, true).unwrap());
+}
+
 fn setup_oracle<'a>(root: &'a ast::Root) -> Oracle<'a> {
     let mut oracle = Oracle::new_raw(root);
     oracle.validate_symbols();

@@ -1,0 +1,56 @@
+---
+source: semantics/oracle/tests/typ.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "types `Foo`, `Bar` create an infite recursion",
+        labels: [
+            Label {
+                style: Primary,
+                message: "types `Foo`, `Bar` create an infite recursion",
+                span: Span {
+                    start: 5,
+                    end: 8,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type `Bar` defined here",
+                span: Span {
+                    start: 19,
+                    end: 22,
+                },
+            },
+        ],
+        note: Some(
+            "help: type cycles have to end with an Array or Option to avoid infinite recursion",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "types `Bar`, `Foo` create an infite recursion",
+        labels: [
+            Label {
+                style: Primary,
+                message: "types `Bar`, `Foo` create an infite recursion",
+                span: Span {
+                    start: 19,
+                    end: 22,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type `Foo` defined here",
+                span: Span {
+                    start: 5,
+                    end: 8,
+                },
+            },
+        ],
+        note: Some(
+            "help: type cycles have to end with an Array or Option to avoid infinite recursion",
+        ),
+    },
+]

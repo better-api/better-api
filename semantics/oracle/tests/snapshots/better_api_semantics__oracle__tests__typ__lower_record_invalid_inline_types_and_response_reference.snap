@@ -1,0 +1,82 @@
+---
+source: semantics/oracle/tests/typ.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "invalid usage of `response` type",
+        labels: [
+            Label {
+                style: Primary,
+                message: "invalid usage of `response` type",
+                span: Span {
+                    start: 171,
+                    end: 204,
+                },
+            },
+        ],
+        note: Some(
+            "help: `response` type can't be a child of a type",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "invalid usage of `response` type",
+        labels: [
+            Label {
+                style: Primary,
+                message: "invalid usage of `response` type",
+                span: Span {
+                    start: 220,
+                    end: 224,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "`response` type introduced here",
+                span: Span {
+                    start: 11,
+                    end: 36,
+                },
+            },
+        ],
+        note: Some(
+            "help: `response` type can't be a child of a type",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "inline enum not allowed in record field",
+        labels: [
+            Label {
+                style: Primary,
+                message: "inline enum type not allowed",
+                span: Span {
+                    start: 70,
+                    end: 103,
+                },
+            },
+        ],
+        note: Some(
+            "help: define a named type first, then reference it\n      example: `type MyEnum: enum (T) { ... }`",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "inline union not allowed in record field",
+        labels: [
+            Label {
+                style: Primary,
+                message: "inline union type not allowed",
+                span: Span {
+                    start: 122,
+                    end: 152,
+                },
+            },
+        ],
+        note: Some(
+            "help: define a named type first, then reference it\n      example: `type MyUnion: union { ... }`",
+        ),
+    },
+]

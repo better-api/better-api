@@ -1,0 +1,29 @@
+---
+source: semantics/oracle/tests/typ.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "invalid type of union field",
+        labels: [
+            Label {
+                style: Primary,
+                message: "union must not contain a `file`",
+                span: Span {
+                    start: 64,
+                    end: 71,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "`file` introduced here",
+                span: Span {
+                    start: 29,
+                    end: 33,
+                },
+            },
+        ],
+        note: None,
+    },
+]
