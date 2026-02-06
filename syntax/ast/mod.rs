@@ -865,6 +865,11 @@ impl Endpoint {
     pub fn request_body(&self) -> Option<EndpointRequestBody> {
         self.0.children().find_map(EndpointRequestBody::cast)
     }
+
+    /// Return iterator over endpoint responses
+    pub fn responses(&self) -> impl Iterator<Item = EndpointResponse> {
+        self.0.children().filter_map(EndpointResponse::cast)
+    }
 }
 
 ast_node! {
