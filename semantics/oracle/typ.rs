@@ -319,7 +319,13 @@ impl<'a> Oracle<'a> {
         // Parse and validate header type
         let mut headers_id = None;
         if let Some(headers) = resp.headers().and_then(|h| h.typ()) {
-            match self.lower_headers(&headers, &format!("{name}Headers")) {
+            match self.lower_simple_record_param(
+                &headers,
+                true,
+                false,
+                "headers",
+                &format!("{name}Headers"),
+            ) {
                 res @ Some(_) => headers_id = res,
                 None => is_valid = false,
             }
@@ -413,26 +419,36 @@ impl<'a> Oracle<'a> {
         Some(id)
     }
 
-    /// Checks that given type represents valid headers and lowers it.
+    /// Checks that given type represents valid simple record parameter and lowers it.
     ///
+    /// Simple header parameter is header, path or query parameter.
     /// If necessary headers are put behind a new type definition, with provided name.
     ///
     /// Valid headers are simple record without files. If type is valid,
     /// Some(_) is returned. If any validation fails, reports are generated and None is returned.
-    fn lower_headers(
+    ///
+    /// ## Parameters
+    ///
+    /// - `typ_name`: name of the type used in reports. This should be `headers`, `path`, ...
+    /// - `ref_name`: name used for created type definition. This should be `FooHeaders`,
+    ///   `BarPath`, ...
+    pub(crate) fn lower_simple_record_param(
         &mut self,
-        headers: &ast::Type,
-        name: &str,
+        node: &ast::Type,
+        allow_option: bool,
+        allow_array: bool,
+        typ_name: &str,
+        ref_name: &str,
     ) -> Option<SimpleRecordReferenceId> {
         // Are headers valid. We don't want to early return, because we want
         // to validate as many things as possible.
         let mut is_valid = true;
 
         let file_report_builder = |range: TextRange| {
-            Report::error("invalid headers type".to_string())
+            Report::error(format!("invalid {typ_name} type"))
                 .add_label(Label::primary(
-                    "headers type must not contain `file`".to_string(),
-                    headers.syntax().text_range().into(),
+                    format!("{typ_name} type must not contain `file`"),
+                    node.syntax().text_range().into(),
                 ))
                 .add_label(Label::secondary(
                     "`file` introduced here".to_string(),
@@ -440,17 +456,17 @@ impl<'a> Oracle<'a> {
                 ))
         };
 
-        match self.require_no_file(headers, &file_report_builder) {
+        match self.require_no_file(node, &file_report_builder) {
             Ok(_) => (),
             Err(_) => is_valid = false,
         }
 
         let simple_report_builder = |typ: SimpleRecordReportType| match typ {
             SimpleRecordReportType::NotRecord(resolved) => {
-                Report::error("invalid header type".to_string())
+                Report::error(format!("invalid {typ_name} type"))
                     .add_label(Label::primary(
                         format!("expected record, got {resolved}"),
-                        headers.syntax().text_range().into(),
+                        node.syntax().text_range().into(),
                     ))
                     .with_note("help: headers must be a simple record".to_string())
             }
@@ -459,11 +475,16 @@ impl<'a> Oracle<'a> {
                     .typ()
                     .map_or_else(|| field.syntax().text_range(), |t| t.syntax().text_range());
 
-                Report::error("invalid header type".to_string())
-                    .add_label(Label::primary(
-                        "header fields can only be primitive types or option".to_string(),
-                        headers.syntax().text_range().into(),
-                    ))
+                let mut label = format!("{typ_name} fields can only be primitive types");
+                match (allow_option, allow_array) {
+                    (true, true) => label.push_str(", option or array"),
+                    (true, false) => label.push_str(" or option"),
+                    (false, true) => label.push_str(" or array"),
+                    (false, false) => (),
+                }
+
+                Report::error(format!("invalid {typ_name} type"))
+                    .add_label(Label::primary(label, node.syntax().text_range().into()))
                     .add_label(Label::secondary(
                         "non-simple field type here".to_string(),
                         range.into(),
@@ -471,7 +492,7 @@ impl<'a> Oracle<'a> {
             }
         };
 
-        match self.require_simple_record(headers, true, false, simple_report_builder) {
+        match self.require_simple_record(node, allow_option, allow_array, simple_report_builder) {
             Ok(_) => (),
             Err(_) => is_valid = false,
         }
@@ -482,8 +503,8 @@ impl<'a> Oracle<'a> {
             return None;
         }
 
-        let id = self.lower_type(headers)?;
-        let id = self.ensure_inline(headers, id, name)?;
+        let id = self.lower_type(node)?;
+        let id = self.ensure_inline(node, id, ref_name)?;
 
         // Safety: We have checked that it's a simple record, and that it's behind a reference.
         let id = unsafe { SimpleRecordReferenceId::new_unchecked(id) };

@@ -916,7 +916,7 @@ fn lower_response_invalid_header_type() {
     assert_eq!(
         oracle.reports(),
         vec![
-            Report::error("invalid header type".to_string())
+            Report::error("invalid headers type".to_string())
                 .add_label(Label::primary(
                     "expected record, got string".to_string(),
                     Span::new(31, 37)
@@ -956,9 +956,9 @@ fn lower_response_invalid_header_type_nested_record() {
     assert_eq!(
         oracle.reports(),
         vec![
-            Report::error("invalid header type".to_string())
+            Report::error("invalid headers type".to_string())
                 .add_label(Label::primary(
-                    "header fields can only be primitive types or option".to_string(),
+                    "headers fields can only be primitive types or option".to_string(),
                     Span::new(102, 109)
                 ))
                 .add_label(Label::secondary(
@@ -1122,9 +1122,9 @@ fn lower_response_headers_with_array_invalid() {
     assert_eq!(
         oracle.reports(),
         vec![
-            Report::error("invalid header type".to_string())
+            Report::error("invalid headers type".to_string())
                 .add_label(Label::primary(
-                    "header fields can only be primitive types or option".to_string(),
+                    "headers fields can only be primitive types or option".to_string(),
                     Span::new(31, 64)
                 ))
                 .add_label(Label::secondary(

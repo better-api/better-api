@@ -5,7 +5,7 @@ expression: oracle.reports()
 [
     Report {
         severity: Error,
-        title: "invalid header type",
+        title: "invalid headers type",
         labels: [
             Label {
                 style: Primary,
