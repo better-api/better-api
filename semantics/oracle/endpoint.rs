@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast::{self, AstNode};
 
-use crate::{path::PathPart, spec::endpoint::EndpointId, text};
+use crate::{oracle::value::lower_mime_types, path::PathPart, spec::endpoint::EndpointId, text};
 
 use super::Oracle;
 
@@ -43,6 +43,28 @@ impl<'a> Oracle<'a> {
             let name = format!("{name}Headers");
             self.lower_simple_record_param(&typ, true, false, "headers", &name)
         });
+
+        // Lower query
+        let query_param = node.query_param().and_then(|q| q.typ()).and_then(|typ| {
+            let name = self.strings.resolve(name_id);
+            let name = format!("{name}Query");
+            self.lower_simple_record_param(&typ, true, true, "query", &name)
+        });
+
+        // Lower query
+        let path_param = node.path_param().and_then(|p| p.typ()).and_then(|typ| {
+            let name = self.strings.resolve(name_id);
+            let name = format!("{name}Path");
+            self.lower_simple_record_param(&typ, false, false, "path", &name)
+        });
+
+        // Lower accept header
+        let accept_id = node.accept().and_then(|a| a.value()).and_then(|v| {
+            lower_mime_types(&mut self.values, &mut self.strings, &mut self.reports, &v)
+        });
+
+        // Validate and lower request body.
+        if let Some(req_body) = node.request_body().and_then(|b| b.typ()) {}
 
         // TODO: Implement me
         None
