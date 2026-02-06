@@ -16,13 +16,12 @@ NODE_ROOT@0..278
     TOKEN_CURLY_LEFT@34..35 "{"
     TOKEN_EOL@35..36 "\n"
     TOKEN_SPACE@36..40 "    "
-    NODE_NAME@40..54
-      TOKEN_IDENTIFIER@40..44 "name"
-      TOKEN_COLON@44..45 ":"
-      TOKEN_SPACE@45..46 " "
-      NODE_VALUE_STRING@46..53
-        TOKEN_STRING@46..53 "\"hello\""
-      TOKEN_EOL@53..54 "\n"
+    TOKEN_IDENTIFIER@40..44 "name"
+    TOKEN_COLON@44..45 ":"
+    TOKEN_SPACE@45..46 " "
+    NODE_NAME@46..53
+      TOKEN_STRING@46..53 "\"hello\""
+    TOKEN_EOL@53..54 "\n"
     TOKEN_EOL@54..55 "\n"
     TOKEN_SPACE@55..59 "    "
     NODE_ENDPOINT_QUERY@59..166

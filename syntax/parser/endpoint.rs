@@ -136,9 +136,15 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
                 Some(TOKEN_IDENTIFIER) => match self.peek_value() {
                     Some("name") => {
-                        self.parse_field(NODE_NAME, prologue, PrologueBehavior::Ignore, |p| {
-                            p.parse_value(is_recovery)
+                        self.advance();
+                        self.assignment();
+
+                        self.with(NODE_NAME, |p| {
+                            p.expect(TOKEN_STRING);
                         });
+
+                        self.skip_whitespace();
+                        self.expect(TOKEN_EOL);
                     }
 
                     Some("path") => {

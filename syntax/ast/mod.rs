@@ -123,13 +123,6 @@ impl Root {
     pub fn endpoints(&self) -> impl Iterator<Item = Endpoint> {
         self.0.children().filter_map(Endpoint::cast)
     }
-
-    /// A placeholder, just so that warning about unused `Oracle::parse_type`
-    /// goes away
-    /// TODO: Remove this in the future.
-    pub fn dummy_type(&self) -> Option<Type> {
-        None
-    }
 }
 
 /////////////////
@@ -837,12 +830,75 @@ impl Endpoint {
     pub fn path(&self) -> Option<Path> {
         self.0.children().find_map(Path::cast)
     }
+
+    /// Returns endpoint method
+    pub fn method(&self) -> Option<EndpointMethod> {
+        self.0.children().find_map(EndpointMethod::cast)
+    }
+
+    /// Returns endpoint name
+    pub fn name(&self) -> Option<Name> {
+        self.0.children().find_map(Name::cast)
+    }
+
+    /// Returns endpoint path param
+    pub fn path_param(&self) -> Option<EndpointPathParams> {
+        self.0.children().find_map(EndpointPathParams::cast)
+    }
+
+    /// Returns endpoint query param
+    pub fn query_param(&self) -> Option<EndpointQueryParams> {
+        self.0.children().find_map(EndpointQueryParams::cast)
+    }
+
+    /// Returns endpoint header param
+    pub fn header_param(&self) -> Option<EndpointHeaderParams> {
+        self.0.children().find_map(EndpointHeaderParams::cast)
+    }
+
+    /// Returns endpoint accept headers
+    pub fn accept(&self) -> Option<EndpointAccept> {
+        self.0.children().find_map(EndpointAccept::cast)
+    }
+
+    /// Return endpoint request body
+    pub fn request_body(&self) -> Option<EndpointRequestBody> {
+        self.0.children().find_map(EndpointRequestBody::cast)
+    }
 }
 
 ast_node! {
     #[from(NODE_ENDPOINT_METHOD)]
     /// Endpoint method
     struct EndpointMethod;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Method {
+    Get,
+    Post,
+    Put,
+    Delete,
+    Patch,
+}
+
+impl EndpointMethod {
+    /// Returns endpoint HTTP method.
+    pub fn value(&self) -> Method {
+        let token = self
+            .0
+            .first_token()
+            .expect("parser should parse endpoint method correctly");
+
+        match token.kind() {
+            TOKEN_KW_GET => Method::Get,
+            TOKEN_KW_POST => Method::Post,
+            TOKEN_KW_PUT => Method::Put,
+            TOKEN_KW_DELETE => Method::Delete,
+            TOKEN_KW_PATCH => Method::Patch,
+            _ => unreachable!("parser should parse endpoint method correctly"),
+        }
+    }
 }
 
 ast_node! {
@@ -875,10 +931,24 @@ ast_node! {
     struct EndpointPathParams;
 }
 
+impl EndpointPathParams {
+    /// Returns type of endpoint path params.
+    pub fn typ(&self) -> Option<Type> {
+        self.0.children().find_map(Type::cast)
+    }
+}
+
 ast_node! {
     #[from(NODE_ENDPOINT_QUERY)]
     /// Endpoint's query parameters
     struct EndpointQueryParams;
+}
+
+impl EndpointQueryParams {
+    /// Returns type of endpoint query params.
+    pub fn typ(&self) -> Option<Type> {
+        self.0.children().find_map(Type::cast)
+    }
 }
 
 ast_node! {
@@ -887,12 +957,26 @@ ast_node! {
     struct EndpointHeaderParams;
 }
 
+impl EndpointHeaderParams {
+    /// Returns type of endpoint header params.
+    pub fn typ(&self) -> Option<Type> {
+        self.0.children().find_map(Type::cast)
+    }
+}
+
 ast_node! {
     #[from(NODE_ENDPOINT_ACCEPT)]
     /// Content type of the endpoint's request body.
     ///
     /// Represents how the request body is encoded as a MIME type.
     struct EndpointAccept;
+}
+
+impl EndpointAccept {
+    /// Returns accepted request body content type.
+    pub fn value(&self) -> Option<Value> {
+        self.0.children().find_map(Value::cast)
+    }
 }
 
 ast_node! {
@@ -904,10 +988,29 @@ ast_node! {
     struct EndpointRequestBody;
 }
 
+impl EndpointRequestBody {
+    /// Returns type of endpoint request body.
+    pub fn typ(&self) -> Option<Type> {
+        self.0.children().find_map(Type::cast)
+    }
+}
+
 ast_node! {
     #[from(NODE_RESPONSE)]
     /// Endpoint's response.
     struct EndpointResponse;
+}
+
+impl EndpointResponse {
+    /// Returns status of the response.
+    pub fn status(&self) -> Option<EndpointResponseStatus> {
+        self.0.children().find_map(EndpointResponseStatus::cast)
+    }
+
+    /// Returns response type.
+    pub fn typ(&self) -> Option<Type> {
+        self.0.children().find_map(Type::cast)
+    }
 }
 
 ast_node! {
@@ -917,6 +1020,33 @@ ast_node! {
     /// This is a child node of [`EndpointResponse`]
     /// and represents the status of a single response.
     struct EndpointResponseStatus;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ResponseStatus {
+    Default,
+    Code(i128),
+}
+
+impl EndpointResponseStatus {
+    /// Returns response status.
+    pub fn value(&self) -> ResponseStatus {
+        let token = self
+            .0
+            .first_token()
+            .expect("parser should parse response status correctly");
+
+        match token.kind() {
+            TOKEN_KW_DEFAULT => ResponseStatus::Default,
+            TOKEN_INTEGER => ResponseStatus::Code(
+                token
+                    .text()
+                    .parse()
+                    .expect("tokenizer should emit valid integers"),
+            ),
+            _ => unreachable!("parser should parse response status correctly"),
+        }
+    }
 }
 
 ////////////

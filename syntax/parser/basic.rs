@@ -132,6 +132,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         prologue_behavior: PrologueBehavior,
     ) {
         match (prologue, prologue_behavior) {
+            // TODO: Probably report an error if docs or prologue is given and behaviour is ignore
             (None, _) | (_, PrologueBehavior::Ignore) => self.builder.start_node(kind.into()),
             (Some(p), _) => {
                 // If only doc comment should be parsed,

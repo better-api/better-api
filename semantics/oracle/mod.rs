@@ -11,6 +11,7 @@ use crate::spec::value::ValueArena;
 use crate::spec::{Metadata, SpecContext, SymbolTable};
 use crate::string::{StringId, StringInterner};
 
+mod endpoint;
 mod metadata;
 mod symbols;
 mod typ;
@@ -88,10 +89,6 @@ impl<'a> Oracle<'a> {
 
     /// Analyzes the complete syntax tree and populates the analyzer arenas.
     fn analyze(&mut self) {
-        // TODO: Steps:
-        // - analyze type defs (not actual types, just defs), populate self.symbol_map, find cycles
-        // - analyze types of type defs, populate spec_symbol_table
-        // - analyze routes & endpoints. as you go also analyze and lower types
         self.lower_metadata();
 
         // Build symbol map and do basic symbol validation
@@ -101,14 +98,7 @@ impl<'a> Oracle<'a> {
 
         self.lower_type_definitions();
 
-        // A placeholder, just so that warning about unused `Oracle::parse_type`
-        // goes away
-        // TODO: Remove this in the future.
-        // if let Some(t) = root.dummy_type() {
-        //     self.lower_type(&t);
-        // }
-
-        // TODO: Implement the actual analysis
+        self.lower_endpoints();
     }
 
     #[cfg(test)]

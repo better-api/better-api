@@ -28,13 +28,12 @@ NODE_ROOT@0..99
       TOKEN_CURLY_LEFT@66..67 "{"
       TOKEN_EOL@67..68 "\n"
       TOKEN_SPACE@68..76 "        "
-      NODE_NAME@76..92
-        TOKEN_IDENTIFIER@76..80 "name"
-        TOKEN_COLON@80..81 ":"
-        TOKEN_SPACE@81..82 " "
-        NODE_VALUE_STRING@82..91
-          TOKEN_STRING@82..91 "\"goodbye\""
-        TOKEN_EOL@91..92 "\n"
+      TOKEN_IDENTIFIER@76..80 "name"
+      TOKEN_COLON@80..81 ":"
+      TOKEN_SPACE@81..82 " "
+      NODE_NAME@82..91
+        TOKEN_STRING@82..91 "\"goodbye\""
+      TOKEN_EOL@91..92 "\n"
       TOKEN_SPACE@92..96 "    "
       TOKEN_CURLY_RIGHT@96..97 "}"
     TOKEN_CURLY_RIGHT@97..98 "}"

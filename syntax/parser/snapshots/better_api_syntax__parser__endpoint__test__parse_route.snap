@@ -25,13 +25,12 @@ NODE_ROOT@0..276
       TOKEN_CURLY_LEFT@77..78 "{"
       TOKEN_EOL@78..79 "\n"
       TOKEN_SPACE@79..87 "        "
-      NODE_NAME@87..101
-        TOKEN_IDENTIFIER@87..91 "name"
-        TOKEN_COLON@91..92 ":"
-        TOKEN_SPACE@92..93 " "
-        NODE_VALUE_STRING@93..100
-          TOKEN_STRING@93..100 "\"hello\""
-        TOKEN_EOL@100..101 "\n"
+      TOKEN_IDENTIFIER@87..91 "name"
+      TOKEN_COLON@91..92 ":"
+      TOKEN_SPACE@92..93 " "
+      NODE_NAME@93..100
+        TOKEN_STRING@93..100 "\"hello\""
+      TOKEN_EOL@100..101 "\n"
       TOKEN_EOL@101..102 "\n"
       TOKEN_SPACE@102..110 "        "
       NODE_RESPONSE@110..196
@@ -78,13 +77,12 @@ NODE_ROOT@0..276
       TOKEN_CURLY_LEFT@242..243 "{"
       TOKEN_EOL@243..244 "\n"
       TOKEN_SPACE@244..252 "        "
-      NODE_NAME@252..268
-        TOKEN_IDENTIFIER@252..256 "name"
-        TOKEN_COLON@256..257 ":"
-        TOKEN_SPACE@257..258 " "
-        NODE_VALUE_STRING@258..267
-          TOKEN_STRING@258..267 "\"goodbye\""
-        TOKEN_EOL@267..268 "\n"
+      TOKEN_IDENTIFIER@252..256 "name"
+      TOKEN_COLON@256..257 ":"
+      TOKEN_SPACE@257..258 " "
+      NODE_NAME@258..267
+        TOKEN_STRING@258..267 "\"goodbye\""
+      TOKEN_EOL@267..268 "\n"
       TOKEN_SPACE@268..272 "    "
       TOKEN_CURLY_RIGHT@272..273 "}"
       TOKEN_EOL@273..274 "\n"
