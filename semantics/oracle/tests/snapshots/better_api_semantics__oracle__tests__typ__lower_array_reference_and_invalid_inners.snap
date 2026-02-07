@@ -33,8 +33,6 @@ expression: oracle.reports()
                 },
             },
         ],
-        note: Some(
-            "help: `response` type can't be a child of a type",
-        ),
+        note: None,
     },
 ]

@@ -736,7 +736,6 @@ fn lower_response_invalid_body_response() {
                     "`response` type introduced here".to_string(),
                     Span::new(10, 35)
                 ))
-                .with_note("help: `response` type can't be a child of a type".to_string())
         ]
     );
 
@@ -772,7 +771,7 @@ fn lower_response_invalid_body_file() {
                     Span::new(61, 64,)
                 ))
                 .add_label(Label::secondary(
-                    "file introduced here".to_string(),
+                    "`file` introduced here".to_string(),
                     Span::new(25, 29)
                 ))
                 .with_note(
@@ -1201,7 +1200,7 @@ fn lower_response_body_file_in_nested_reference() {
                     Span::new(101, 106)
                 ))
                 .add_label(Label::secondary(
-                    "file introduced here".to_string(),
+                    "`file` introduced here".to_string(),
                     Span::new(27, 31)
                 ))
                 .with_note(
@@ -1340,7 +1339,6 @@ fn lower_array_option_response_reference() {
                     "`response` type introduced here".to_string(),
                     Span::new(10, 35)
                 ))
-                .with_note("help: `response` type can't be a child of a type".to_string())
         ]
     );
 
