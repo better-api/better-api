@@ -18,7 +18,7 @@
 //! arenas and performs validation before data is exposed through `SpecContext`.
 
 use crate::spec::SpecContext;
-use crate::spec::value::{self, Value, ValueId};
+use crate::spec::value::{self, Value, ValueContext, ValueId};
 use crate::string::StringId;
 
 /// Primitive types.
@@ -587,7 +587,8 @@ impl<'a> Iterator for EnumMemberIterator<'a> {
 
         match &self.ctx.types.data[self.current.0 as usize] {
             Slot::EnumMember { value, docs } => {
-                let value = self.ctx.get_value(*value);
+                let val_ctx: ValueContext = self.ctx.into();
+                let value = val_ctx.get_value(*value);
                 let docs = docs.map(|id| self.ctx.strings.resolve(id));
                 let member = EnumMember { value, docs };
                 self.current = TypeId(self.current.0 + 1);
@@ -628,7 +629,9 @@ impl<'a> FromSlot<'a> for ResponseTy<'a> {
 
         let body = ctx.get_inline_type(*body);
         let headers = headers.map(|id| ctx.get_simple_record_reference(id));
-        let content_type = content_type.map(|id| ctx.get_mime_types(id));
+
+        let val_ctx: ValueContext = ctx.into();
+        let content_type = content_type.map(|id| val_ctx.get_mime_types(id));
 
         ResponseTy {
             body,
@@ -1438,7 +1441,9 @@ impl<'a> SpecContext<'a> {
         };
 
         let name = self.strings.resolve(name_id);
-        let default = default_id.map(|id| self.get_value(id));
+
+        let val_ctx: ValueContext = (*self).into();
+        let default = default_id.map(|id| val_ctx.get_value(id));
         let docs = docs_id.map(|id| self.strings.resolve(id));
 
         let typ = InlineTy::from_slot(*self, id.slot_idx + 1, typ_slot);

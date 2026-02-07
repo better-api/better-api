@@ -19,7 +19,7 @@ use crate::spec::typ::{
     InlineTy, InlineTyId, NamedReference, ResponseReference, ResponseReferenceId,
     SimpleRecordReference, SimpleRecordReferenceId, Type,
 };
-use crate::spec::value::{self, MimeTypes};
+use crate::spec::value::{self, MimeTypes, ValueContext};
 use crate::string::StringId;
 
 /// Route group representation returned by the [`EndpointArena`].
@@ -551,6 +551,11 @@ impl<'a> SpecContext<'a> {
             unreachable!("slot at endpoint id should contain an endpoint");
         };
 
+        let accept = data.accept.map(|id| {
+            let val_ctx: ValueContext = (*self).into();
+            val_ctx.get_mime_types(id)
+        });
+
         Endpoint {
             id,
             path: self.endpoints.paths.get(*path),
@@ -562,7 +567,7 @@ impl<'a> SpecContext<'a> {
                 .map(|id| self.get_simple_record_reference(id)),
             query: data.query.map(|id| self.get_simple_record_reference(id)),
             headers: data.headers.map(|id| self.get_simple_record_reference(id)),
-            accept: data.accept.map(|id| self.get_mime_types(id)),
+            accept,
             request_body: data.request_body.map(|id| self.get_inline_type(id)),
             request_body_docs: data.request_body_docs.map(|id| self.strings.resolve(id)),
             ctx: *self,

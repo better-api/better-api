@@ -15,7 +15,25 @@
 //! Construction is handled by [`Oracle`](crate::Oracle). It builds the internal
 //! arenas and performs validation before data is exposed through `SpecContext`.
 
-use crate::{spec::SpecContext, string::StringId};
+use crate::{
+    spec::SpecContext,
+    string::{StringId, StringInterner},
+};
+
+#[derive(Clone, Copy)]
+pub(crate) struct ValueContext<'a> {
+    pub(crate) strings: &'a StringInterner,
+    pub(crate) values: &'a ValueArena,
+}
+
+impl<'a> From<SpecContext<'a>> for ValueContext<'a> {
+    fn from(value: SpecContext<'a>) -> Self {
+        Self {
+            strings: value.strings,
+            values: value.values,
+        }
+    }
+}
 
 /// Representation of a value.
 #[derive(Debug, derive_more::Display, Clone)]
@@ -37,7 +55,7 @@ pub enum Value<'a> {
 }
 
 impl<'a> Value<'a> {
-    fn from_slot(ctx: SpecContext<'a>, id: ValueId, slot: &'a Slot) -> Self {
+    fn from_slot(ctx: ValueContext<'a>, id: ValueId, slot: &'a Slot) -> Self {
         match slot {
             Slot::Primitive(PrimitiveValue::Null) => Value::Null,
             Slot::Primitive(PrimitiveValue::Bool(b)) => Value::Bool(*b),
@@ -101,7 +119,7 @@ impl<'a> Object<'a> {
 #[derive(derive_more::Debug, Clone)]
 pub struct ObjectFields<'a> {
     #[debug(skip)]
-    ctx: SpecContext<'a>,
+    ctx: ValueContext<'a>,
     current: ValueId,
     end: ValueId,
 
@@ -162,7 +180,7 @@ impl<'a> Array<'a> {
 #[derive(derive_more::Debug, Clone)]
 pub struct ArrayItems<'a> {
     #[debug(skip)]
-    ctx: SpecContext<'a>,
+    ctx: ValueContext<'a>,
     current: ValueId,
     end: ValueId,
 }
@@ -540,7 +558,7 @@ impl ValueArena {
     }
 }
 
-impl<'a> SpecContext<'a> {
+impl<'a> ValueContext<'a> {
     /// Get [`Value`] by id.
     pub(crate) fn get_value(&self, id: ValueId) -> Value<'a> {
         let val = &self.values.data[id.0 as usize];
@@ -579,7 +597,7 @@ impl<'a> SpecContext<'a> {
 #[cfg(test)]
 mod test {
     use super::{ArrayItem, ObjectFieldId, PrimitiveValue, Slot, Value, ValueId};
-    use crate::spec::Spec;
+    use crate::spec::{Spec, value::ValueContext};
 
     #[test]
     fn builds_nested_values() {
@@ -705,14 +723,16 @@ mod test {
             );
         }
 
+        let ctx: ValueContext = spec.ctx().into();
+
         // Check primitive value getting works
-        assert!(matches!(spec.ctx().get_value(null_id), Value::Null));
-        assert!(matches!(spec.ctx().get_value(bool_id), Value::Bool(true)));
-        assert!(matches!(spec.ctx().get_value(string_id), Value::String(id) if id == "hello"));
+        assert!(matches!(ctx.get_value(null_id), Value::Null));
+        assert!(matches!(ctx.get_value(bool_id), Value::Bool(true)));
+        assert!(matches!(ctx.get_value(string_id), Value::String(id) if id == "hello"));
 
         // Check that getters for nested values work by checking that root
         // object is exactly how it should be
-        let root_object = match spec.ctx().get_value(root_id) {
+        let root_object = match ctx.get_value(root_id) {
             Value::Object(object) => object,
             other => panic!("expected object at root_id, got {other:?}"),
         };
@@ -822,7 +842,7 @@ mod test {
         assert!(container_object_fields.next().is_none());
 
         // Check getting container directly by id
-        let container_get = match spec.ctx().get_value(container_id) {
+        let container_get = match ctx.get_value(container_id) {
             Value::Object(object) => object,
             other => panic!("expected object at inner_id, got {other:?}"),
         };
@@ -830,7 +850,7 @@ mod test {
         assert_eq!(inner_field_names, vec!["numbers", "nested", "active"]);
 
         // Check getting numbers array directly by id
-        let numbers_from_get = match spec.ctx().get_value(numbers_id) {
+        let numbers_from_get = match ctx.get_value(numbers_id) {
             Value::Array(array) => array,
             other => panic!("expected array at numbers_id, got {other:?}"),
         };
@@ -895,7 +915,7 @@ mod test {
         assert!(numbers_from_get_items.next().is_none());
 
         // Check getting deeply nested object directly by id
-        let array_obj_from_get = match spec.ctx().get_value(array_obj_id) {
+        let array_obj_from_get = match ctx.get_value(array_obj_id) {
             Value::Object(object) => object,
             other => panic!("expected object at array_obj_id, got {other:?}"),
         };
@@ -915,7 +935,7 @@ mod test {
         assert!(array_obj_from_get_fields.next().is_none());
 
         // Check getting nested object directly by id
-        let nested_from_get = match spec.ctx().get_value(nested_obj_id) {
+        let nested_from_get = match ctx.get_value(nested_obj_id) {
             Value::Object(object) => object,
             other => panic!("expected object at nested_obj_id, got {other:?}"),
         };

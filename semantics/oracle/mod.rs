@@ -45,6 +45,15 @@ pub struct Oracle<'a> {
     reports: Vec<Report>,
 }
 
+struct Context<'o, 'a> {
+    strings: &'o mut StringInterner,
+    spec_symbol_table: &'o mut SymbolTable,
+    symbol_map: &'o mut SymbolMap,
+    reports: &'o mut Vec<Report>,
+
+    root: &'a ast::Root,
+}
+
 impl<'a> Oracle<'a> {
     /// Create a new oracle.
     ///
