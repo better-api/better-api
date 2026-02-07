@@ -481,7 +481,7 @@ pub(crate) fn lower_response(
     let requires_file = content_type_id.is_some_and(|id| {
         let val_ctx = ValueContext {
             strings: ctx.strings,
-            values: &values,
+            values,
         };
 
         val_ctx
@@ -506,7 +506,7 @@ pub(crate) fn lower_response(
                     body.syntax().text_range().into(),
                 ))
                 .add_label(Label::secondary(
-                    "file introduced here".to_string(),
+                    "`file` introduced here".to_string(),
                     range.into(),
                 ))
                 .with_note(
@@ -848,7 +848,11 @@ fn require_resp_body_is_file(
 /// Reports are added to `reports` on the fly.
 ///
 /// If no reports are generated (node is valid), Ok is returned, otherwise Err.
-fn require_no_file<R>(ctx: &mut Context, node: &ast::Type, build_report: &R) -> Result<(), ()>
+pub(crate) fn require_no_file<R>(
+    ctx: &mut Context,
+    node: &ast::Type,
+    build_report: &R,
+) -> Result<(), ()>
 where
     R: Fn(TextRange) -> Report,
 {
@@ -990,7 +994,7 @@ where
 /// Reports are added to `reports` on the fly.
 ///
 /// If no reports are generated (node is valid), Ok is returned, otherwise Err.
-fn require_not_response(ctx: &mut Context, node: &ast::Type) -> Result<(), ()> {
+pub(crate) fn require_not_response(ctx: &mut Context, node: &ast::Type) -> Result<(), ()> {
     let check = |derefed: &ast::Type| {
         if !matches!(derefed, ast::Type::TypeResponse(_)) {
             Ok(())
@@ -1013,9 +1017,9 @@ fn require_not_response(ctx: &mut Context, node: &ast::Type) -> Result<(), ()> {
     }
 }
 
-/// Requires that check C succeeds for given node. If node is a reference,
+/// Requires that check C succeeds for given type node. If node is a reference,
 /// it dereferences it first.
-fn require_with_deref<C>(
+pub(crate) fn require_with_deref<C>(
     node: &ast::Type,
     strings: &StringInterner,
     symbol_map: &SymbolMap,
@@ -1041,7 +1045,7 @@ where
 /// with name `name`. Parameter `id` should be the id of the lowered type behind `node`.
 ///
 /// If type can't be inlined (usually because `name` already exists), None is returned.
-fn ensure_inline(
+pub(crate) fn ensure_inline(
     ctx: &mut Context,
     node: &ast::Type,
     id: RootTypeId,
@@ -1317,12 +1321,9 @@ fn new_invalid_inner_type(
 /// - `deref_range`: If the invalid node is a reference, this is the range of the dereferenced response type.
 ///   If the invalid node is not a reference, this is `None`.
 fn new_invalid_response(range: TextRange, deref_range: Option<TextRange>) -> Report {
-    let mut report = Report::error("invalid usage of `response` type".to_string())
-        .add_label(Label::primary(
-            "invalid usage of `response` type".to_string(),
-            range.into(),
-        ))
-        .with_note("help: `response` type can't be a child of a type".to_string());
+    let mut report = Report::error("invalid usage of `response` type".to_string()).add_label(
+        Label::primary("invalid usage of `response` type".to_string(), range.into()),
+    );
 
     if let Some(deref_range) = deref_range
         && range != deref_range
