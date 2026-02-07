@@ -43,6 +43,24 @@ enum ParsedType<'a> {
     Option(&'a ast::TypeOption),
 }
 
+/// Configuration for validating and lowering simple record params.
+///
+/// It controls allowed field shapes and the generated diagnostic/reference names.
+#[derive(Clone, Copy)]
+pub(crate) struct SimpleRecordParamConfig<'a> {
+    /// Are option types allowed in the simple record
+    pub(crate) allow_option: bool,
+
+    /// Are array types allowed in the simple record
+    pub(crate) allow_array: bool,
+
+    /// Name of the type used in reports. This should be `headers`, `path`, ...
+    pub(crate) typ_name: &'a str,
+
+    /// Name used for created type definition. This should be `FooHeaders`,
+    pub(crate) ref_name: &'a str,
+}
+
 impl<'a> ParsedType<'a> {
     fn new(typ: &'a ast::Type, strings: &mut StringInterner) -> Self {
         match typ {
@@ -191,16 +209,14 @@ impl<'a> Oracle<'a> {
             root: self.root,
         };
 
-        lower_simple_record_param(
-            &mut ctx,
-            &mut self.types,
-            &mut self.values,
-            node,
+        let conf = SimpleRecordParamConfig {
             allow_option,
             allow_array,
             typ_name,
             ref_name,
-        )
+        };
+
+        lower_simple_record_param(&mut ctx, &mut self.types, &mut self.values, node, conf)
     }
 }
 
@@ -448,10 +464,12 @@ pub(crate) fn lower_response(
             types,
             values,
             &headers,
-            true,
-            false,
-            "headers",
-            &format!("{name}Headers"),
+            SimpleRecordParamConfig {
+                allow_option: true,
+                allow_array: false,
+                typ_name: "headers",
+                ref_name: &format!("{name}Headers"),
+            },
         ) {
             res @ Some(_) => headers_id = res,
             None => is_valid = false,
@@ -554,22 +572,20 @@ pub(crate) fn lower_response(
 ///
 /// Valid headers are simple record without files. If type is valid,
 /// Some(_) is returned. If any validation fails, reports are generated and None is returned.
-///
-/// ## Parameters
-///
-/// - `typ_name`: name of the type used in reports. This should be `headers`, `path`, ...
-/// - `ref_name`: name used for created type definition. This should be `FooHeaders`,
-///   `BarPath`, ...
 pub(crate) fn lower_simple_record_param(
     ctx: &mut Context,
     types: &mut TypeArena,
     values: &mut ValueArena,
     node: &ast::Type,
-    allow_option: bool,
-    allow_array: bool,
-    typ_name: &str,
-    ref_name: &str,
+    conf: SimpleRecordParamConfig<'_>,
 ) -> Option<SimpleRecordReferenceId> {
+    let SimpleRecordParamConfig {
+        allow_option,
+        allow_array,
+        typ_name,
+        ref_name,
+    } = conf;
+
     // Are headers valid. We don't want to early return, because we want
     // to validate as many things as possible.
     let mut is_valid = true;
@@ -597,7 +613,7 @@ pub(crate) fn lower_simple_record_param(
                     format!("expected record, got {resolved}"),
                     node.syntax().text_range().into(),
                 ))
-                .with_note("help: headers must be a simple record".to_string())
+                .with_note(format!("help: {typ_name} must be a simple record"))
         }
         SimpleRecordReportType::CompositeField(field) => {
             let range = field

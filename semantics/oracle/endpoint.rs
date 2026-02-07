@@ -6,8 +6,8 @@ use better_api_syntax::ast::{self, AstNode};
 
 use crate::oracle::Context;
 use crate::oracle::typ::{
-    ensure_inline, lower_simple_record_param, lower_type, require_no_file, require_not_response,
-    require_with_deref,
+    SimpleRecordParamConfig, ensure_inline, lower_simple_record_param, lower_type, require_no_file,
+    require_not_response, require_with_deref,
 };
 use crate::oracle::value::lower_mime_types;
 use crate::path::PathPart;
@@ -148,7 +148,18 @@ fn lower_endpoint<P: EndpointParent>(
         .and_then(|typ| {
             let name = ctx.strings.resolve(name_id);
             let name = format!("{name}Headers");
-            lower_simple_record_param(ctx, types, values, &typ, true, false, "headers", &name)
+            lower_simple_record_param(
+                ctx,
+                types,
+                values,
+                &typ,
+                SimpleRecordParamConfig {
+                    allow_option: true,
+                    allow_array: false,
+                    typ_name: "headers",
+                    ref_name: &name,
+                },
+            )
         });
 
     // Lower query
@@ -158,14 +169,36 @@ fn lower_endpoint<P: EndpointParent>(
         .and_then(|typ| {
             let name = ctx.strings.resolve(name_id);
             let name = format!("{name}Query");
-            lower_simple_record_param(ctx, types, values, &typ, true, true, "query", &name)
+            lower_simple_record_param(
+                ctx,
+                types,
+                values,
+                &typ,
+                SimpleRecordParamConfig {
+                    allow_option: true,
+                    allow_array: true,
+                    typ_name: "query",
+                    ref_name: &name,
+                },
+            )
         });
 
     // Lower query
     let path_param = endpoint.path_param().and_then(|p| p.typ()).and_then(|typ| {
         let name = ctx.strings.resolve(name_id);
         let name = format!("{name}Path");
-        lower_simple_record_param(ctx, types, values, &typ, false, false, "path", &name)
+        lower_simple_record_param(
+            ctx,
+            types,
+            values,
+            &typ,
+            SimpleRecordParamConfig {
+                allow_option: false,
+                allow_array: false,
+                typ_name: "path",
+                ref_name: &name,
+            },
+        )
     });
 
     // Lower accept header
