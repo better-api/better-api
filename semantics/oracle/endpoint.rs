@@ -4,20 +4,21 @@ use better_api_diagnostic::{Label, Report};
 use better_api_syntax::TextRange;
 use better_api_syntax::ast::{self, AstNode};
 
-use crate::oracle::Context;
+use crate::oracle::symbols::deref;
 use crate::oracle::typ::{
-    SimpleRecordParamConfig, ensure_inline, lower_simple_record_param, lower_type, require_no_file,
-    require_not_response, require_with_deref,
+    SimpleRecordParamConfig, ensure_inline, lower_response, lower_simple_record_param, lower_type,
+    require_no_file, require_not_response, require_with_deref,
 };
 use crate::oracle::value::lower_mime_types;
+use crate::oracle::{Context, value};
 use crate::path::PathPart;
 use crate::spec::endpoint::{
     EndpointArena, EndpointBuilder, EndpointData, EndpointId, EndpointResponseId,
     EndpointResponseTypeId, ResponseStatus, RouteBuilder,
 };
-use crate::spec::typ::{InlineTyId, TypeArena};
+use crate::spec::typ::{InlineTyId, ResponseReferenceId, TypeArena};
 use crate::spec::value::{ValueArena, ValueContext};
-use crate::string::StringId;
+use crate::string::{StringId, StringInterner};
 use crate::text;
 
 use super::Oracle;
@@ -254,7 +255,7 @@ fn lower_endpoint<P: EndpointParent>(
     );
 
     for resp in endpoint.responses() {
-        lower_endpoint_response(ctx, &mut endpoint_builder, &resp);
+        lower_endpoint_response(ctx, values, types, &mut endpoint_builder, &resp, name_id);
     }
 
     Some(endpoint_builder.finish())
@@ -397,10 +398,81 @@ fn require_request_body_is_file(
 /// Lower endpoint response
 fn lower_endpoint_response<P: ResponseParent>(
     ctx: &mut Context,
+    values: &mut ValueArena,
+    types: &mut TypeArena,
     parent: &mut P,
     resp: &ast::EndpointResponse,
-) {
-    todo!("Implement me")
+    endpoint_name_id: StringId,
+) -> Option<()> {
+    // Validate status
+    let status = match resp.status() {
+        None => None,
+        Some(status) => match convert_status(&status) {
+            Ok(status) => Some(status),
+            Err(report) => {
+                ctx.reports.push(report);
+                None
+            }
+        },
+    };
+
+    let typ = resp.typ()?;
+    let type_id = match &typ {
+        ast::Type::TypeResponse(resp) => {
+            let resp_name = endpoint_response_name(ctx.strings, endpoint_name_id, status);
+            let resp_id = lower_response(ctx, types, values, resp, &resp_name)?;
+
+            let resp_id = ensure_inline(ctx, &typ, resp_id.into(), &resp_name, types)?;
+
+            // Safety: We know it's a response and we have made sure that it's behind a reference.
+            let resp_id = unsafe { ResponseReferenceId::new_unchecked(resp_id) };
+            EndpointResponseTypeId::Response(resp_id)
+        }
+
+        ast::Type::TypeRef(reference) => {
+            let reference_id = lower_type(ctx, types, values, &typ)?;
+            match deref(ctx.strings, ctx.symbol_map, ctx.root, reference)? {
+                ast::Type::TypeResponse(_) => {
+                    // Safety: We know it's a reference to a response
+                    let id = unsafe { ResponseReferenceId::new_unchecked(reference_id) };
+                    EndpointResponseTypeId::Response(id)
+                }
+
+                _ => {
+                    // Safety: We know it's a reference to a type that isn't a response
+                    let id = unsafe { InlineTyId::new_unchecked(reference_id) };
+                    EndpointResponseTypeId::InlineType(id)
+                }
+            }
+        }
+        _ => {
+            let id = lower_type(ctx, types, values, &typ)?;
+
+            let resp_name = endpoint_response_name(ctx.strings, endpoint_name_id, status);
+            let id = ensure_inline(ctx, &typ, id, &resp_name, types)?;
+
+            // Safety: We know it's a type and we made sure it's inline
+            let id = unsafe { InlineTyId::new_unchecked(id) };
+            EndpointResponseTypeId::InlineType(id)
+        }
+    };
+
+    // TODO: Get docs from doc comments
+    parent.add_response(status?, type_id, None);
+    Some(())
+}
+
+/// Name of the auto generated type for endpoint response
+fn endpoint_response_name(
+    strings: &StringInterner,
+    endpoint_name_id: StringId,
+    status: Option<ResponseStatus>,
+) -> String {
+    let endpoint_name = strings.resolve(endpoint_name_id);
+    match status {
+        None => format!("{endpoint_name}DefaultResponse"),
+        Some(status) => format!("{endpoint_name}{status}Response"),
+    }
 }
 
 /// Converts AST method to http::Method
@@ -412,4 +484,24 @@ fn convert_method(method: ast::Method) -> http::Method {
         ast::Method::Delete => http::Method::DELETE,
         ast::Method::Patch => http::Method::PATCH,
     }
+}
+
+/// Convert AST response status to semantic one
+fn convert_status(status: &ast::EndpointResponseStatus) -> Result<ResponseStatus, Report> {
+    let build_report = || {
+        Report::error("invalid response status".to_string()).add_label(Label::primary(
+            "invalid response status".to_string(),
+            status.syntax().text_range().into(),
+        ))
+    };
+
+    let res = match status.value() {
+        ast::ResponseStatus::Default => ResponseStatus::Default,
+        ast::ResponseStatus::Code(code) => {
+            let code = u16::try_from(code).map_err(|_| build_report())?;
+            let code = http::StatusCode::from_u16(code).map_err(|_| build_report())?;
+            ResponseStatus::Code(code)
+        }
+    };
+    Ok(res)
 }

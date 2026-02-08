@@ -793,7 +793,7 @@ impl InlineTyId {
     ///
     /// ## Safety
     ///
-    /// The caller must ensure the id does not refer to a inline type
+    /// The caller must ensure the id refers to an inline type that isn't a response.
     pub(crate) unsafe fn new_unchecked(id: RootTypeId) -> Self {
         Self(id.0)
     }

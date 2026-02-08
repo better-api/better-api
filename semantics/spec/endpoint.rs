@@ -216,6 +216,15 @@ pub enum ResponseStatus {
     Code(http::StatusCode),
 }
 
+impl std::fmt::Display for ResponseStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Default => f.write_str("Default"),
+            Self::Code(code) => code.as_u16().fmt(f),
+        }
+    }
+}
+
 /// Type used in endpoint response  
 #[derive(Debug, Clone)]
 pub enum EndpointResponseType<'a> {
