@@ -1,16 +1,18 @@
 //! Define methods for validating and lowering routes and endpoints.
 
+use std::collections::HashMap;
+
 use better_api_diagnostic::{Label, Report};
 use better_api_syntax::TextRange;
 use better_api_syntax::ast::{self, AstNode};
 
+use crate::oracle::Context;
 use crate::oracle::symbols::deref;
 use crate::oracle::typ::{
     SimpleRecordParamConfig, ensure_inline, lower_response, lower_simple_record_param, lower_type,
     require_no_file, require_not_response, require_with_deref,
 };
 use crate::oracle::value::lower_mime_types;
-use crate::oracle::{Context, value};
 use crate::path::PathPart;
 use crate::spec::endpoint::{
     EndpointArena, EndpointBuilder, EndpointData, EndpointId, EndpointResponseId,
@@ -88,15 +90,23 @@ impl ResponseParent for EndpointBuilder<'_> {
     }
 }
 
+struct EndpointContext<'o, 'a> {
+    ctx: Context<'o, 'a>,
+    response_statuses: HashMap<ResponseStatus, TextRange>,
+}
+
 impl<'a> Oracle<'a> {
     /// Lowers routes and endpoints
     pub(crate) fn lower_endpoints(&mut self) {
-        let mut ctx = Context {
-            strings: &mut self.strings,
-            spec_symbol_table: &mut self.spec_symbol_table,
-            symbol_map: &mut self.symbol_map,
-            reports: &mut self.reports,
-            root: self.root,
+        let mut ctx = EndpointContext {
+            ctx: Context {
+                strings: &mut self.strings,
+                spec_symbol_table: &mut self.spec_symbol_table,
+                symbol_map: &mut self.symbol_map,
+                reports: &mut self.reports,
+                root: self.root,
+            },
+            response_statuses: HashMap::new(),
         };
 
         for endpoint in self.root.endpoints() {
@@ -113,7 +123,7 @@ impl<'a> Oracle<'a> {
 
 /// Validate and lower endpoint and it's responses.
 fn lower_endpoint<P: EndpointParent>(
-    ctx: &mut Context,
+    ctx: &mut EndpointContext,
     values: &mut ValueArena,
     types: &mut TypeArena,
     parent: &mut P,
@@ -129,9 +139,9 @@ fn lower_endpoint<P: EndpointParent>(
     // Without a valid name we can't lower path, query, header params and request body.
     // They all require a name to be inlined.
     let name_id = if let Some(name) = endpoint.name() {
-        text::lower_name(&name, ctx.strings, ctx.reports)?
+        text::lower_name(&name, ctx.ctx.strings, ctx.ctx.reports)?
     } else {
-        ctx.reports.push(
+        ctx.ctx.reports.push(
             Report::error("missing endpoint name".to_string())
                 .add_label(Label::primary(
                     "missing endpoint name".to_string(),
@@ -147,10 +157,10 @@ fn lower_endpoint<P: EndpointParent>(
         .header_param()
         .and_then(|h| h.typ())
         .and_then(|typ| {
-            let name = ctx.strings.resolve(name_id);
+            let name = ctx.ctx.strings.resolve(name_id);
             let name = format!("{name}Headers");
             lower_simple_record_param(
-                ctx,
+                &mut ctx.ctx,
                 types,
                 values,
                 &typ,
@@ -168,10 +178,10 @@ fn lower_endpoint<P: EndpointParent>(
         .query_param()
         .and_then(|q| q.typ())
         .and_then(|typ| {
-            let name = ctx.strings.resolve(name_id);
+            let name = ctx.ctx.strings.resolve(name_id);
             let name = format!("{name}Query");
             lower_simple_record_param(
-                ctx,
+                &mut ctx.ctx,
                 types,
                 values,
                 &typ,
@@ -185,11 +195,12 @@ fn lower_endpoint<P: EndpointParent>(
         });
 
     // Lower query
+    // TODO: Check that fields match path fields
     let path_param = endpoint.path_param().and_then(|p| p.typ()).and_then(|typ| {
-        let name = ctx.strings.resolve(name_id);
+        let name = ctx.ctx.strings.resolve(name_id);
         let name = format!("{name}Path");
         lower_simple_record_param(
-            ctx,
+            &mut ctx.ctx,
             types,
             values,
             &typ,
@@ -206,12 +217,12 @@ fn lower_endpoint<P: EndpointParent>(
     let accept_id = endpoint
         .accept()
         .and_then(|a| a.value())
-        .and_then(|v| lower_mime_types(values, ctx.strings, ctx.reports, &v));
+        .and_then(|v| lower_mime_types(values, ctx.ctx.strings, ctx.ctx.reports, &v));
 
     // Does accept parameter requires the request body to be `file`
     let requires_file = accept_id.is_some_and(|id| {
         let val_ctx = ValueContext {
-            strings: ctx.strings,
+            strings: ctx.ctx.strings,
             values,
         };
 
@@ -221,21 +232,15 @@ fn lower_endpoint<P: EndpointParent>(
     });
 
     // Validate and lower request body.
-    let name = ctx.strings.resolve(name_id);
-    let req_body = lower_request_body(
-        ctx,
-        types,
-        values,
-        requires_file,
-        endpoint,
-        &format!("{name}RequestBody"),
-    )
-    .ok()?;
+    let name = ctx.ctx.strings.resolve(name_id);
+    let name = format!("{name}RequestBody");
+    let req_body =
+        lower_request_body(&mut ctx.ctx, types, values, requires_file, endpoint, &name).ok()?;
 
     // Lower path
     let path_token = endpoint.path().map(|p| p.string())?;
-    let parsed_str = text::parse_string(&path_token, ctx.reports);
-    let path = PathPart::new(&parsed_str, path_token.text_range(), ctx.reports);
+    let parsed_str = text::parse_string(&path_token, ctx.ctx.reports);
+    let path = PathPart::new(&parsed_str, path_token.text_range(), ctx.ctx.reports);
 
     let mut endpoint_builder = parent.add_endpoint(
         path,
@@ -254,8 +259,40 @@ fn lower_endpoint<P: EndpointParent>(
         },
     );
 
+    // Lower responses
+    ctx.response_statuses.clear();
     for resp in endpoint.responses() {
-        lower_endpoint_response(ctx, values, types, &mut endpoint_builder, &resp, name_id);
+        let Some(status) = lower_endpoint_response(
+            &mut ctx.ctx,
+            values,
+            types,
+            &mut endpoint_builder,
+            &resp,
+            name_id,
+        ) else {
+            continue;
+        };
+
+        let range = resp
+            .status()
+            .map(|s| s.syntax().text_range())
+            .unwrap_or_else(|| resp.syntax().text_range());
+
+        if let Some(existing_range) = ctx.response_statuses.get(&status) {
+            ctx.ctx.reports.push(
+                Report::error(format!("repeated response status {status}"))
+                    .add_label(Label::primary(
+                        "repeated response status".to_string(),
+                        range.into(),
+                    ))
+                    .add_label(Label::secondary(
+                        "response with same status first defined here".to_string(),
+                        (*existing_range).into(),
+                    )),
+            );
+        } else {
+            ctx.response_statuses.insert(status, range);
+        }
     }
 
     Some(endpoint_builder.finish())
@@ -403,7 +440,7 @@ fn lower_endpoint_response<P: ResponseParent>(
     parent: &mut P,
     resp: &ast::EndpointResponse,
     endpoint_name_id: StringId,
-) -> Option<()> {
+) -> Option<ResponseStatus> {
     // Validate status
     let status = match resp.status() {
         None => None,
@@ -458,8 +495,9 @@ fn lower_endpoint_response<P: ResponseParent>(
     };
 
     // TODO: Get docs from doc comments
-    parent.add_response(status?, type_id, None);
-    Some(())
+    let status = status?;
+    parent.add_response(status, type_id, None);
+    Some(status)
 }
 
 /// Name of the auto generated type for endpoint response
