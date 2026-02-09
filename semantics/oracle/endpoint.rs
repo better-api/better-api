@@ -551,18 +551,17 @@ fn lower_endpoint_response<P: ResponseParent>(
 /// - params for each path are unique
 /// - params match with endpoint path type
 fn validate_paths<'a>(range_map: &RangeMap, reports: &mut Vec<Report>, spec_ctx: &'a SpecContext) {
-    // Validate that paths are unique
     let mut path_unique: HashMap<Path<'a>, TextRange> = HashMap::new();
+
     for endpoint in spec_ctx.root_endpoints() {
         validate_endpoint_path_unique(range_map, reports, &endpoint, &mut path_unique);
+        validate_path_params_unique(&endpoint.path);
     }
 
     for route in spec_ctx.root_routes() {
         validate_route_paths_unique(range_map, reports, &route, &mut path_unique);
+        validate_route_path_params_unique(&route);
     }
-
-    // Validate path params for each path are unique.
-    // TODO: Implement unique path validation
 
     // TODO: Implement param and endpoint path type match
 }
@@ -611,6 +610,29 @@ fn validate_route_paths_unique<'a>(
     for route in route.routes() {
         validate_route_paths_unique(range_map, reports, &route, existing_paths);
     }
+}
+
+/// Auxiliary method to validate if params in route path are unique.
+///
+/// This is used to call itself recursively on descendants.
+fn validate_route_path_params_unique<'a>(route: &Route<'a>) {
+    // Validate path of "self"
+    validate_path_params_unique(&route.path);
+
+    // Validate child endpoints.
+    for endpoint in route.endpoints() {
+        validate_path_params_unique(&endpoint.path);
+    }
+
+    // Validate child routes.
+    for route in route.routes() {
+        validate_route_path_params_unique(&route);
+    }
+}
+
+/// Validate that path parameters are unique. Used for endpoint and route path validation.
+fn validate_path_params_unique<'a>(path: &Path<'a>) {
+    todo!()
 }
 
 /// Name of the auto generated type for endpoint response
