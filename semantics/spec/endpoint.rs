@@ -282,7 +282,7 @@ pub(crate) struct EndpointBuilder<'p> {
 }
 
 impl<'p> EndpointBuilder<'p> {
-    fn new(parent: Parent<'p>, path: PathPart, data: EndpointData) -> Self {
+    fn new(parent: Parent<'p>, path: PathPart, data: EndpointData) -> (Self, PathId) {
         let path_id = parent.paths.insert(parent.path_id, path);
 
         let idx = parent.data.len();
@@ -292,11 +292,12 @@ impl<'p> EndpointBuilder<'p> {
             end: 0,
         });
 
-        Self {
+        let builder = Self {
             parent,
             start: EndpointId(idx as u32),
             finished: false,
-        }
+        };
+        (builder, path_id)
     }
 
     /// Add a response to this endpoint.
@@ -360,7 +361,7 @@ pub(crate) struct RouteBuilder<'p> {
 }
 
 impl<'p> RouteBuilder<'p> {
-    fn new(parent: Parent<'p>, path: PathPart, docs: Option<StringId>) -> Self {
+    fn new(parent: Parent<'p>, path: PathPart, docs: Option<StringId>) -> (Self, PathId) {
         let path_id = parent.paths.insert(parent.path_id, path);
 
         let idx = parent.data.len();
@@ -370,12 +371,13 @@ impl<'p> RouteBuilder<'p> {
             end: 0,
         });
 
-        Self {
+        let builder = Self {
             parent,
             path_id,
             start: RouteId(idx as u32),
             finished: false,
-        }
+        };
+        (builder, path_id)
     }
 
     /// Returns self as Parent
@@ -408,7 +410,7 @@ impl<'p> RouteBuilder<'p> {
         &'a mut self,
         path: PathPart,
         data: EndpointData,
-    ) -> EndpointBuilder<'a> {
+    ) -> (EndpointBuilder<'a>, PathId) {
         EndpointBuilder::new(self.as_parent(), path, data)
     }
 
@@ -417,7 +419,7 @@ impl<'p> RouteBuilder<'p> {
         &'a mut self,
         path: PathPart,
         docs: Option<StringId>,
-    ) -> RouteBuilder<'a> {
+    ) -> (RouteBuilder<'a>, PathId) {
         RouteBuilder::new(self.as_parent(), path, docs)
     }
 
@@ -539,7 +541,7 @@ impl EndpointArena {
         &'a mut self,
         path: PathPart,
         fields: EndpointData,
-    ) -> EndpointBuilder<'a> {
+    ) -> (EndpointBuilder<'a>, PathId) {
         EndpointBuilder::new(self.parent(), path, fields)
     }
 
@@ -548,7 +550,7 @@ impl EndpointArena {
         &'a mut self,
         path: PathPart,
         docs: Option<StringId>,
-    ) -> RouteBuilder<'a> {
+    ) -> (RouteBuilder<'a>, PathId) {
         RouteBuilder::new(self.parent(), path, docs)
     }
 }
@@ -596,6 +598,28 @@ impl<'a> SpecContext<'a> {
             docs: docs.map(|id| self.strings.resolve(id)),
             ctx: *self,
             end: *end,
+        }
+    }
+
+    /// Return iterator through root routes.
+    ///
+    /// Root routes are routes without a parent.
+    pub(crate) fn root_routes(&self) -> RouteIterator<'a> {
+        RouteIterator {
+            ctx: *self,
+            current: 0,
+            end: self.endpoints.data.len() as u32,
+        }
+    }
+
+    /// Return iterator through root endpoints.
+    ///
+    /// Root endpoints are endpoints without a parent.
+    pub(crate) fn root_endpoints(&self) -> EndpointIterator<'a> {
+        EndpointIterator {
+            ctx: *self,
+            current: 0,
+            end: self.endpoints.data.len() as u32,
         }
     }
 
@@ -716,7 +740,7 @@ mod test {
         //   }
         // }
 
-        let mut root = spec.endpoints.add_route(PathPart::Empty, None);
+        let (mut root, _) = spec.endpoints.add_route(PathPart::Empty, None);
         root.add_response(
             ResponseStatus::Default,
             EndpointResponseTypeId::InlineType(unsafe {
@@ -732,7 +756,7 @@ mod test {
             None,
         );
 
-        let mut status_endpoint = root.add_endpoint(
+        let (mut status_endpoint, _) = root.add_endpoint(
             PathPart::Segment("/status"),
             EndpointData {
                 docs: None,
@@ -762,7 +786,7 @@ mod test {
         );
         let status_endpoint_id = status_endpoint.finish();
 
-        let mut users_route = root.add_route(PathPart::Segment("/users"), None);
+        let (mut users_route, _) = root.add_route(PathPart::Segment("/users"), None);
         users_route.add_response(
             ResponseStatus::Default,
             EndpointResponseTypeId::InlineType(unsafe {
@@ -771,7 +795,7 @@ mod test {
             None,
         );
 
-        let mut list_endpoint = users_route.add_endpoint(
+        let (mut list_endpoint, _) = users_route.add_endpoint(
             PathPart::Segment("/list"),
             EndpointData {
                 docs: None,
@@ -794,7 +818,7 @@ mod test {
         );
         let list_endpoint_id = list_endpoint.finish();
 
-        let mut create_endpoint = users_route.add_endpoint(
+        let (mut create_endpoint, _) = users_route.add_endpoint(
             PathPart::Segment("/create"),
             EndpointData {
                 docs: None,
@@ -817,7 +841,7 @@ mod test {
         );
         let create_endpoint_id = create_endpoint.finish();
 
-        let mut admin_route = users_route.add_route(PathPart::Segment("/admin"), None);
+        let (mut admin_route, _) = users_route.add_route(PathPart::Segment("/admin"), None);
         admin_route.add_response(
             ResponseStatus::Code(StatusCode::UNAUTHORIZED),
             EndpointResponseTypeId::InlineType(unsafe {
@@ -826,7 +850,7 @@ mod test {
             None,
         );
 
-        let mut admin_endpoint = admin_route.add_endpoint(
+        let (mut admin_endpoint, _) = admin_route.add_endpoint(
             PathPart::Segment("/ban"),
             EndpointData {
                 docs: None,

@@ -3,10 +3,11 @@
 use std::collections::HashMap;
 
 use better_api_diagnostic::Report;
-use better_api_syntax::ast;
+use better_api_syntax::{TextRange, ast};
 
+use crate::path::PathId;
 use crate::spec::endpoint::EndpointArena;
-use crate::spec::typ::TypeArena;
+use crate::spec::typ::{TypeArena, TypeFieldId};
 use crate::spec::value::ValueArena;
 use crate::spec::{Metadata, SpecContext, SymbolTable};
 use crate::string::{StringId, StringInterner};
@@ -43,6 +44,25 @@ pub struct Oracle<'a> {
 
     // Reports generated during semantic analysis
     reports: Vec<Report>,
+
+    // Range mapping for some of the semantic elements.
+    //
+    // Some of the checks are done after lowering the types, because
+    // it's easier this way. We use this map to store the range information
+    // so that the checks can emit nice reports.
+    range_map: RangeMap,
+}
+
+#[derive(Clone, Default)]
+struct RangeMap {
+    /// Path to range mapping.
+    ///
+    /// Note that path is made up of multiple parts. PathId points to the last
+    /// part of the path. This mapping maps last path part to its range.
+    path: HashMap<PathId, TextRange>,
+
+    /// Map record and union field names to their ranges.
+    field_name: HashMap<TypeFieldId, TextRange>,
 }
 
 struct Context<'o, 'a> {
@@ -50,6 +70,7 @@ struct Context<'o, 'a> {
     spec_symbol_table: &'o mut SymbolTable,
     symbol_map: &'o mut SymbolMap,
     reports: &'o mut Vec<Report>,
+    range_map: &'o mut RangeMap,
 
     root: &'a ast::Root,
 }
@@ -74,6 +95,8 @@ impl<'a> Oracle<'a> {
             root,
 
             reports: Default::default(),
+
+            range_map: Default::default(),
         };
 
         oracle.analyze();
@@ -108,6 +131,8 @@ impl<'a> Oracle<'a> {
         self.lower_type_definitions();
 
         self.lower_endpoints();
+        // TODO: Lower routes
+        self.validate_paths();
     }
 
     #[cfg(test)]
@@ -128,6 +153,8 @@ impl<'a> Oracle<'a> {
             root,
 
             reports: Default::default(),
+
+            range_map: Default::default(),
         }
     }
 }

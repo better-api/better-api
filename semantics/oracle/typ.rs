@@ -102,6 +102,7 @@ impl<'a> Oracle<'a> {
             spec_symbol_table: &mut self.spec_symbol_table,
             symbol_map: &mut self.symbol_map,
             reports: &mut self.reports,
+            range_map: &mut self.range_map,
             root: self.root,
         };
 
@@ -126,6 +127,7 @@ impl<'a> Oracle<'a> {
             spec_symbol_table: &mut self.spec_symbol_table,
             symbol_map: &mut self.symbol_map,
             reports: &mut self.reports,
+            range_map: &mut self.range_map,
             root: self.root,
         };
 
@@ -174,6 +176,7 @@ impl<'a> Oracle<'a> {
             spec_symbol_table: &mut self.spec_symbol_table,
             symbol_map: &mut self.symbol_map,
             reports: &mut self.reports,
+            range_map: &mut self.range_map,
             root: self.root,
         };
 
@@ -206,6 +209,7 @@ impl<'a> Oracle<'a> {
             spec_symbol_table: &mut self.spec_symbol_table,
             symbol_map: &mut self.symbol_map,
             reports: &mut self.reports,
+            range_map: &mut self.range_map,
             root: self.root,
         };
 
@@ -286,10 +290,8 @@ pub(crate) fn lower_type(
 ) -> Option<RootTypeId> {
     match ParsedType::new(typ, ctx.strings) {
         ParsedType::Primitive(primitive) => Some(types.add_primitive(primitive).into()),
-        ParsedType::Reference { name, range } => match validate_reference(ctx, name, range) {
-            None => None,
-            Some(valid_ref) => Some(types.add_reference(valid_ref.into())),
-        },
+        ParsedType::Reference { name, range } => validate_reference(ctx, name, range)
+            .map(|valid_ref| Some(types.add_reference(valid_ref.into())))?,
         ParsedType::Enum(en) => lower_enum(ctx, types, values, en).map(|id| id.into()),
         ParsedType::Record(record) => Some(lower_record(ctx, types, values, record).into()),
         ParsedType::Union(union) => lower_union(ctx, types, values, union).map(|id| id.into()),
@@ -1368,17 +1370,24 @@ fn insert_type_fields(
             .typ()
             .expect("inserted field should have a type");
 
-        match ParsedType::new(&typ, ctx.strings) {
+        let name_range = field
+            .field
+            .name()
+            .expect("inserted field should have a name")
+            .syntax()
+            .text_range();
+
+        let field_id = match ParsedType::new(&typ, ctx.strings) {
             ParsedType::Primitive(primitive) => {
-                builder.add_primitive(field.name, primitive, field.default, field.docs);
+                builder.add_primitive(field.name, primitive, field.default, field.docs)
             }
             ParsedType::Reference { name, range } => {
                 match validate_reference(ctx, name, range) {
-                    None => (),
+                    None => continue,
                     // On response we do nothing. Report was generated in `parse_type_fields`.
-                    Some(ValidRef::Response { .. }) => (),
+                    Some(ValidRef::Response { .. }) => continue,
                     Some(ValidRef::Type(reference)) => {
-                        builder.add_reference(field.name, reference, field.default, field.docs);
+                        builder.add_reference(field.name, reference, field.default, field.docs)
                     }
                 }
             }
@@ -1387,17 +1396,20 @@ fn insert_type_fields(
                     continue;
                 };
 
-                let (child_builder, _) = builder.start_array(field.name, field.default, None);
+                let (child_builder, field_id) =
+                    builder.start_array(field.name, field.default, None);
                 lower_array_option(ctx, &inner, child_builder, InvalidOuterContext::Array);
+                field_id
             }
             ParsedType::Option(opt) => {
                 let Some(inner) = opt.typ() else {
                     continue;
                 };
 
-                let (child_builder, _) =
+                let (child_builder, field_id) =
                     builder.start_option(field.name, field.default, field.docs);
                 lower_array_option(ctx, &inner, child_builder, InvalidOuterContext::Option);
+                field_id
             }
             ParsedType::Enum(_) => {
                 ctx.reports.push(new_invalid_inner_type(
@@ -1405,15 +1417,17 @@ fn insert_type_fields(
                     outer_type,
                     &typ,
                 ));
+                continue;
             }
             // On response we do nothing. Report was generated in `parse_type_fields`.
-            ParsedType::Response => (),
+            ParsedType::Response => continue,
             ParsedType::Record(_) => {
                 ctx.reports.push(new_invalid_inner_type(
                     InvalidInnerContext::Record,
                     outer_type,
                     &typ,
                 ));
+                continue;
             }
             ParsedType::Union(_) => {
                 ctx.reports.push(new_invalid_inner_type(
@@ -1421,8 +1435,11 @@ fn insert_type_fields(
                     outer_type,
                     &typ,
                 ));
+                continue;
             }
         };
+
+        ctx.range_map.field_name.insert(field_id, name_range);
     }
 
     builder.finish()

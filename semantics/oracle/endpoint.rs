@@ -6,17 +6,18 @@ use better_api_diagnostic::{Label, Report};
 use better_api_syntax::TextRange;
 use better_api_syntax::ast::{self, AstNode};
 
-use crate::oracle::Context;
 use crate::oracle::symbols::deref;
 use crate::oracle::typ::{
     SimpleRecordParamConfig, ensure_inline, lower_response, lower_simple_record_param, lower_type,
     require_no_file, require_not_response, require_with_deref,
 };
 use crate::oracle::value::lower_mime_types;
-use crate::path::PathPart;
+use crate::oracle::{Context, RangeMap};
+use crate::path::{Path, PathId, PathPart};
+use crate::spec::SpecContext;
 use crate::spec::endpoint::{
-    EndpointArena, EndpointBuilder, EndpointData, EndpointId, EndpointResponseId,
-    EndpointResponseTypeId, ResponseStatus, RouteBuilder,
+    Endpoint, EndpointArena, EndpointBuilder, EndpointData, EndpointId, EndpointResponseId,
+    EndpointResponseTypeId, ResponseStatus, Route, RouteBuilder,
 };
 use crate::spec::typ::{InlineTyId, ResponseReferenceId, TypeArena};
 use crate::spec::value::{ValueArena, ValueContext};
@@ -27,31 +28,55 @@ use super::Oracle;
 
 /// Helper trait to unify endpoint arena and route builder.
 trait EndpointParent {
-    fn add_endpoint<'a>(&'a mut self, path: PathPart, data: EndpointData) -> EndpointBuilder<'a>;
+    fn add_endpoint<'a>(
+        &'a mut self,
+        path: PathPart,
+        data: EndpointData,
+    ) -> (EndpointBuilder<'a>, PathId);
 
-    fn add_route<'a>(&'a mut self, path: PathPart, docs: Option<StringId>) -> RouteBuilder<'a>;
+    fn add_route<'a>(
+        &'a mut self,
+        path: PathPart,
+        docs: Option<StringId>,
+    ) -> (RouteBuilder<'a>, PathId);
 }
 
 impl EndpointParent for EndpointArena {
     #[inline(always)]
-    fn add_endpoint<'a>(&'a mut self, path: PathPart, data: EndpointData) -> EndpointBuilder<'a> {
+    fn add_endpoint<'a>(
+        &'a mut self,
+        path: PathPart,
+        data: EndpointData,
+    ) -> (EndpointBuilder<'a>, PathId) {
         self.add_endpoint(path, data)
     }
 
     #[inline(always)]
-    fn add_route<'a>(&'a mut self, path: PathPart, docs: Option<StringId>) -> RouteBuilder<'a> {
+    fn add_route<'a>(
+        &'a mut self,
+        path: PathPart,
+        docs: Option<StringId>,
+    ) -> (RouteBuilder<'a>, PathId) {
         self.add_route(path, docs)
     }
 }
 
 impl EndpointParent for RouteBuilder<'_> {
     #[inline(always)]
-    fn add_endpoint<'a>(&'a mut self, path: PathPart, data: EndpointData) -> EndpointBuilder<'a> {
+    fn add_endpoint<'a>(
+        &'a mut self,
+        path: PathPart,
+        data: EndpointData,
+    ) -> (EndpointBuilder<'a>, PathId) {
         self.add_endpoint(path, data)
     }
 
     #[inline(always)]
-    fn add_route<'a>(&'a mut self, path: PathPart, docs: Option<StringId>) -> RouteBuilder<'a> {
+    fn add_route<'a>(
+        &'a mut self,
+        path: PathPart,
+        docs: Option<StringId>,
+    ) -> (RouteBuilder<'a>, PathId) {
         self.add_route(path, docs)
     }
 }
@@ -104,6 +129,7 @@ impl<'a> Oracle<'a> {
                 spec_symbol_table: &mut self.spec_symbol_table,
                 symbol_map: &mut self.symbol_map,
                 reports: &mut self.reports,
+                range_map: &mut self.range_map,
                 root: self.root,
             },
             response_statuses: HashMap::new(),
@@ -118,6 +144,18 @@ impl<'a> Oracle<'a> {
                 &endpoint,
             );
         }
+    }
+
+    pub(crate) fn validate_paths(&mut self) {
+        let spec_ctx = SpecContext {
+            strings: &self.strings,
+            symbol_table: &self.spec_symbol_table,
+            values: &self.values,
+            types: &self.types,
+            endpoints: &self.endpoints,
+        };
+
+        validate_paths(&self.range_map, &mut self.reports, &spec_ctx);
     }
 }
 
@@ -242,7 +280,7 @@ fn lower_endpoint<P: EndpointParent>(
     let parsed_str = text::parse_string(&path_token, ctx.ctx.reports);
     let path = PathPart::new(&parsed_str, path_token.text_range(), ctx.ctx.reports);
 
-    let mut endpoint_builder = parent.add_endpoint(
+    let (mut endpoint_builder, path_id) = parent.add_endpoint(
         path,
         EndpointData {
             method: method?,
@@ -258,6 +296,12 @@ fn lower_endpoint<P: EndpointParent>(
             request_body_docs: None,
         },
     );
+
+    // Insert range mapping for path
+    ctx.ctx
+        .range_map
+        .path
+        .insert(path_id, path_token.text_range());
 
     // Lower responses
     ctx.response_statuses.clear();
@@ -498,6 +542,75 @@ fn lower_endpoint_response<P: ResponseParent>(
     let status = status?;
     parent.add_response(status, type_id, None);
     Some(status)
+}
+
+/// Validate paths are correct
+///
+/// Specifically this checks:
+/// - paths are unique
+/// - params for each path are unique
+/// - params match with endpoint path type
+fn validate_paths<'a>(range_map: &RangeMap, reports: &mut Vec<Report>, spec_ctx: &'a SpecContext) {
+    // Validate that paths are unique
+    let mut path_unique: HashMap<Path<'a>, TextRange> = HashMap::new();
+    for endpoint in spec_ctx.root_endpoints() {
+        validate_endpoint_path_unique(range_map, reports, &endpoint, &mut path_unique);
+    }
+
+    for route in spec_ctx.root_routes() {
+        validate_route_paths_unique(range_map, reports, &route, &mut path_unique);
+    }
+
+    // Validate path params for each path are unique.
+    // TODO: Implement unique path validation
+
+    // TODO: Implement param and endpoint path type match
+}
+
+/// Auxiliary method to validate if endpoint path is unique.
+fn validate_endpoint_path_unique<'a>(
+    range_map: &RangeMap,
+    reports: &mut Vec<Report>,
+    endpoint: &Endpoint<'a>,
+    existing_paths: &mut HashMap<Path<'a>, TextRange>,
+) {
+    let path_id = endpoint.path.id();
+    let path_range = range_map
+        .path
+        .get(&path_id)
+        .expect("endpoint paths should be inserted into range map");
+
+    if let Some(existing_range) = existing_paths.get(&endpoint.path) {
+        reports.push(
+            Report::error("duplicated endpoint path".to_string())
+                .add_label(Label::primary(
+                    "duplicated endpoint path".to_string(),
+                    (*path_range).into(),
+                ))
+                .add_label(Label::secondary(
+                    "same path first defined here".to_string(),
+                    (*existing_range).into(),
+                )),
+        );
+    } else {
+        existing_paths.insert(endpoint.path.clone(), *path_range);
+    }
+}
+
+/// Auxiliary method to validate if all endpoints inside the route have unique paths.
+fn validate_route_paths_unique<'a>(
+    range_map: &RangeMap,
+    reports: &mut Vec<Report>,
+    route: &Route<'a>,
+    existing_paths: &mut HashMap<Path<'a>, TextRange>,
+) {
+    for endpoint in route.endpoints() {
+        validate_endpoint_path_unique(range_map, reports, &endpoint, existing_paths);
+    }
+
+    for route in route.routes() {
+        validate_route_paths_unique(range_map, reports, &route, existing_paths);
+    }
 }
 
 /// Name of the auto generated type for endpoint response
