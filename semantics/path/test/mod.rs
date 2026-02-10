@@ -1,6 +1,7 @@
 use better_api_syntax::{TextRange, TextSize};
 
 mod part;
+mod param;
 mod path;
 
 /// Helper function for constructing mock text range that belongs to a string.

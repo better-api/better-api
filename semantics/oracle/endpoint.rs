@@ -13,7 +13,7 @@ use crate::oracle::typ::{
 };
 use crate::oracle::value::lower_mime_types;
 use crate::oracle::{Context, RangeMap};
-use crate::path::{Path, PathId, PathPart};
+use crate::path::{Path, PathId, PathParamIterator, PathPart};
 use crate::spec::SpecContext;
 use crate::spec::endpoint::{
     Endpoint, EndpointArena, EndpointBuilder, EndpointData, EndpointId, EndpointResponseId,
@@ -233,7 +233,6 @@ fn lower_endpoint<P: EndpointParent>(
         });
 
     // Lower query
-    // TODO: Check that fields match path fields
     let path_param = endpoint.path_param().and_then(|p| p.typ()).and_then(|typ| {
         let name = ctx.ctx.strings.resolve(name_id);
         let name = format!("{name}Path");
@@ -552,15 +551,22 @@ fn lower_endpoint_response<P: ResponseParent>(
 /// - params match with endpoint path type
 fn validate_paths<'a>(range_map: &RangeMap, reports: &mut Vec<Report>, spec_ctx: &'a SpecContext) {
     let mut path_unique: HashMap<Path<'a>, TextRange> = HashMap::new();
+    let mut param_unique: HashMap<&'a str, TextRange> = HashMap::new();
 
     for endpoint in spec_ctx.root_endpoints() {
         validate_endpoint_path_unique(range_map, reports, &endpoint, &mut path_unique);
-        validate_path_params_unique(&endpoint.path);
+        validate_path_params_unique(
+            range_map,
+            reports,
+            &mut param_unique,
+            &endpoint.path,
+            |_, _, _| {},
+        );
     }
 
     for route in spec_ctx.root_routes() {
         validate_route_paths_unique(range_map, reports, &route, &mut path_unique);
-        validate_route_path_params_unique(&route);
+        validate_route_path_params_unique(range_map, reports, &mut param_unique, &route);
     }
 
     // TODO: Implement param and endpoint path type match
@@ -615,24 +621,98 @@ fn validate_route_paths_unique<'a>(
 /// Auxiliary method to validate if params in route path are unique.
 ///
 /// This is used to call itself recursively on descendants.
-fn validate_route_path_params_unique<'a>(route: &Route<'a>) {
-    // Validate path of "self"
-    validate_path_params_unique(&route.path);
+fn validate_route_path_params_unique<'a>(
+    range_map: &RangeMap,
+    reports: &mut Vec<Report>,
+    param_unique: &mut HashMap<&'a str, TextRange>,
+    route: &Route<'a>,
+) {
+    // Validate self and then children
+    validate_path_params_unique(
+        range_map,
+        reports,
+        param_unique,
+        &route.path,
+        |range_map, reports, param_unique| {
+            // Validate child endpoints.
+            for endpoint in route.endpoints() {
+                validate_path_params_unique(
+                    range_map,
+                    reports,
+                    param_unique,
+                    &endpoint.path,
+                    |_, _, _| {},
+                );
+            }
 
-    // Validate child endpoints.
-    for endpoint in route.endpoints() {
-        validate_path_params_unique(&endpoint.path);
-    }
-
-    // Validate child routes.
-    for route in route.routes() {
-        validate_route_path_params_unique(&route);
-    }
+            // Validate child routes.
+            for route in route.routes() {
+                validate_route_path_params_unique(range_map, reports, param_unique, &route);
+            }
+        },
+    );
 }
 
 /// Validate that path parameters are unique. Used for endpoint and route path validation.
-fn validate_path_params_unique<'a>(path: &Path<'a>) {
-    todo!()
+///
+/// Params of the last path param are put into param_unique.
+fn validate_path_params_unique<'a, F>(
+    range_map: &RangeMap,
+    reports: &mut Vec<Report>,
+    param_unique: &mut HashMap<&'a str, TextRange>,
+    path: &Path<'a>,
+    inner: F,
+) where
+    F: Fn(&RangeMap, &mut Vec<Report>, &mut HashMap<&'a str, TextRange>),
+{
+    // We have to only validate the last segment, which is path.part(). Previous segments are
+    // validated by parent calls.
+    let PathPart::Segment(segment) = path.part() else {
+        return;
+    };
+
+    let range = range_map
+        .path
+        .get(&path.id())
+        .expect("endpoint paths should be inserted into range map");
+    let params = PathParamIterator::new(segment, *range);
+    for (param, range) in params {
+        match param_unique.get(param) {
+            None => {
+                param_unique.insert(param, range);
+            }
+            Some(existing_range) => {
+                reports.push(
+                    Report::error(format!("path parameter '{param}' already defined"))
+                        .add_label(Label::primary(
+                            "path parameter already defined".to_string(),
+                            range.into(),
+                        ))
+                        .add_label(Label::secondary(
+                            "previously defined here".to_string(),
+                            (*existing_range).into(),
+                        )),
+                );
+            }
+        }
+    }
+
+    inner(range_map, reports, param_unique);
+
+    // Clean params
+    let params = PathParamIterator::new(segment, *range);
+
+    for (param, range) in params {
+        let Some(stored_range) = param_unique.get(param) else {
+            continue;
+        };
+
+        // If ranges don't match, the param was defined by one of the parents,
+        // which means we shouldn't be the ones removing it.
+        if range == *stored_range {
+            param_unique.remove(param);
+        }
+    }
 }
 
 /// Name of the auto generated type for endpoint response

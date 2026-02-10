@@ -48,12 +48,13 @@
 
 use std::hash::{Hash, Hasher};
 use std::iter::Peekable;
+use std::str::CharIndices;
 use std::{cmp::Ordering, str::Chars};
 
 use smallvec::SmallVec;
 
 use better_api_diagnostic::{Label, Report, Span};
-use better_api_syntax::TextRange;
+use better_api_syntax::{TextRange, TextSize};
 
 #[cfg(test)]
 mod test;
@@ -96,7 +97,7 @@ impl<'a> Path<'a> {
     }
 
     /// Get the tail part of the path
-    pub fn part(&'a self) -> PathPart<'a> {
+    pub fn part(&self) -> PathPart<'a> {
         self.part
     }
 
@@ -351,6 +352,54 @@ fn hash_segment(segment: &mut Peekable<Chars>, state: &mut impl Hasher) {
         } else {
             ch.hash(state);
         }
+    }
+}
+
+/// Iterator through path parameters
+pub(crate) struct PathParamIterator<'a> {
+    part: &'a str,
+    range: TextRange,
+    chars: CharIndices<'a>,
+}
+
+impl<'a> PathParamIterator<'a> {
+    pub(crate) fn new(part: &'a str, range: TextRange) -> Self {
+        Self {
+            part,
+            range,
+            chars: part.char_indices(),
+        }
+    }
+}
+
+impl<'a> Iterator for PathParamIterator<'a> {
+    type Item = (&'a str, TextRange);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some((idx, ch)) = self.chars.next() {
+            if ch != '{' {
+                continue;
+            }
+
+            let start_idx = idx + 1;
+
+            let end_idx = self
+                .chars
+                .find_map(|(idx, ch)| if ch == '}' { Some(idx) } else { None });
+            let Some(end_idx) = end_idx else {
+                continue;
+            };
+
+            // +1 accounts for the starting `"` of the string containing the path.
+            let start = TextSize::from(start_idx as u32 + 1) + self.range.start();
+            let end = TextSize::from(end_idx as u32 + 1) + self.range.start();
+
+            let param = &self.part[start_idx..end_idx];
+            let range = TextRange::new(start, end);
+            return Some((param, range));
+        }
+
+        None
     }
 }
 
