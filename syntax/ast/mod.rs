@@ -941,6 +941,22 @@ impl EndpointPathParams {
     pub fn typ(&self) -> Option<Type> {
         self.0.children().find_map(Type::cast)
     }
+
+    /// Range of the path attribute name.
+    pub fn name_range(&self) -> TextRange {
+        let token = self
+            .0
+            .first_token()
+            .expect("parser should parse endpint path attribute correctly");
+
+        assert_eq!(
+            token.kind(),
+            TOKEN_IDENTIFIER,
+            "parser should parse endpint path attribute correctly"
+        );
+
+        token.text_range()
+    }
 }
 
 ast_node! {

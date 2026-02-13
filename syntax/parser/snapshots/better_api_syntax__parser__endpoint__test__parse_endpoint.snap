@@ -2,8 +2,8 @@
 source: syntax/parser/endpoint.rs
 expression: res.node
 ---
-NODE_ROOT@0..278
-  NODE_ENDPOINT@0..278
+NODE_ROOT@0..299
+  NODE_ENDPOINT@0..299
     NODE_PROLOGUE@0..21
       TOKEN_DOC_COMMENT@0..20 "/// Greet the caller"
       TOKEN_EOL@20..21 "\n"
@@ -58,45 +58,54 @@ NODE_ROOT@0..278
       TOKEN_EOL@165..166 "\n"
     TOKEN_EOL@166..167 "\n"
     TOKEN_SPACE@167..171 "    "
-    NODE_RESPONSE@171..245
-      NODE_PROLOGUE@171..200
-        TOKEN_DOC_COMMENT@171..195 "/// Successfull greeting"
-        TOKEN_EOL@195..196 "\n"
-        TOKEN_SPACE@196..200 "    "
-      TOKEN_KW_ON@200..202 "on"
-      TOKEN_SPACE@202..203 " "
-      NODE_RESPONSE_STATUS@203..206
-        TOKEN_INTEGER@203..206 "200"
-      TOKEN_COLON@206..207 ":"
-      TOKEN_SPACE@207..208 " "
-      NODE_TYPE_RECORD@208..244
-        TOKEN_KW_REC@208..211 "rec"
-        TOKEN_SPACE@211..212 " "
-        TOKEN_CURLY_LEFT@212..213 "{"
-        TOKEN_EOL@213..214 "\n"
-        TOKEN_SPACE@214..222 "        "
-        NODE_TYPE_FIELD@222..239
-          NODE_NAME@222..230
-            TOKEN_IDENTIFIER@222..230 "greeting"
-          TOKEN_COLON@230..231 ":"
-          TOKEN_SPACE@231..232 " "
-          NODE_TYPE_STRING@232..238
-            TOKEN_KW_STRING@232..238 "string"
-          TOKEN_EOL@238..239 "\n"
-        TOKEN_SPACE@239..243 "    "
-        TOKEN_CURLY_RIGHT@243..244 "}"
-      TOKEN_EOL@244..245 "\n"
-    TOKEN_EOL@245..246 "\n"
-    TOKEN_SPACE@246..250 "    "
-    NODE_RESPONSE@250..276
-      TOKEN_KW_ON@250..252 "on"
-      TOKEN_SPACE@252..253 " "
-      NODE_RESPONSE_STATUS@253..260
-        TOKEN_KW_DEFAULT@253..260 "default"
-      TOKEN_COLON@260..261 ":"
-      TOKEN_SPACE@261..262 " "
-      NODE_TYPE_REF@262..275
-        TOKEN_IDENTIFIER@262..275 "ErrorResponse"
-      TOKEN_EOL@275..276 "\n"
-    TOKEN_CURLY_RIGHT@276..277 "}"
-    TOKEN_EOL@277..278 "\n"
+    NODE_ENDPOINT_PATH@171..187
+      TOKEN_IDENTIFIER@171..175 "path"
+      TOKEN_COLON@175..176 ":"
+      TOKEN_SPACE@176..177 " "
+      NODE_TYPE_REF@177..186
+        TOKEN_IDENTIFIER@177..186 "HelloPath"
+      TOKEN_EOL@186..187 "\n"
+    TOKEN_EOL@187..188 "\n"
+    TOKEN_SPACE@188..192 "    "
+    NODE_RESPONSE@192..266
+      NODE_PROLOGUE@192..221
+        TOKEN_DOC_COMMENT@192..216 "/// Successfull greeting"
+        TOKEN_EOL@216..217 "\n"
+        TOKEN_SPACE@217..221 "    "
+      TOKEN_KW_ON@221..223 "on"
+      TOKEN_SPACE@223..224 " "
+      NODE_RESPONSE_STATUS@224..227
+        TOKEN_INTEGER@224..227 "200"
+      TOKEN_COLON@227..228 ":"
+      TOKEN_SPACE@228..229 " "
+      NODE_TYPE_RECORD@229..265
+        TOKEN_KW_REC@229..232 "rec"
+        TOKEN_SPACE@232..233 " "
+        TOKEN_CURLY_LEFT@233..234 "{"
+        TOKEN_EOL@234..235 "\n"
+        TOKEN_SPACE@235..243 "        "
+        NODE_TYPE_FIELD@243..260
+          NODE_NAME@243..251
+            TOKEN_IDENTIFIER@243..251 "greeting"
+          TOKEN_COLON@251..252 ":"
+          TOKEN_SPACE@252..253 " "
+          NODE_TYPE_STRING@253..259
+            TOKEN_KW_STRING@253..259 "string"
+          TOKEN_EOL@259..260 "\n"
+        TOKEN_SPACE@260..264 "    "
+        TOKEN_CURLY_RIGHT@264..265 "}"
+      TOKEN_EOL@265..266 "\n"
+    TOKEN_EOL@266..267 "\n"
+    TOKEN_SPACE@267..271 "    "
+    NODE_RESPONSE@271..297
+      TOKEN_KW_ON@271..273 "on"
+      TOKEN_SPACE@273..274 " "
+      NODE_RESPONSE_STATUS@274..281
+        TOKEN_KW_DEFAULT@274..281 "default"
+      TOKEN_COLON@281..282 ":"
+      TOKEN_SPACE@282..283 " "
+      NODE_TYPE_REF@283..296
+        TOKEN_IDENTIFIER@283..296 "ErrorResponse"
+      TOKEN_EOL@296..297 "\n"
+    TOKEN_CURLY_RIGHT@297..298 "}"
+    TOKEN_EOL@298..299 "\n"

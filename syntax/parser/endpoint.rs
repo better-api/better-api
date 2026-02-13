@@ -341,6 +341,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 #[cfg(test)]
 mod test {
     use indoc::indoc;
+    use rowan::{TextRange, TextSize};
 
     use crate::{parse, tokenize};
 
@@ -357,6 +358,8 @@ mod test {
                     name: string 
                 }
 
+                path: HelloPath
+
                 /// Successfull greeting
                 on 200: rec {
                     greeting: string
@@ -372,6 +375,12 @@ mod test {
         let res = parse(tokens);
         insta::assert_debug_snapshot!(res.node);
         assert_eq!(res.reports, vec![]);
+
+        let path_param = res.root.endpoints().next().unwrap().path_param().unwrap();
+        assert_eq!(
+            path_param.name_range(),
+            TextRange::new(TextSize::from(171), TextSize::from(175))
+        )
     }
 
     #[test]

@@ -19,7 +19,9 @@ use crate::spec::endpoint::{
     Endpoint, EndpointArena, EndpointBuilder, EndpointData, EndpointId, EndpointResponseId,
     EndpointResponseTypeId, ResponseStatus, Route, RouteBuilder,
 };
-use crate::spec::typ::{InlineTyId, ResponseReferenceId, TypeArena};
+use crate::spec::typ::{
+    InlineTyId, NamedReference, ResponseReferenceId, SimpleRecordReference, TypeArena,
+};
 use crate::spec::value::{ValueArena, ValueContext};
 use crate::string::{StringId, StringInterner};
 use crate::text;
@@ -249,6 +251,15 @@ fn lower_endpoint<P: EndpointParent>(
             },
         )
     });
+    if let Some(param) = path_param {
+        ctx.ctx.range_map.endpoint_path_attribute_name.insert(
+            param.into(),
+            endpoint
+                .path_param()
+                .expect("path param should exist")
+                .name_range(),
+        );
+    }
 
     // Lower accept header
     let accept_id = endpoint
@@ -551,14 +562,23 @@ fn lower_endpoint_response<P: ResponseParent>(
 /// - params match with endpoint path type
 fn validate_paths<'a>(range_map: &RangeMap, reports: &mut Vec<Report>, spec_ctx: &'a SpecContext) {
     let mut path_unique: HashMap<Path<'a>, TextRange> = HashMap::new();
-    let mut param_unique: HashMap<&'a str, TextRange> = HashMap::new();
+    let mut params: HashMap<&'a str, TextRange> = HashMap::new();
+    let mut fields_buf: HashMap<&'a str, TextRange> = HashMap::new();
 
     for endpoint in spec_ctx.root_endpoints() {
         validate_endpoint_path_unique(range_map, reports, &endpoint, &mut path_unique);
-        validate_path_params_unique(
+
+        let fields = PathParamTypeFields::from_endpoint_path(
+            range_map,
+            &mut fields_buf,
+            endpoint.path_param,
+        );
+
+        validate_path_params(
             range_map,
             reports,
-            &mut param_unique,
+            &mut params,
+            fields,
             &endpoint.path,
             |_, _, _| {},
         );
@@ -566,10 +586,8 @@ fn validate_paths<'a>(range_map: &RangeMap, reports: &mut Vec<Report>, spec_ctx:
 
     for route in spec_ctx.root_routes() {
         validate_route_paths_unique(range_map, reports, &route, &mut path_unique);
-        validate_route_path_params_unique(range_map, reports, &mut param_unique, &route);
+        validate_route_path_params(range_map, reports, &mut params, &mut fields_buf, &route);
     }
-
-    // TODO: Implement param and endpoint path type match
 }
 
 /// Auxiliary method to validate if endpoint path is unique.
@@ -618,28 +636,37 @@ fn validate_route_paths_unique<'a>(
     }
 }
 
-/// Auxiliary method to validate if params in route path are unique.
+/// Auxiliary method to validate if params in route path are valid.
 ///
 /// This is used to call itself recursively on descendants.
-fn validate_route_path_params_unique<'a>(
+fn validate_route_path_params<'a>(
     range_map: &RangeMap,
     reports: &mut Vec<Report>,
-    param_unique: &mut HashMap<&'a str, TextRange>,
+    params: &mut HashMap<&'a str, TextRange>,
+    fields_buf: &mut HashMap<&'a str, TextRange>,
     route: &Route<'a>,
 ) {
     // Validate self and then children
-    validate_path_params_unique(
+    validate_path_params(
         range_map,
         reports,
-        param_unique,
+        params,
+        PathParamTypeFields::Ignore,
         &route.path,
-        |range_map, reports, param_unique| {
+        |range_map, reports, params| {
             // Validate child endpoints.
             for endpoint in route.endpoints() {
-                validate_path_params_unique(
+                let fields = PathParamTypeFields::from_endpoint_path(
+                    range_map,
+                    fields_buf,
+                    endpoint.path_param,
+                );
+
+                validate_path_params(
                     range_map,
                     reports,
-                    param_unique,
+                    params,
+                    fields,
                     &endpoint.path,
                     |_, _, _| {},
                 );
@@ -647,71 +674,201 @@ fn validate_route_path_params_unique<'a>(
 
             // Validate child routes.
             for route in route.routes() {
-                validate_route_path_params_unique(range_map, reports, param_unique, &route);
+                validate_route_path_params(range_map, reports, params, fields_buf, &route);
             }
         },
     );
 }
 
-/// Validate that path parameters are unique. Used for endpoint and route path validation.
+/// Path parameter type fields that should be validated.
 ///
-/// Params of the last path param are put into param_unique.
-fn validate_path_params_unique<'a, F>(
+/// This is basically [`Endpoint::path_param`] converted to HashMap.
+enum PathParamTypeFields<'a, 'b> {
+    Ignore,
+    None,
+    Some {
+        fields: &'b mut HashMap<&'a str, TextRange>,
+        path_attribute_name_range: TextRange,
+    },
+}
+
+impl<'a, 'b> PathParamTypeFields<'a, 'b> {
+    fn from_endpoint_path(
+        range_map: &RangeMap,
+        fields_buf: &'b mut HashMap<&'a str, TextRange>,
+        path_param: Option<NamedReference<'a, SimpleRecordReference<'a>>>,
+    ) -> Self {
+        let Some(mut path_param) = path_param else {
+            return Self::None;
+        };
+
+        let attribute_range = range_map
+            .endpoint_path_attribute_name
+            .get(&path_param.id())
+            .expect("endpoint path attribute range should be inserted into range map");
+
+        let record = loop {
+            match path_param.typ() {
+                SimpleRecordReference::SimpleRecord(record) => break record,
+                SimpleRecordReference::NamedReference(reference) => path_param = reference,
+            }
+        };
+
+        fields_buf.clear();
+        for field in record.fields() {
+            let range = range_map
+                .field_name
+                .get(&field.id)
+                .expect("record field name should be inserted into range map");
+            fields_buf.insert(field.name, *range);
+        }
+
+        Self::Some {
+            fields: fields_buf,
+            path_attribute_name_range: *attribute_range,
+        }
+    }
+}
+
+/// Validate that path parameters are unique and endpoint path param type is valid.
+///
+/// This function is used for endpoint and route path validation.
+/// Params of the last path param are put into param_unique. Then inner is executed on
+/// endpoint/route children.
+fn validate_path_params<'a, F>(
     range_map: &RangeMap,
     reports: &mut Vec<Report>,
-    param_unique: &mut HashMap<&'a str, TextRange>,
+    parameters: &mut HashMap<&'a str, TextRange>,
+    param_fields: PathParamTypeFields<'a, '_>,
     path: &Path<'a>,
-    inner: F,
+    mut inner: F,
 ) where
-    F: Fn(&RangeMap, &mut Vec<Report>, &mut HashMap<&'a str, TextRange>),
+    F: FnMut(&RangeMap, &mut Vec<Report>, &mut HashMap<&'a str, TextRange>),
 {
-    // We have to only validate the last segment, which is path.part(). Previous segments are
-    // validated by parent calls.
-    let PathPart::Segment(segment) = path.part() else {
-        return;
+    let segment = match path.part() {
+        PathPart::Empty => None,
+        PathPart::Segment(seg) => Some(seg),
     };
 
     let range = range_map
         .path
         .get(&path.id())
         .expect("endpoint paths should be inserted into range map");
-    let params = PathParamIterator::new(segment, *range);
-    for (param, range) in params {
-        match param_unique.get(param) {
-            None => {
-                param_unique.insert(param, range);
-            }
-            Some(existing_range) => {
-                reports.push(
-                    Report::error(format!("path parameter '{param}' already defined"))
-                        .add_label(Label::primary(
-                            "path parameter already defined".to_string(),
-                            range.into(),
-                        ))
-                        .add_label(Label::secondary(
-                            "previously defined here".to_string(),
-                            (*existing_range).into(),
-                        )),
-                );
+
+    // Populate map with params of the new segment
+    if let Some(segment) = segment {
+        let params = PathParamIterator::new(segment, *range);
+        for (param, range) in params {
+            match parameters.get(param) {
+                None => {
+                    parameters.insert(param, range);
+                }
+                Some(existing_range) => {
+                    reports.push(
+                        Report::error(format!("path parameter '{param}' already defined"))
+                            .add_label(Label::primary(
+                                "path parameter already defined".to_string(),
+                                range.into(),
+                            ))
+                            .add_label(Label::secondary(
+                                "previously defined here".to_string(),
+                                (*existing_range).into(),
+                            )),
+                    );
+                }
             }
         }
     }
 
-    inner(range_map, reports, param_unique);
+    // Validate params of descendants, based on the inner function from caller.
+    inner(range_map, reports, parameters);
 
-    // Clean params
-    let params = PathParamIterator::new(segment, *range);
+    compare_path_params_to_type(reports, *range, parameters, param_fields);
 
-    for (param, range) in params {
-        let Some(stored_range) = param_unique.get(param) else {
-            continue;
-        };
+    // Clean params from the hashmap
+    if let Some(segment) = segment {
+        let params = PathParamIterator::new(segment, *range);
+        for (param, range) in params {
+            let Some(stored_range) = parameters.get(param) else {
+                continue;
+            };
 
-        // If ranges don't match, the param was defined by one of the parents,
-        // which means we shouldn't be the ones removing it.
-        if range == *stored_range {
-            param_unique.remove(param);
+            // If ranges don't match, the param was defined by one of the parents,
+            // which means we shouldn't be the ones removing it.
+            if range == *stored_range {
+                parameters.remove(param);
+            }
         }
+    }
+}
+
+/// Compare path parameters to endpoint's path param type.
+///
+/// It checks that all params in path are defined in the type,
+/// and vice versa.
+fn compare_path_params_to_type<'a>(
+    reports: &mut Vec<Report>,
+    path_range: TextRange,
+    parameters: &mut HashMap<&'a str, TextRange>,
+    param_fields: PathParamTypeFields<'a, '_>,
+) {
+    let (fields, path_attribute_range) = match param_fields {
+        PathParamTypeFields::Ignore => return,
+        PathParamTypeFields::None => {
+            if parameters.is_empty() {
+                return;
+            } else {
+                reports.push(
+                    Report::error("missing path parameters type".to_string()).add_label(
+                        Label::primary(
+                            "missing path parameters type".to_string(),
+                            path_range.into(),
+                        ),
+                    ).with_note("help: endpoint's path contains path parameters. You must define their type in `path` attribute.".to_string()),
+                );
+                return;
+            }
+        }
+        PathParamTypeFields::Some {
+            fields,
+            path_attribute_name_range,
+        } => (fields, path_attribute_name_range),
+    };
+
+    for (p_name, p_range) in parameters.iter() {
+        if fields.contains_key(p_name) {
+            continue;
+        }
+
+        reports.push(
+            Report::error(format!("missing field for path parameter `{p_name}`"))
+                .add_label(Label::primary(
+                    "missing field for path parameter".to_string(),
+                    path_attribute_range.into(),
+                ))
+                .add_label(Label::secondary(
+                    "path parameter defined here".to_string(),
+                    (*p_range).into(),
+                )),
+        );
+    }
+
+    for (f_name, f_range) in fields.iter() {
+        if parameters.contains_key(f_name) {
+            continue;
+        }
+
+        reports.push(
+            Report::error(format!("invalid path parameters field `{f_name}`"))
+                .add_label(Label::primary(
+                    "field not defined in path".to_string(),
+                    (*f_range).into(),
+                ))
+                .with_note(
+                    "help: endpoint's path attribute can only contain fields defined in the path"
+                        .to_string(),
+                ),
+        );
     }
 }
 

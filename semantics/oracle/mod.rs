@@ -7,7 +7,7 @@ use better_api_syntax::{TextRange, ast};
 
 use crate::path::PathId;
 use crate::spec::endpoint::EndpointArena;
-use crate::spec::typ::{TypeArena, TypeFieldId};
+use crate::spec::typ::{RootTypeId, TypeArena, TypeFieldId, TypeId};
 use crate::spec::value::ValueArena;
 use crate::spec::{Metadata, SpecContext, SymbolTable};
 use crate::string::{StringId, StringInterner};
@@ -63,6 +63,20 @@ struct RangeMap {
 
     /// Map record and union field names to their ranges.
     field_name: HashMap<TypeFieldId, TextRange>,
+
+    /// Maps endpoint's path params attribute to their ranges.
+    ///
+    /// This is used to emit diagnostics for endpoint's path params, ie:
+    /// ```text
+    /// GET {
+    ///     path: {
+    ///     ^^^^ This is a problem
+    ///       foo: string
+    ///       ...
+    ///     }
+    /// }
+    /// ```
+    endpoint_path_attribute_name: HashMap<RootTypeId, TextRange>,
 }
 
 struct Context<'o, 'a> {

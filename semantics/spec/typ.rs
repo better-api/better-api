@@ -304,6 +304,12 @@ impl<'a, T> FromSlot<'a> for NamedReference<'a, T> {
     }
 }
 
+impl<'a, T> NamedReference<'a, T> {
+    pub(crate) fn id(&self) -> RootTypeId {
+        RootTypeId(self.id)
+    }
+}
+
 impl<'a> NamedReference<'a, SimpleTy<'a>> {
     /// Resolve the referenced type.
     pub fn typ(&self) -> SimpleTy<'a> {
@@ -765,6 +771,12 @@ impl From<TypeId> for RootTypeId {
 
 impl From<ResponseTyId> for RootTypeId {
     fn from(value: ResponseTyId) -> Self {
+        Self(value.0)
+    }
+}
+
+impl From<SimpleRecordReferenceId> for RootTypeId {
+    fn from(value: SimpleRecordReferenceId) -> Self {
         Self(value.0)
     }
 }
