@@ -234,7 +234,7 @@ fn lower_endpoint<P: EndpointParent>(
             )
         });
 
-    // Lower query
+    // Lower path params
     let path_param = endpoint.path_param().and_then(|p| p.typ()).and_then(|typ| {
         let name = ctx.ctx.strings.resolve(name_id);
         let name = format!("{name}Path");
@@ -554,15 +554,20 @@ fn lower_endpoint_response<P: ResponseParent>(
     Some(status)
 }
 
-/// Validate paths are correct
+/// Validate endpoint and route paths.
 ///
 /// Specifically this checks:
-/// - paths are unique
-/// - params for each path are unique
-/// - params match with endpoint path type
+/// - endpoint paths are unique across the whole tree
+/// - visible path params are unique in each scope
+/// - endpoint path params type matches visible path params
 fn validate_paths<'a>(range_map: &RangeMap, reports: &mut Vec<Report>, spec_ctx: &'a SpecContext) {
+    // Unique paths and their ranges.
     let mut path_unique: HashMap<Path<'a>, TextRange> = HashMap::new();
-    let mut params: HashMap<&'a str, TextRange> = HashMap::new();
+
+    // Path params extract from path and descendants. Updated during traversal.
+    let mut scoped_params: HashMap<&'a str, TextRange> = HashMap::new();
+
+    // Shared buffer for type fields of Endpoint::path_params
     let mut fields_buf: HashMap<&'a str, TextRange> = HashMap::new();
 
     for endpoint in spec_ctx.root_endpoints() {
@@ -577,7 +582,7 @@ fn validate_paths<'a>(range_map: &RangeMap, reports: &mut Vec<Report>, spec_ctx:
         validate_path_params(
             range_map,
             reports,
-            &mut params,
+            &mut scoped_params,
             fields,
             &endpoint.path,
             |_, _, _| {},
@@ -586,7 +591,13 @@ fn validate_paths<'a>(range_map: &RangeMap, reports: &mut Vec<Report>, spec_ctx:
 
     for route in spec_ctx.root_routes() {
         validate_route_paths_unique(range_map, reports, &route, &mut path_unique);
-        validate_route_path_params(range_map, reports, &mut params, &mut fields_buf, &route);
+        validate_route_path_params(
+            range_map,
+            reports,
+            &mut scoped_params,
+            &mut fields_buf,
+            &route,
+        );
     }
 }
 
@@ -620,7 +631,9 @@ fn validate_endpoint_path_unique<'a>(
     }
 }
 
-/// Auxiliary method to validate if all endpoints inside the route have unique paths.
+/// Auxiliary method to validate if route descendants have unique endpoint paths.
+///
+/// `existing_paths` is shared across all roots, so this enforces global uniqueness.
 fn validate_route_paths_unique<'a>(
     range_map: &RangeMap,
     reports: &mut Vec<Report>,
@@ -636,13 +649,13 @@ fn validate_route_paths_unique<'a>(
     }
 }
 
-/// Auxiliary method to validate if params in route path are valid.
+/// Auxiliary method to validate route path params and all descendants.
 ///
-/// This is used to call itself recursively on descendants.
+/// This also maintains path params in scope while descending the tree.
 fn validate_route_path_params<'a>(
     range_map: &RangeMap,
     reports: &mut Vec<Report>,
-    params: &mut HashMap<&'a str, TextRange>,
+    scoped_params: &mut HashMap<&'a str, TextRange>,
     fields_buf: &mut HashMap<&'a str, TextRange>,
     route: &Route<'a>,
 ) {
@@ -650,10 +663,10 @@ fn validate_route_path_params<'a>(
     validate_path_params(
         range_map,
         reports,
-        params,
+        scoped_params,
         PathParamTypeFields::Ignore,
         &route.path,
-        |range_map, reports, params| {
+        |range_map, reports, scoped_params| {
             // Validate child endpoints.
             for endpoint in route.endpoints() {
                 let fields = PathParamTypeFields::from_endpoint_path(
@@ -665,7 +678,7 @@ fn validate_route_path_params<'a>(
                 validate_path_params(
                     range_map,
                     reports,
-                    params,
+                    scoped_params,
                     fields,
                     &endpoint.path,
                     |_, _, _| {},
@@ -674,7 +687,7 @@ fn validate_route_path_params<'a>(
 
             // Validate child routes.
             for route in route.routes() {
-                validate_route_path_params(range_map, reports, params, fields_buf, &route);
+                validate_route_path_params(range_map, reports, scoped_params, fields_buf, &route);
             }
         },
     );
@@ -682,7 +695,7 @@ fn validate_route_path_params<'a>(
 
 /// Path parameter type fields that should be validated.
 ///
-/// This is basically [`Endpoint::path_param`] converted to HashMap.
+/// This wraps endpoint `path` attribute fields together with validation mode.
 enum PathParamTypeFields<'a, 'b> {
     Ignore,
     None,
@@ -733,15 +746,16 @@ impl<'a, 'b> PathParamTypeFields<'a, 'b> {
 /// Validate that path parameters are unique and endpoint path param type is valid.
 ///
 /// This function is used for endpoint and route path validation.
-/// Params of the last path param are put into param_unique. Then inner is executed on
-/// endpoint/route children.
+///
+/// It adds params from current path segment to scope, validates descendants,
+/// validates endpoint's [path type fields](Endpoint::path_param), then removes params introduced by this segment.
 fn validate_path_params<'a, F>(
     range_map: &RangeMap,
     reports: &mut Vec<Report>,
-    parameters: &mut HashMap<&'a str, TextRange>,
-    param_fields: PathParamTypeFields<'a, '_>,
+    scoped_params: &mut HashMap<&'a str, TextRange>,
+    path_param_fields: PathParamTypeFields<'a, '_>,
     path: &Path<'a>,
-    mut inner: F,
+    mut validate_descendants: F,
 ) where
     F: FnMut(&RangeMap, &mut Vec<Report>, &mut HashMap<&'a str, TextRange>),
 {
@@ -757,11 +771,11 @@ fn validate_path_params<'a, F>(
 
     // Populate map with params of the new segment
     if let Some(segment) = segment {
-        let params = PathParamIterator::new(segment, *range);
-        for (param, range) in params {
-            match parameters.get(param) {
+        let path_params = PathParamIterator::new(segment, *range);
+        for (param, range) in path_params {
+            match scoped_params.get(param) {
                 None => {
-                    parameters.insert(param, range);
+                    scoped_params.insert(param, range);
                 }
                 Some(existing_range) => {
                     reports.push(
@@ -781,41 +795,41 @@ fn validate_path_params<'a, F>(
     }
 
     // Validate params of descendants, based on the inner function from caller.
-    inner(range_map, reports, parameters);
+    validate_descendants(range_map, reports, scoped_params);
 
-    compare_path_params_to_type(reports, *range, parameters, param_fields);
+    compare_path_params_to_type(reports, *range, scoped_params, path_param_fields);
 
     // Clean params from the hashmap
     if let Some(segment) = segment {
-        let params = PathParamIterator::new(segment, *range);
-        for (param, range) in params {
-            let Some(stored_range) = parameters.get(param) else {
+        let path_params = PathParamIterator::new(segment, *range);
+        for (param, range) in path_params {
+            let Some(stored_range) = scoped_params.get(param) else {
                 continue;
             };
 
             // If ranges don't match, the param was defined by one of the parents,
             // which means we shouldn't be the ones removing it.
             if range == *stored_range {
-                parameters.remove(param);
+                scoped_params.remove(param);
             }
         }
     }
 }
 
-/// Compare path parameters to endpoint's path param type.
+/// Compare visible path parameters to endpoint's path param type.
 ///
 /// It checks that all params in path are defined in the type,
 /// and vice versa.
 fn compare_path_params_to_type<'a>(
     reports: &mut Vec<Report>,
     path_range: TextRange,
-    parameters: &mut HashMap<&'a str, TextRange>,
-    param_fields: PathParamTypeFields<'a, '_>,
+    scoped_params: &HashMap<&'a str, TextRange>,
+    path_param_fields: PathParamTypeFields<'a, '_>,
 ) {
-    let (fields, path_attribute_range) = match param_fields {
+    let (fields, path_attribute_range) = match path_param_fields {
         PathParamTypeFields::Ignore => return,
         PathParamTypeFields::None => {
-            if parameters.is_empty() {
+            if scoped_params.is_empty() {
                 return;
             } else {
                 reports.push(
@@ -835,7 +849,7 @@ fn compare_path_params_to_type<'a>(
         } => (fields, path_attribute_name_range),
     };
 
-    for (p_name, p_range) in parameters.iter() {
+    for (p_name, p_range) in scoped_params.iter() {
         if fields.contains_key(p_name) {
             continue;
         }
@@ -854,7 +868,7 @@ fn compare_path_params_to_type<'a>(
     }
 
     for (f_name, f_range) in fields.iter() {
-        if parameters.contains_key(f_name) {
+        if scoped_params.contains_key(f_name) {
             continue;
         }
 
