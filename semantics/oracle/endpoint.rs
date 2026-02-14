@@ -17,7 +17,7 @@ use crate::path::{Path, PathId, PathParamIterator, PathPart};
 use crate::spec::SpecContext;
 use crate::spec::endpoint::{
     Endpoint, EndpointArena, EndpointBuilder, EndpointData, EndpointId, EndpointResponseId,
-    EndpointResponseTypeId, ResponseStatus, Route, RouteBuilder,
+    EndpointResponseTypeId, ResponseStatus, Route, RouteBuilder, RouteId,
 };
 use crate::spec::typ::{
     InlineTyId, NamedReference, ResponseReferenceId, SimpleRecordReference, TypeArena,
@@ -146,6 +146,16 @@ impl<'a> Oracle<'a> {
                 &endpoint,
             );
         }
+
+        for route in self.root.routes() {
+            lower_route(
+                &mut ctx,
+                &mut self.values,
+                &mut self.types,
+                &mut self.endpoints,
+                &route,
+            );
+        }
     }
 
     pub(crate) fn validate_paths(&mut self) {
@@ -159,6 +169,42 @@ impl<'a> Oracle<'a> {
 
         validate_paths(&self.range_map, &mut self.reports, &spec_ctx);
     }
+}
+
+/// Lower a route
+fn lower_route<P: EndpointParent>(
+    ctx: &mut EndpointContext,
+    values: &mut ValueArena,
+    types: &mut TypeArena,
+    parent: &mut P,
+    route: &ast::Route,
+) -> Option<RouteId> {
+    // Lower path and start route builder
+    let path_token = route.path().map(|p| p.string());
+    let mut route_builder = with_lowered_path(
+        ctx,
+        route.syntax().text_range(),
+        path_token,
+        |ctx, path, path_range| {
+            // TODO: Get docs from doc comment
+            let (builder, path_id) = parent.add_route(path, None);
+            ctx.ctx.range_map.path.insert(path_id, path_range);
+            builder
+        },
+    );
+
+    // Lower children routes and endpoints
+    for child in route.routes() {
+        lower_route(ctx, values, types, &mut route_builder, &child);
+    }
+
+    for endpoint in route.endpoints() {
+        lower_endpoint(ctx, values, types, &mut route_builder, &endpoint);
+    }
+
+    // Lower response
+
+    todo!()
 }
 
 /// Validate and lower endpoint and it's responses.
@@ -285,33 +331,38 @@ fn lower_endpoint<P: EndpointParent>(
     let req_body =
         lower_request_body(&mut ctx.ctx, types, values, requires_file, endpoint, &name).ok()?;
 
-    // Lower path
-    let path_token = endpoint.path().map(|p| p.string())?;
-    let parsed_str = text::parse_string(&path_token, ctx.ctx.reports);
-    let path = PathPart::new(&parsed_str, path_token.text_range(), ctx.ctx.reports);
+    // Lower path and start endpoint builder with the lowered path
+    let path_token = endpoint.path().map(|p| p.string());
+    let endpoint_builder = with_lowered_path(
+        ctx,
+        endpoint.syntax().text_range(),
+        path_token,
+        move |ctx, path, path_range| {
+            let (builder, path_id) = parent.add_endpoint(
+                path,
+                EndpointData {
+                    method: method?,
+                    name: name_id,
+                    path_param,
+                    query: query_param,
+                    headers: headers_param,
+                    accept: accept_id,
+                    request_body: req_body,
 
-    let (mut endpoint_builder, path_id) = parent.add_endpoint(
-        path,
-        EndpointData {
-            method: method?,
-            name: name_id,
-            path_param,
-            query: query_param,
-            headers: headers_param,
-            accept: accept_id,
-            request_body: req_body,
+                    // TODO: Extract doc comments
+                    docs: None,
+                    request_body_docs: None,
+                },
+            );
 
-            // TODO: Extract doc comments
-            docs: None,
-            request_body_docs: None,
+            // Insert range mapping for path
+            ctx.ctx.range_map.path.insert(path_id, path_range);
+            Some(builder)
         },
     );
 
-    // Insert range mapping for path
-    ctx.ctx
-        .range_map
-        .path
-        .insert(path_id, path_token.text_range());
+    // Unpack the builder, it can be None if some stuff is invalid
+    let mut endpoint_builder = endpoint_builder?;
 
     // Lower responses
     ctx.response_statuses.clear();
@@ -350,6 +401,44 @@ fn lower_endpoint<P: EndpointParent>(
     }
 
     Some(endpoint_builder.finish())
+}
+
+fn lower_responses<P: ResponseParent>(
+    ctx: &mut EndpointContext,
+    values: &mut ValueArena,
+    types: &mut TypeArena,
+    parent: &mut P,
+    responses: impl Iterator<Item = ast::EndpointResponse>,
+) {
+    ctx.response_statuses.clear();
+    for resp in responses {
+        let Some(status) =
+            lower_endpoint_response(&mut ctx.ctx, values, types, parent, &resp, name_id)
+        else {
+            continue;
+        };
+
+        let range = resp
+            .status()
+            .map(|s| s.syntax().text_range())
+            .unwrap_or_else(|| resp.syntax().text_range());
+
+        if let Some(existing_range) = ctx.response_statuses.get(&status) {
+            ctx.ctx.reports.push(
+                Report::error(format!("repeated response status {status}"))
+                    .add_label(Label::primary(
+                        "repeated response status".to_string(),
+                        range.into(),
+                    ))
+                    .add_label(Label::secondary(
+                        "response with same status first defined here".to_string(),
+                        (*existing_range).into(),
+                    )),
+            );
+        } else {
+            ctx.response_statuses.insert(status, range);
+        }
+    }
 }
 
 /// Validate and lower request body.
@@ -928,4 +1017,34 @@ fn convert_status(status: &ast::EndpointResponseStatus) -> Result<ResponseStatus
         }
     };
     Ok(res)
+}
+
+fn with_lowered_path<T, F>(
+    ctx: &mut EndpointContext,
+    fallback_range: TextRange,
+    path_token: Option<ast::StringToken>,
+    inner: F,
+) -> T
+where
+    F: FnOnce(&mut EndpointContext, PathPart, TextRange) -> T,
+{
+    let path_range = path_token
+        .as_ref()
+        .map_or_else(|| fallback_range, |tk| tk.text_range());
+    let parsed_str = path_token
+        .as_ref()
+        .map(|tk| text::parse_string(tk, ctx.ctx.reports));
+    let path = match &parsed_str {
+        Some(parsed_str) => PathPart::new(
+            parsed_str,
+            path_token
+                .as_ref()
+                .expect("path token should be defined when path str is defined")
+                .text_range(),
+            ctx.ctx.reports,
+        ),
+        None => PathPart::Empty,
+    };
+
+    inner(ctx, path, path_range)
 }

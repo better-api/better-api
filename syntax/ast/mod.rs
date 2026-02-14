@@ -123,6 +123,11 @@ impl Root {
     pub fn endpoints(&self) -> impl Iterator<Item = Endpoint> {
         self.0.children().filter_map(Endpoint::cast)
     }
+
+    /// Get iterator through all routes.
+    pub fn routes(&self) -> impl Iterator<Item = Route> {
+        self.0.children().filter_map(Route::cast)
+    }
 }
 
 /////////////////
@@ -1078,4 +1083,26 @@ ast_node! {
     #[from(NODE_ROUTE)]
     /// Route group
     struct Route;
+}
+
+impl Route {
+    /// Returns route path
+    pub fn path(&self) -> Option<Path> {
+        self.0.children().find_map(Path::cast)
+    }
+
+    /// Return iterator over route responses
+    pub fn responses(&self) -> impl Iterator<Item = EndpointResponse> {
+        self.0.children().filter_map(EndpointResponse::cast)
+    }
+
+    /// Return iterator over endpoints in route
+    pub fn endpoints(&self) -> impl Iterator<Item = Endpoint> {
+        self.0.children().filter_map(Endpoint::cast)
+    }
+
+    /// Return iterator over child routes
+    pub fn routes(&self) -> impl Iterator<Item = Route> {
+        self.0.children().filter_map(Route::cast)
+    }
 }
