@@ -8,8 +8,9 @@ use better_api_syntax::ast::{self, AstNode};
 
 use crate::oracle::symbols::deref;
 use crate::oracle::typ::{
-    SimpleRecordParamConfig, TypeClass, ensure_inline, lower_response, lower_simple_record_param,
-    lower_type, require_no_file, require_not_response, require_with_deref,
+    InvalidInnerContext, InvalidOuterContext, SimpleRecordParamConfig, TypeClass, ensure_inline,
+    lower_response, lower_simple_record_param, lower_type, new_invalid_inner_type, require_no_file,
+    require_not_response, require_with_deref,
 };
 use crate::oracle::value::lower_mime_types;
 use crate::oracle::{Context, RangeMap};
@@ -606,9 +607,16 @@ fn lower_endpoint_response<P: ResponseParent>(
 
                 // Safety: We know it's a response and we have made sure that it's behind a reference.
                 let resp_id = unsafe { ResponseReferenceId::new_unchecked(resp_id) };
-                EndpointResponseTypeId::Response(resp_id)
+                Some(EndpointResponseTypeId::Response(resp_id))
             }
-            LowerResponseBehavior::Route => todo!("raise error"),
+            LowerResponseBehavior::Route => {
+                ctx.reports.push(new_invalid_inner_type(
+                    InvalidInnerContext::Response,
+                    InvalidOuterContext::RouteResponse,
+                    &typ,
+                ));
+                None
+            }
         },
 
         ast::Type::TypeRef(reference) => {
@@ -617,13 +625,13 @@ fn lower_endpoint_response<P: ResponseParent>(
                 ast::Type::TypeResponse(_) => {
                     // Safety: We know it's a reference to a response
                     let id = unsafe { ResponseReferenceId::new_unchecked(reference_id) };
-                    EndpointResponseTypeId::Response(id)
+                    Some(EndpointResponseTypeId::Response(id))
                 }
 
                 _ => {
                     // Safety: We know it's a reference to a type that isn't a response
                     let id = unsafe { InlineTyId::new_unchecked(reference_id) };
-                    EndpointResponseTypeId::InlineType(id)
+                    Some(EndpointResponseTypeId::InlineType(id))
                 }
             }
         }
@@ -636,7 +644,7 @@ fn lower_endpoint_response<P: ResponseParent>(
 
                 // Safety: We know it's a type and we made sure it's inline
                 let id = unsafe { InlineTyId::new_unchecked(id) };
-                EndpointResponseTypeId::InlineType(id)
+                Some(EndpointResponseTypeId::InlineType(id))
             }
             LowerResponseBehavior::Route => {
                 match TypeClass::from(&typ) {
@@ -645,9 +653,40 @@ fn lower_endpoint_response<P: ResponseParent>(
 
                         // Safety: We know it's inline type
                         let id = unsafe { InlineTyId::new_unchecked(id) };
-                        EndpointResponseTypeId::InlineType(id)
+                        Some(EndpointResponseTypeId::InlineType(id))
                     }
-                    _ => todo!("report error"),
+                    TypeClass::Enum => {
+                        ctx.reports.push(new_invalid_inner_type(
+                            InvalidInnerContext::Enum,
+                            InvalidOuterContext::RouteResponse,
+                            &typ,
+                        ));
+                        None
+                    }
+                    TypeClass::Union => {
+                        ctx.reports.push(new_invalid_inner_type(
+                            InvalidInnerContext::Union,
+                            InvalidOuterContext::RouteResponse,
+                            &typ,
+                        ));
+                        None
+                    }
+                    TypeClass::Record => {
+                        ctx.reports.push(new_invalid_inner_type(
+                            InvalidInnerContext::Record,
+                            InvalidOuterContext::RouteResponse,
+                            &typ,
+                        ));
+                        None
+                    }
+                    TypeClass::Response => {
+                        ctx.reports.push(new_invalid_inner_type(
+                            InvalidInnerContext::Response,
+                            InvalidOuterContext::RouteResponse,
+                            &typ,
+                        ));
+                        None
+                    }
                 }
             }
         },
@@ -655,7 +694,7 @@ fn lower_endpoint_response<P: ResponseParent>(
 
     // TODO: Get docs from doc comments
     let status = status?;
-    parent.add_response(status, type_id, None);
+    parent.add_response(status, type_id?, None);
     Some(status)
 }
 

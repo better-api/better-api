@@ -1301,7 +1301,7 @@ fn lower_array_option(
 /// Helper type for passing around the context in which an invalid inner
 /// type has been found.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display)]
-enum InvalidInnerContext {
+pub(crate) enum InvalidInnerContext {
     #[display("enum")]
     Enum,
 
@@ -1310,12 +1310,15 @@ enum InvalidInnerContext {
 
     #[display("record")]
     Record,
+
+    #[display("response")]
+    Response,
 }
 
 /// Helper type for passing around the context in which an invalid inner
 /// type has been found
 #[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display)]
-enum InvalidOuterContext {
+pub(crate) enum InvalidOuterContext {
     #[display("option")]
     Option,
 
@@ -1327,13 +1330,16 @@ enum InvalidOuterContext {
 
     #[display("union field")]
     UnionField,
+
+    #[display("route response")]
+    RouteResponse,
 }
 
 /// Constructs a [`Report`] for reporting that a type contains invalid inner(inline) type.
 ///
 /// For instance, when parsing a record, not all types are valid inside a record field.
 /// This function can be used to construct a [`Report`] that tells the user about invalid type.
-fn new_invalid_inner_type(
+pub(crate) fn new_invalid_inner_type(
     inner: InvalidInnerContext,
     outer: InvalidOuterContext,
     node: &impl AstNode,
@@ -1344,6 +1350,7 @@ fn new_invalid_inner_type(
         InvalidInnerContext::Enum => "type MyEnum: enum (T) { ... }",
         InvalidInnerContext::Union => "type MyUnion: union { ... }",
         InvalidInnerContext::Record => "type MyRecord: rec { ... }",
+        InvalidInnerContext::Response => "type MyResponse: resp { ... }",
     };
 
     Report::error(format!("inline {inner} not allowed in {outer}"))
