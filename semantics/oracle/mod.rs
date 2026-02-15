@@ -7,7 +7,7 @@ use better_api_syntax::{TextRange, ast};
 
 use crate::path::PathId;
 use crate::spec::endpoint::EndpointArena;
-use crate::spec::typ::{RootTypeId, TypeArena, TypeFieldId, TypeId};
+use crate::spec::typ::{RootTypeId, TypeArena, TypeFieldId};
 use crate::spec::value::ValueArena;
 use crate::spec::{Metadata, SpecContext, SymbolTable};
 use crate::string::{StringId, StringInterner};
@@ -144,8 +144,8 @@ impl<'a> Oracle<'a> {
 
         self.lower_type_definitions();
 
-        self.lower_endpoints();
-        // TODO: Lower routes
+        self.lower_endpoints_and_routes();
+
         self.validate_paths();
     }
 

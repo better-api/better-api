@@ -1,0 +1,52 @@
+---
+source: syntax/parser/endpoint.rs
+expression: res.node
+---
+NODE_ROOT@0..119
+  NODE_ROUTE@0..119
+    TOKEN_KW_ROUTE@0..5 "route"
+    TOKEN_SPACE@5..6 " "
+    NODE_PATH@6..14
+      TOKEN_STRING@6..14 "\"/hello\""
+    TOKEN_SPACE@14..15 " "
+    TOKEN_CURLY_LEFT@15..16 "{"
+    TOKEN_EOL@16..17 "\n"
+    TOKEN_SPACE@17..21 "    "
+    NODE_ROUTE@21..117
+      TOKEN_KW_ROUTE@21..26 "route"
+      TOKEN_SPACE@26..27 " "
+      NODE_PATH@27..33
+        TOKEN_STRING@27..33 "\"/foo\""
+      TOKEN_SPACE@33..34 " "
+      TOKEN_CURLY_LEFT@34..35 "{"
+      TOKEN_EOL@35..36 "\n"
+      TOKEN_SPACE@36..44 "        "
+      NODE_ROUTE@44..111
+        TOKEN_KW_ROUTE@44..49 "route"
+        TOKEN_SPACE@49..50 " "
+        NODE_PATH@50..56
+          TOKEN_STRING@50..56 "\"/bar\""
+        TOKEN_SPACE@56..57 " "
+        TOKEN_CURLY_LEFT@57..58 "{"
+        TOKEN_EOL@58..59 "\n"
+        TOKEN_SPACE@59..71 "            "
+        NODE_ROUTE@71..101
+          TOKEN_KW_ROUTE@71..76 "route"
+          TOKEN_SPACE@76..77 " "
+          NODE_PATH@77..83
+            TOKEN_STRING@77..83 "\"/baz\""
+          TOKEN_SPACE@83..84 " "
+          TOKEN_CURLY_LEFT@84..85 "{"
+          TOKEN_EOL@85..86 "\n"
+          TOKEN_EOL@86..87 "\n"
+          TOKEN_SPACE@87..99 "            "
+          TOKEN_CURLY_RIGHT@99..100 "}"
+          TOKEN_EOL@100..101 "\n"
+        TOKEN_SPACE@101..109 "        "
+        TOKEN_CURLY_RIGHT@109..110 "}"
+        TOKEN_EOL@110..111 "\n"
+      TOKEN_SPACE@111..115 "    "
+      TOKEN_CURLY_RIGHT@115..116 "}"
+      TOKEN_EOL@116..117 "\n"
+    TOKEN_CURLY_RIGHT@117..118 "}"
+    TOKEN_EOL@118..119 "\n"

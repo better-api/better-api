@@ -252,6 +252,8 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 | Some(TOKEN_KW_DELETE)
                 | Some(TOKEN_KW_PATCH) => self.parse_endpoint(prologue),
 
+                Some(TOKEN_KW_ROUTE) => self.parse_route(prologue),
+
                 Some(kind) => {
                     let span = self.parse_error(is_recovery);
 
@@ -455,5 +457,27 @@ mod test {
         let res = parse(tokens);
         insta::assert_debug_snapshot!(res.node);
         insta::assert_debug_snapshot!(res.reports);
+    }
+
+    #[test]
+    fn parse_nested_routes() {
+        let text = indoc! {r#"
+            route "/hello" {
+                route "/foo" {
+                    route "/bar" {
+                        route "/baz" {
+
+                        }
+                    }
+                }
+            }
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let res = parse(tokens);
+        insta::assert_debug_snapshot!(res.node);
+        assert_eq!(res.reports, vec![]);
     }
 }

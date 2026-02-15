@@ -125,7 +125,7 @@ struct EndpointContext<'o, 'a> {
 
 impl<'a> Oracle<'a> {
     /// Lowers routes and endpoints
-    pub(crate) fn lower_endpoints(&mut self) {
+    pub(crate) fn lower_endpoints_and_routes(&mut self) {
         let mut ctx = EndpointContext {
             ctx: Context {
                 strings: &mut self.strings,
@@ -374,7 +374,7 @@ fn lower_endpoint<P: EndpointParent>(
     let mut endpoint_builder = endpoint_builder?;
 
     // Lower responses
-    lower_responses(
+    let nr_responses = lower_responses(
         ctx,
         values,
         types,
@@ -383,9 +383,26 @@ fn lower_endpoint<P: EndpointParent>(
         endpoint.responses(),
     );
 
+    if nr_responses == 0 {
+        ctx.ctx.reports.push(
+            Report::error("missing endpoint responses".to_string())
+                .add_label(Label::primary(
+                    "missing endpoint responses".to_string(),
+                    endpoint.syntax().text_range().into(),
+                ))
+                .with_note("help: endpoint must have at least one response".to_string()),
+        );
+    }
+
     Some(endpoint_builder.finish())
 }
 
+/// Lower route or endpoint responses.
+///
+/// Returns number of lowered responses.
+///
+/// **Note:** Number of lowered response can be smaller than number of responses
+/// in AST iterator.
 fn lower_responses<P: ResponseParent>(
     ctx: &mut EndpointContext,
     values: &mut ValueArena,
@@ -393,7 +410,7 @@ fn lower_responses<P: ResponseParent>(
     parent: &mut P,
     behavior: LowerResponseBehavior,
     responses: impl Iterator<Item = ast::EndpointResponse>,
-) {
+) -> usize {
     ctx.response_statuses.clear();
     for resp in responses {
         let Some(status) =
@@ -423,6 +440,8 @@ fn lower_responses<P: ResponseParent>(
             ctx.response_statuses.insert(status, range);
         }
     }
+
+    ctx.response_statuses.len()
 }
 
 /// Validate and lower request body.
