@@ -8,8 +8,8 @@ use better_api_syntax::ast::{self, AstNode};
 
 use crate::oracle::symbols::deref;
 use crate::oracle::typ::{
-    SimpleRecordParamConfig, ensure_inline, lower_response, lower_simple_record_param, lower_type,
-    require_no_file, require_not_response, require_with_deref,
+    SimpleRecordParamConfig, ensure_inline, is_inline, lower_response, lower_simple_record_param,
+    lower_type, require_no_file, require_not_response, require_with_deref,
 };
 use crate::oracle::value::lower_mime_types;
 use crate::oracle::{Context, RangeMap};
@@ -203,8 +203,16 @@ fn lower_route<P: EndpointParent>(
     }
 
     // Lower response
+    lower_responses(
+        ctx,
+        values,
+        types,
+        &mut route_builder,
+        LowerResponseBehavior::Route,
+        route.responses(),
+    );
 
-    todo!()
+    Some(route_builder.finish())
 }
 
 /// Validate and lower endpoint and it's responses.
@@ -365,40 +373,14 @@ fn lower_endpoint<P: EndpointParent>(
     let mut endpoint_builder = endpoint_builder?;
 
     // Lower responses
-    ctx.response_statuses.clear();
-    for resp in endpoint.responses() {
-        let Some(status) = lower_endpoint_response(
-            &mut ctx.ctx,
-            values,
-            types,
-            &mut endpoint_builder,
-            &resp,
-            name_id,
-        ) else {
-            continue;
-        };
-
-        let range = resp
-            .status()
-            .map(|s| s.syntax().text_range())
-            .unwrap_or_else(|| resp.syntax().text_range());
-
-        if let Some(existing_range) = ctx.response_statuses.get(&status) {
-            ctx.ctx.reports.push(
-                Report::error(format!("repeated response status {status}"))
-                    .add_label(Label::primary(
-                        "repeated response status".to_string(),
-                        range.into(),
-                    ))
-                    .add_label(Label::secondary(
-                        "response with same status first defined here".to_string(),
-                        (*existing_range).into(),
-                    )),
-            );
-        } else {
-            ctx.response_statuses.insert(status, range);
-        }
-    }
+    lower_responses(
+        ctx,
+        values,
+        types,
+        &mut endpoint_builder,
+        LowerResponseBehavior::Endpoint(name_id),
+        endpoint.responses(),
+    );
 
     Some(endpoint_builder.finish())
 }
@@ -408,12 +390,13 @@ fn lower_responses<P: ResponseParent>(
     values: &mut ValueArena,
     types: &mut TypeArena,
     parent: &mut P,
+    behavior: LowerResponseBehavior,
     responses: impl Iterator<Item = ast::EndpointResponse>,
 ) {
     ctx.response_statuses.clear();
     for resp in responses {
         let Some(status) =
-            lower_endpoint_response(&mut ctx.ctx, values, types, parent, &resp, name_id)
+            lower_endpoint_response(&mut ctx.ctx, values, types, parent, &resp, behavior)
         else {
             continue;
         };
@@ -575,14 +558,30 @@ fn require_request_body_is_file(
     }
 }
 
+/// Defines how response lowering handles non-inlined types
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LowerResponseBehavior {
+    /// Lower responses for endpoint. If a type is not inlined,
+    /// we define a new type and use it as a reference. Name of
+    /// the new type is based on the endpoint name.
+    Endpoint(StringId),
+
+    /// Lower responses for route. If a type is not inlined,
+    /// we report an error.
+    Route,
+}
+
 /// Lower endpoint response
+///
+/// Types that are not inlined are handled based on given
+/// [behavior](LowerResponseBehavior).
 fn lower_endpoint_response<P: ResponseParent>(
     ctx: &mut Context,
     values: &mut ValueArena,
     types: &mut TypeArena,
     parent: &mut P,
     resp: &ast::EndpointResponse,
-    endpoint_name_id: StringId,
+    behavior: LowerResponseBehavior,
 ) -> Option<ResponseStatus> {
     // Validate status
     let status = match resp.status() {
@@ -598,16 +597,19 @@ fn lower_endpoint_response<P: ResponseParent>(
 
     let typ = resp.typ()?;
     let type_id = match &typ {
-        ast::Type::TypeResponse(resp) => {
-            let resp_name = endpoint_response_name(ctx.strings, endpoint_name_id, status);
-            let resp_id = lower_response(ctx, types, values, resp, &resp_name)?;
+        ast::Type::TypeResponse(resp) => match behavior {
+            LowerResponseBehavior::Endpoint(endpoint_name_id) => {
+                let resp_name = endpoint_response_name(ctx.strings, endpoint_name_id, status);
+                let resp_id = lower_response(ctx, types, values, resp, &resp_name)?;
 
-            let resp_id = ensure_inline(ctx, &typ, resp_id.into(), &resp_name, types)?;
+                let resp_id = ensure_inline(ctx, &typ, resp_id.into(), &resp_name, types)?;
 
-            // Safety: We know it's a response and we have made sure that it's behind a reference.
-            let resp_id = unsafe { ResponseReferenceId::new_unchecked(resp_id) };
-            EndpointResponseTypeId::Response(resp_id)
-        }
+                // Safety: We know it's a response and we have made sure that it's behind a reference.
+                let resp_id = unsafe { ResponseReferenceId::new_unchecked(resp_id) };
+                EndpointResponseTypeId::Response(resp_id)
+            }
+            LowerResponseBehavior::Route => todo!("raise error"),
+        },
 
         ast::Type::TypeRef(reference) => {
             let reference_id = lower_type(ctx, types, values, &typ)?;
@@ -625,16 +627,29 @@ fn lower_endpoint_response<P: ResponseParent>(
                 }
             }
         }
-        _ => {
-            let id = lower_type(ctx, types, values, &typ)?;
+        _ => match behavior {
+            LowerResponseBehavior::Endpoint(endpoint_name_id) => {
+                let id = lower_type(ctx, types, values, &typ)?;
 
-            let resp_name = endpoint_response_name(ctx.strings, endpoint_name_id, status);
-            let id = ensure_inline(ctx, &typ, id, &resp_name, types)?;
+                let resp_name = endpoint_response_name(ctx.strings, endpoint_name_id, status);
+                let id = ensure_inline(ctx, &typ, id, &resp_name, types)?;
 
-            // Safety: We know it's a type and we made sure it's inline
-            let id = unsafe { InlineTyId::new_unchecked(id) };
-            EndpointResponseTypeId::InlineType(id)
-        }
+                // Safety: We know it's a type and we made sure it's inline
+                let id = unsafe { InlineTyId::new_unchecked(id) };
+                EndpointResponseTypeId::InlineType(id)
+            }
+            LowerResponseBehavior::Route => {
+                if is_inline(&typ) {
+                    let id = lower_type(ctx, types, values, &typ)?;
+
+                    // Safety: We know it's inline type
+                    let id = unsafe { InlineTyId::new_unchecked(id) };
+                    EndpointResponseTypeId::InlineType(id)
+                } else {
+                    todo!("report error")
+                }
+            }
+        },
     };
 
     // TODO: Get docs from doc comments

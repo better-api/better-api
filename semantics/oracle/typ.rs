@@ -1057,6 +1057,27 @@ where
     }
 }
 
+/// Returns if type is inline.
+pub(crate) fn is_inline(node: &ast::Type) -> bool {
+    matches!(
+        node,
+        ast::Type::TypeOption(_)
+            | ast::Type::TypeArray(_)
+            | ast::Type::TypeRef(_)
+            | ast::Type::TypeI32(_)
+            | ast::Type::TypeI64(_)
+            | ast::Type::TypeU32(_)
+            | ast::Type::TypeU64(_)
+            | ast::Type::TypeF32(_)
+            | ast::Type::TypeF64(_)
+            | ast::Type::TypeDate(_)
+            | ast::Type::TypeTimestamp(_)
+            | ast::Type::TypeBool(_)
+            | ast::Type::TypeString(_)
+            | ast::Type::TypeFile(_)
+    )
+}
+
 /// Ensures the type is an inline type.
 ///
 /// If type behind `node` is not already an inline type, it gets a new type definition
@@ -1071,26 +1092,8 @@ pub(crate) fn ensure_inline(
     types: &mut TypeArena,
 ) -> Option<RootTypeId> {
     // If type is already inline, there's nothing to do.
-    match node {
-        ast::Type::TypeOption(_)
-        | ast::Type::TypeArray(_)
-        | ast::Type::TypeRef(_)
-        | ast::Type::TypeI32(_)
-        | ast::Type::TypeI64(_)
-        | ast::Type::TypeU32(_)
-        | ast::Type::TypeU64(_)
-        | ast::Type::TypeF32(_)
-        | ast::Type::TypeF64(_)
-        | ast::Type::TypeDate(_)
-        | ast::Type::TypeTimestamp(_)
-        | ast::Type::TypeBool(_)
-        | ast::Type::TypeString(_)
-        | ast::Type::TypeFile(_) => return Some(id),
-
-        ast::Type::Record(_)
-        | ast::Type::Enum(_)
-        | ast::Type::Union(_)
-        | ast::Type::TypeResponse(_) => (),
+    if is_inline(node) {
+        return Some(id);
     }
 
     // Check if name already exists
