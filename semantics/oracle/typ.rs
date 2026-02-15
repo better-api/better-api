@@ -1057,11 +1057,29 @@ where
     }
 }
 
-/// Returns if type is inline.
-pub(crate) fn is_inline(node: &ast::Type) -> bool {
-    matches!(
-        node,
-        ast::Type::TypeOption(_)
+/// Type class for [`ast::Type`].
+///
+/// The logic behind what classes there are is just
+/// "this is the information we need down the road".
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TypeClass {
+    Inline,
+    Enum,
+    Union,
+    Record,
+    Response,
+}
+
+impl TypeClass {
+    pub fn is_inline(&self) -> bool {
+        *self == Self::Inline
+    }
+}
+
+impl From<&ast::Type> for TypeClass {
+    fn from(value: &ast::Type) -> Self {
+        match value {
+            ast::Type::TypeOption(_)
             | ast::Type::TypeArray(_)
             | ast::Type::TypeRef(_)
             | ast::Type::TypeI32(_)
@@ -1074,8 +1092,13 @@ pub(crate) fn is_inline(node: &ast::Type) -> bool {
             | ast::Type::TypeTimestamp(_)
             | ast::Type::TypeBool(_)
             | ast::Type::TypeString(_)
-            | ast::Type::TypeFile(_)
-    )
+            | ast::Type::TypeFile(_) => Self::Inline,
+            ast::Type::Record(_) => Self::Record,
+            ast::Type::Enum(_) => Self::Enum,
+            ast::Type::Union(_) => Self::Union,
+            ast::Type::TypeResponse(_) => Self::Response,
+        }
+    }
 }
 
 /// Ensures the type is an inline type.
@@ -1092,7 +1115,7 @@ pub(crate) fn ensure_inline(
     types: &mut TypeArena,
 ) -> Option<RootTypeId> {
     // If type is already inline, there's nothing to do.
-    if is_inline(node) {
+    if TypeClass::from(node).is_inline() {
         return Some(id);
     }
 

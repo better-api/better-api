@@ -8,7 +8,7 @@ use better_api_syntax::ast::{self, AstNode};
 
 use crate::oracle::symbols::deref;
 use crate::oracle::typ::{
-    SimpleRecordParamConfig, ensure_inline, is_inline, lower_response, lower_simple_record_param,
+    SimpleRecordParamConfig, TypeClass, ensure_inline, lower_response, lower_simple_record_param,
     lower_type, require_no_file, require_not_response, require_with_deref,
 };
 use crate::oracle::value::lower_mime_types;
@@ -639,14 +639,15 @@ fn lower_endpoint_response<P: ResponseParent>(
                 EndpointResponseTypeId::InlineType(id)
             }
             LowerResponseBehavior::Route => {
-                if is_inline(&typ) {
-                    let id = lower_type(ctx, types, values, &typ)?;
+                match TypeClass::from(&typ) {
+                    TypeClass::Inline => {
+                        let id = lower_type(ctx, types, values, &typ)?;
 
-                    // Safety: We know it's inline type
-                    let id = unsafe { InlineTyId::new_unchecked(id) };
-                    EndpointResponseTypeId::InlineType(id)
-                } else {
-                    todo!("report error")
+                        // Safety: We know it's inline type
+                        let id = unsafe { InlineTyId::new_unchecked(id) };
+                        EndpointResponseTypeId::InlineType(id)
+                    }
+                    _ => todo!("report error"),
                 }
             }
         },
