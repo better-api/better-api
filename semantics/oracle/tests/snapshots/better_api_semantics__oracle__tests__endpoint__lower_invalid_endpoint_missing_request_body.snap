@@ -1,0 +1,29 @@
+---
+source: semantics/oracle/tests/endpoint.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "endpoint's `requestBody` is required",
+        labels: [
+            Label {
+                style: Primary,
+                message: "endpoint's `accept` parameter requires `requestBody` body to be defined",
+                span: Span {
+                    start: 0,
+                    end: 85,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "`accept` defined here",
+                span: Span {
+                    start: 27,
+                    end: 63,
+                },
+            },
+        ],
+        note: None,
+    },
+]

@@ -1,0 +1,52 @@
+---
+source: semantics/oracle/tests/endpoint.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "invalid path type",
+        labels: [
+            Label {
+                style: Primary,
+                message: "path fields can only be primitive types",
+                span: Span {
+                    start: 47,
+                    end: 91,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "non-simple field type here",
+                span: Span {
+                    start: 62,
+                    end: 66,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "invalid path type",
+        labels: [
+            Label {
+                style: Primary,
+                message: "path fields can only be primitive types",
+                span: Span {
+                    start: 47,
+                    end: 91,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "non-simple field type here",
+                span: Span {
+                    start: 80,
+                    end: 85,
+                },
+            },
+        ],
+        note: None,
+    },
+]

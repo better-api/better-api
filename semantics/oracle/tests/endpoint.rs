@@ -3,12 +3,12 @@ use http::{Method, StatusCode};
 use indoc::indoc;
 
 use crate::{
+    Oracle,
     path::PathPart,
     spec::{
         endpoint::{EndpointResponseType, ResponseStatus},
         typ::{InlineTy, PrimitiveTy, ResponseReference, SimpleRecordReference, Type},
     },
-    Oracle,
 };
 
 #[test]
@@ -292,6 +292,289 @@ fn lower_simple_valid_routes() {
         bar_responses[0].typ,
         EndpointResponseType::InlineType(InlineTy::Primitive(PrimitiveTy::String))
     ));
+}
+
+#[test]
+fn lower_invalid_endpoint_missing_name() {
+    let text = indoc! {r#"
+        GET {
+            on 200: string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+    insta::assert_debug_snapshot!(oracle.reports());
+}
+
+#[test]
+fn lower_invalid_endpoint_headers_param() {
+    let text = indoc! {r#"
+        GET {
+            name: "foo"
+
+            headers: string
+
+            on 200: string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+    insta::assert_debug_snapshot!(oracle.reports());
+}
+
+#[test]
+fn lower_invalid_endpoint_accept_type() {
+    let text = indoc! {r#"
+        GET {
+            name: "foo"
+
+            accept: 32
+
+            on 200: string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+    insta::assert_debug_snapshot!(oracle.reports());
+}
+
+#[test]
+fn lower_invalid_endpoint_missing_request_body() {
+    let text = indoc! {r#"
+        GET {
+            name: "foo"
+
+            accept: ["image/png", "image/jpeg"]
+
+            on 200: string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+    insta::assert_debug_snapshot!(oracle.reports());
+}
+
+#[test]
+fn lower_invalid_endpoint_request_body_not_file() {
+    let text = indoc! {r#"
+        GET {
+            name: "foo"
+
+            accept: ["image/png", "image/jpeg"]
+            requestBody: rec {
+                foo: string
+            }
+
+            on 200: string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+    insta::assert_debug_snapshot!(oracle.reports());
+}
+
+#[test]
+fn lower_invalid_endpoint_request_body_contains_file() {
+    let text = indoc! {r#"
+        type Foo: rec {
+            foo: file
+        }
+
+        GET {
+            name: "foo"
+
+            requestBody: rec {
+                bar: Foo
+            }
+
+            on 200: string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+    insta::assert_debug_snapshot!(oracle.reports());
+}
+
+#[test]
+fn lower_invalid_endpoint_request_body_is_response() {
+    let text = indoc! {r#"
+        GET {
+            name: "foo"
+
+            requestBody: resp {
+                body: string
+            }
+
+            on 200: string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+    insta::assert_debug_snapshot!(oracle.reports());
+}
+
+#[test]
+fn lower_invalid_endpoint_paths_not_unique() {
+    let text = indoc! {r#"
+        GET "/foo/bar" {
+            name: "foo"
+            on 200: string
+        }
+
+        route "/foo" {
+            route {
+                GET "/bar" {
+                    name: "bar"
+                    on 200: i32?
+                }
+            }
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+    insta::assert_debug_snapshot!(oracle.reports());
+}
+
+#[test]
+fn lower_invalid_endpoint_paths_params_not_unique() {
+    let text = indoc! {r#"
+        route "/foo" {
+            route "/{slug}" {
+                GET "/bar/{slug}" {
+                    name: "foo"
+
+                    path: {
+                        slug: string
+                    }
+
+                    on 200: string
+                }
+            }
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+    insta::assert_debug_snapshot!(oracle.reports());
+}
+
+#[test]
+fn lower_invalid_endpoint_paths_missing_path_attribute() {
+    let text = indoc! {r#"
+        GET "/foo/{bar}" {
+            name: "foo"
+
+            on 200: string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+    insta::assert_debug_snapshot!(oracle.reports());
+}
+
+#[test]
+fn lower_invalid_endpoint_paths_attribute_mismatch() {
+    let text = indoc! {r#"
+        route "/{foo}" {
+            route "/{bar}" {
+                GET "/baz/{xyz}" {
+                    name: "foo"
+
+                    path: {
+                        foo: string
+                        bar: i32
+                        zyx: u32
+                    }
+
+                    on 200: string
+                }
+            }
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+    insta::assert_debug_snapshot!(oracle.reports());
+}
+
+#[test]
+fn lower_invalid_endpoint_path_params_option_or_array() {
+    let text = indoc! {r#"
+        GET "/{foo}/{bar}" {
+            name: "foo"
+            path: {
+                foo: i32?
+                bar: [u64]
+            }
+
+            on 200: string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+    insta::assert_debug_snapshot!(oracle.reports());
+}
+
+#[test]
+fn lower_invalid_endpoint_missing_response() {
+    let text = indoc! {r#"
+        GET {
+            name: "foo"
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+    insta::assert_debug_snapshot!(oracle.reports());
 }
 
 fn setup_oracle<'a>(root: &'a ast::Root) -> Oracle<'a> {

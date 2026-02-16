@@ -1,0 +1,21 @@
+---
+source: semantics/oracle/tests/endpoint.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "expected string or array, got integer",
+        labels: [
+            Label {
+                style: Primary,
+                message: "expected string or array, got integer",
+                span: Span {
+                    start: 35,
+                    end: 37,
+                },
+            },
+        ],
+        note: None,
+    },
+]

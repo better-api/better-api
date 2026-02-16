@@ -1,0 +1,23 @@
+---
+source: semantics/oracle/tests/endpoint.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "missing endpoint name",
+        labels: [
+            Label {
+                style: Primary,
+                message: "missing endpoint name",
+                span: Span {
+                    start: 0,
+                    end: 27,
+                },
+            },
+        ],
+        note: Some(
+            "help: endpoint must have a unique name",
+        ),
+    },
+]

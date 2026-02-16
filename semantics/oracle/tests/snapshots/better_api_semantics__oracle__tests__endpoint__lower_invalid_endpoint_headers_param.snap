@@ -1,0 +1,23 @@
+---
+source: semantics/oracle/tests/endpoint.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "invalid headers type",
+        labels: [
+            Label {
+                style: Primary,
+                message: "expected record, got string",
+                span: Span {
+                    start: 36,
+                    end: 42,
+                },
+            },
+        ],
+        note: Some(
+            "help: headers must be a simple record",
+        ),
+    },
+]

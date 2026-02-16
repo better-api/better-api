@@ -1,0 +1,23 @@
+---
+source: semantics/oracle/tests/endpoint.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "missing path parameters type",
+        labels: [
+            Label {
+                style: Primary,
+                message: "missing path parameters type",
+                span: Span {
+                    start: 4,
+                    end: 16,
+                },
+            },
+        ],
+        note: Some(
+            "help: endpoint's path contains path parameters. You must define their type in `path` attribute.",
+        ),
+    },
+]

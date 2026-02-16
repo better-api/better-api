@@ -1,0 +1,46 @@
+---
+source: semantics/oracle/tests/endpoint.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "missing field for path parameter `xyz`",
+        labels: [
+            Label {
+                style: Primary,
+                message: "missing field for path parameter",
+                span: Span {
+                    start: 102,
+                    end: 106,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "path parameter defined here",
+                span: Span {
+                    start: 57,
+                    end: 60,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "invalid path parameters field `zyx`",
+        labels: [
+            Label {
+                style: Primary,
+                message: "field not defined in path",
+                span: Span {
+                    start: 179,
+                    end: 182,
+                },
+            },
+        ],
+        note: Some(
+            "help: endpoint's path attribute can only contain fields defined in the path",
+        ),
+    },
+]

@@ -1,0 +1,23 @@
+---
+source: semantics/oracle/tests/endpoint.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "missing endpoint responses",
+        labels: [
+            Label {
+                style: Primary,
+                message: "missing endpoint responses",
+                span: Span {
+                    start: 0,
+                    end: 24,
+                },
+            },
+        ],
+        note: Some(
+            "help: endpoint must have at least one response",
+        ),
+    },
+]

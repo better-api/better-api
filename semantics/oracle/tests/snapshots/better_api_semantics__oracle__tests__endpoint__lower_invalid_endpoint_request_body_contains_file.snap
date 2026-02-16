@@ -1,0 +1,31 @@
+---
+source: semantics/oracle/tests/endpoint.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "invalid endpoint's request body type",
+        labels: [
+            Label {
+                style: Primary,
+                message: "`accept` requires that no `file` is present in request body",
+                span: Span {
+                    start: 73,
+                    end: 101,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "`file` introduced here",
+                span: Span {
+                    start: 25,
+                    end: 29,
+                },
+            },
+        ],
+        note: Some(
+            "help: `application/json` request body must not use `file` in body",
+        ),
+    },
+]

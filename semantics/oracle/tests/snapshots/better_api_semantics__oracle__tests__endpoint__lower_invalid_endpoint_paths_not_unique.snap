@@ -1,0 +1,29 @@
+---
+source: semantics/oracle/tests/endpoint.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "duplicated endpoint path",
+        labels: [
+            Label {
+                style: Primary,
+                message: "duplicated endpoint path",
+                span: Span {
+                    start: 94,
+                    end: 100,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "same path first defined here",
+                span: Span {
+                    start: 4,
+                    end: 14,
+                },
+            },
+        ],
+        note: None,
+    },
+]

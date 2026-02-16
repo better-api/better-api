@@ -20,9 +20,7 @@ use crate::spec::endpoint::{
     Endpoint, EndpointArena, EndpointBuilder, EndpointData, EndpointId, EndpointResponseId,
     EndpointResponseTypeId, ResponseStatus, Route, RouteBuilder, RouteId,
 };
-use crate::spec::typ::{
-    InlineTyId, NamedReference, ResponseReferenceId, SimpleRecordReference, TypeArena,
-};
+use crate::spec::typ::{InlineTyId, ResponseReferenceId, SimpleRecordReference, TypeArena};
 use crate::spec::value::{ValueArena, ValueContext};
 use crate::string::{StringId, StringInterner};
 use crate::text;
@@ -306,15 +304,6 @@ fn lower_endpoint<P: EndpointParent>(
             },
         )
     });
-    if let Some(param) = path_param {
-        ctx.ctx.range_map.endpoint_path_attribute_name.insert(
-            param.into(),
-            endpoint
-                .path_param()
-                .expect("path param should exist")
-                .name_range(),
-        );
-    }
 
     // Lower accept header
     let accept_id = endpoint
@@ -394,7 +383,17 @@ fn lower_endpoint<P: EndpointParent>(
         );
     }
 
-    Some(endpoint_builder.finish())
+    let id = endpoint_builder.finish();
+
+    // Add range of path param attribute
+    if let Some(param) = endpoint.path_param() {
+        ctx.ctx
+            .range_map
+            .endpoint_path_attribute_name
+            .insert(id, param.name_range());
+    }
+
+    Some(id)
 }
 
 /// Lower route or endpoint responses.
@@ -481,12 +480,12 @@ fn lower_request_body(
         }
     };
 
-    let mut is_valid = true;
-
     // Check that body isn't a response
     if require_not_response(ctx, &body).is_err() {
-        is_valid = false;
+        return Err(());
     }
+
+    let mut is_valid = true;
 
     if requires_file {
         // Check that request body is a file
@@ -497,7 +496,7 @@ fn lower_request_body(
         // Check that request body is not a file and it does not contain a file (in case of ie a
         // record).
         let report_builder = |range: TextRange| {
-            let mut report = Report::error("invalid endpoint`s request body type".to_string())
+            let mut report = Report::error("invalid endpoint's request body type".to_string())
                 .add_label(Label::primary(
                     "`accept` requires that no `file` is present in request body".to_string(),
                     body.syntax().text_range().into(),
@@ -736,11 +735,7 @@ fn validate_paths<'a>(range_map: &RangeMap, reports: &mut Vec<Report>, spec_ctx:
     for endpoint in spec_ctx.root_endpoints() {
         validate_endpoint_path_unique(range_map, reports, &endpoint, &mut path_unique);
 
-        let fields = PathParamTypeFields::from_endpoint_path(
-            range_map,
-            &mut fields_buf,
-            endpoint.path_param,
-        );
+        let fields = PathParamTypeFields::from_endpoint_path(range_map, &mut fields_buf, &endpoint);
 
         validate_path_params(
             range_map,
@@ -832,11 +827,8 @@ fn validate_route_path_params<'a>(
         |range_map, reports, scoped_params| {
             // Validate child endpoints.
             for endpoint in route.endpoints() {
-                let fields = PathParamTypeFields::from_endpoint_path(
-                    range_map,
-                    fields_buf,
-                    endpoint.path_param,
-                );
+                let fields =
+                    PathParamTypeFields::from_endpoint_path(range_map, fields_buf, &endpoint);
 
                 validate_path_params(
                     range_map,
@@ -860,8 +852,16 @@ fn validate_route_path_params<'a>(
 ///
 /// This wraps endpoint `path` attribute fields together with validation mode.
 enum PathParamTypeFields<'a, 'b> {
+    /// Don't validate path parameter type fields
     Ignore,
+
+    /// There are no type fields
     None,
+
+    /// There was an error during lowering of path parameter type
+    Error,
+
+    /// Path parameter type fields that should be validated
     Some {
         fields: &'b mut HashMap<&'a str, TextRange>,
         path_attribute_name_range: TextRange,
@@ -872,16 +872,20 @@ impl<'a, 'b> PathParamTypeFields<'a, 'b> {
     fn from_endpoint_path(
         range_map: &RangeMap,
         fields_buf: &'b mut HashMap<&'a str, TextRange>,
-        path_param: Option<NamedReference<'a, SimpleRecordReference<'a>>>,
+        endpoint: &Endpoint<'a>,
     ) -> Self {
-        let Some(mut path_param) = path_param else {
+        fields_buf.clear();
+
+        // If there is no params attribute name in endpoint, there for sure isn't any parameters.
+        let Some(attr_name_range) = range_map.endpoint_path_attribute_name.get(&endpoint.id) else {
             return Self::None;
         };
 
-        let attribute_range = range_map
-            .endpoint_path_attribute_name
-            .get(&path_param.id())
-            .expect("endpoint path attribute range should be inserted into range map");
+        // We have parameter name, but we don't have a concrete lowered type.
+        // This means there was an error during lowering of the path params type.
+        let Some(mut path_param) = endpoint.path_param.clone() else {
+            return Self::Error;
+        };
 
         let record = loop {
             match path_param.typ() {
@@ -890,7 +894,6 @@ impl<'a, 'b> PathParamTypeFields<'a, 'b> {
             }
         };
 
-        fields_buf.clear();
         for field in record.fields() {
             let range = range_map
                 .field_name
@@ -901,7 +904,7 @@ impl<'a, 'b> PathParamTypeFields<'a, 'b> {
 
         Self::Some {
             fields: fields_buf,
-            path_attribute_name_range: *attribute_range,
+            path_attribute_name_range: *attr_name_range,
         }
     }
 }
@@ -990,7 +993,7 @@ fn compare_path_params_to_type<'a>(
     path_param_fields: PathParamTypeFields<'a, '_>,
 ) {
     let (fields, path_attribute_range) = match path_param_fields {
-        PathParamTypeFields::Ignore => return,
+        PathParamTypeFields::Ignore | PathParamTypeFields::Error => return,
         PathParamTypeFields::None => {
             if scoped_params.is_empty() {
                 return;

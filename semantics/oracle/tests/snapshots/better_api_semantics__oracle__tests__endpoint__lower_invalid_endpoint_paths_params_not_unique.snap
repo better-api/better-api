@@ -1,0 +1,29 @@
+---
+source: semantics/oracle/tests/endpoint.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "path parameter 'slug' already defined",
+        labels: [
+            Label {
+                style: Primary,
+                message: "path parameter already defined",
+                span: Span {
+                    start: 56,
+                    end: 60,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "previously defined here",
+                span: Span {
+                    start: 28,
+                    end: 32,
+                },
+            },
+        ],
+        note: None,
+    },
+]

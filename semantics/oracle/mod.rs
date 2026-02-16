@@ -6,7 +6,7 @@ use better_api_diagnostic::Report;
 use better_api_syntax::{TextRange, ast};
 
 use crate::path::PathId;
-use crate::spec::endpoint::EndpointArena;
+use crate::spec::endpoint::{EndpointArena, EndpointId};
 use crate::spec::typ::{RootTypeId, TypeArena, TypeFieldId};
 use crate::spec::value::ValueArena;
 use crate::spec::{Metadata, SpecContext, SymbolTable};
@@ -76,7 +76,7 @@ struct RangeMap {
     ///     }
     /// }
     /// ```
-    endpoint_path_attribute_name: HashMap<RootTypeId, TextRange>,
+    endpoint_path_attribute_name: HashMap<EndpointId, TextRange>,
 }
 
 struct Context<'o, 'a> {

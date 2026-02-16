@@ -588,10 +588,7 @@ pub(crate) fn lower_simple_record_param(
         ref_name,
     } = conf;
 
-    // Are headers valid. We don't want to early return, because we want
-    // to validate as many things as possible.
-    let mut is_valid = true;
-
+    // Validate no files are present
     let file_report_builder = |range: TextRange| {
         Report::error(format!("invalid {typ_name} type"))
             .add_label(Label::primary(
@@ -604,10 +601,9 @@ pub(crate) fn lower_simple_record_param(
             ))
     };
 
-    if require_no_file(ctx, node, &file_report_builder).is_err() {
-        is_valid = false;
-    }
+    let has_no_file = require_no_file(ctx, node, &file_report_builder).is_ok();
 
+    // Validate that it's a simple record
     let simple_report_builder = |typ: SimpleRecordReportType| match typ {
         SimpleRecordReportType::NotRecord(resolved) => {
             Report::error(format!("invalid {typ_name} type"))
@@ -639,22 +635,27 @@ pub(crate) fn lower_simple_record_param(
         }
     };
 
-    if require_simple_record(ctx, node, allow_option, allow_array, simple_report_builder).is_err() {
-        is_valid = false;
-    }
+    let is_simple_record =
+        require_simple_record(ctx, node, allow_option, allow_array, simple_report_builder).is_ok();
+
+    let is_valid = has_no_file && is_simple_record;
 
     // We don't lower type if it isn't a simple record. We don't want to report things
     // like union errors _and_ "it's not a simple record". This would be confusing.
-    if !is_valid {
+    if !is_simple_record {
         return None;
     }
 
     let id = lower_type(ctx, types, values, node)?;
     let id = ensure_inline(ctx, node, id, ref_name, types)?;
 
-    // Safety: We have checked that it's a simple record, and that it's behind a reference.
-    let id = unsafe { SimpleRecordReferenceId::new_unchecked(id) };
-    Some(id)
+    if is_valid {
+        // Safety: We have checked that it's a simple record, and that it's behind a reference.
+        let id = unsafe { SimpleRecordReferenceId::new_unchecked(id) };
+        Some(id)
+    } else {
+        None
+    }
 }
 
 /// Lowers record type and inserts it into arena.

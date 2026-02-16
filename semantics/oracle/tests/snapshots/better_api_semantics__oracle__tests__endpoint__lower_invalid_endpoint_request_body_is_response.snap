@@ -1,0 +1,21 @@
+---
+source: semantics/oracle/tests/endpoint.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "invalid usage of `response` type",
+        labels: [
+            Label {
+                style: Primary,
+                message: "invalid usage of `response` type",
+                span: Span {
+                    start: 40,
+                    end: 73,
+                },
+            },
+        ],
+        note: None,
+    },
+]
