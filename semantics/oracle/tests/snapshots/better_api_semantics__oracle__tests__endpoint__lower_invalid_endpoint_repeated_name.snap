@@ -1,0 +1,29 @@
+---
+source: semantics/oracle/tests/endpoint.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "repeated endpoint name 'foo'",
+        labels: [
+            Label {
+                style: Primary,
+                message: "repeated endpoint name",
+                span: Span {
+                    start: 68,
+                    end: 73,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "endpoint with same name first defined here",
+                span: Span {
+                    start: 16,
+                    end: 21,
+                },
+            },
+        ],
+        note: None,
+    },
+]

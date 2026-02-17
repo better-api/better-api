@@ -119,6 +119,7 @@ impl ResponseParent for EndpointBuilder<'_> {
 struct EndpointContext<'o, 'a> {
     ctx: Context<'o, 'a>,
     response_statuses: HashMap<ResponseStatus, TextRange>,
+    endpoint_names: HashMap<StringId, TextRange>,
 }
 
 impl<'a> Oracle<'a> {
@@ -134,6 +135,7 @@ impl<'a> Oracle<'a> {
                 root: self.root,
             },
             response_statuses: HashMap::new(),
+            endpoint_names: HashMap::new(),
         };
 
         for endpoint in self.root.endpoints() {
@@ -157,6 +159,10 @@ impl<'a> Oracle<'a> {
         }
     }
 
+    /// Validate route and endpoint paths.
+    ///
+    /// It checks all paths are unique, parameters are unique, and that parameters match
+    /// endpoint's `path` record.
     pub(crate) fn validate_paths(&mut self) {
         let spec_ctx = SpecContext {
             strings: &self.strings,
@@ -231,8 +237,11 @@ fn lower_endpoint<P: EndpointParent>(
     // Validate name and return early if it doesn't exist or isn't valid.
     // Without a valid name we can't lower path, query, header params and request body.
     // They all require a name to be inlined.
-    let name_id = if let Some(name) = endpoint.name() {
-        text::lower_name(&name, ctx.ctx.strings, ctx.ctx.reports)?
+    let (name_id, name_range) = if let Some(name) = endpoint.name() {
+        (
+            text::lower_name(&name, ctx.ctx.strings, ctx.ctx.reports)?,
+            name.syntax().text_range(),
+        )
     } else {
         ctx.ctx.reports.push(
             Report::error("missing endpoint name".to_string())
@@ -244,6 +253,24 @@ fn lower_endpoint<P: EndpointParent>(
         );
         return None;
     };
+
+    // Check that name is unique
+    if let Some(existing_range) = ctx.endpoint_names.get(&name_id) {
+        let name = ctx.ctx.strings.resolve(name_id);
+        ctx.ctx.reports.push(
+            Report::error(format!("repeated endpoint name '{name}'"))
+                .add_label(Label::primary(
+                    "repeated endpoint name".to_string(),
+                    name_range.into(),
+                ))
+                .add_label(Label::secondary(
+                    "endpoint with same name first defined here".to_string(),
+                    (*existing_range).into(),
+                )),
+        );
+    } else {
+        ctx.endpoint_names.insert(name_id, name_range);
+    }
 
     // Lower headers
     let headers_param = endpoint
