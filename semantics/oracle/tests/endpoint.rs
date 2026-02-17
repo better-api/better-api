@@ -621,6 +621,28 @@ fn lower_invalid_endpoint_repeated_name() {
     insta::assert_debug_snapshot!(oracle.reports());
 }
 
+#[test]
+fn lower_valid_endpoint_same_path_different_method() {
+    let text = indoc! {r#"
+        GET {
+            name: "foo"
+            on 200: string
+        }
+
+        POST {
+            name: "bar"
+            on 200: string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+    assert!(oracle.reports().is_empty());
+}
+
 fn setup_oracle<'a>(root: &'a ast::Root) -> Oracle<'a> {
     let mut oracle = Oracle::new_raw(root);
     oracle.validate_symbols();

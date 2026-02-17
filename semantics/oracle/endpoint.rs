@@ -769,6 +769,8 @@ fn lower_endpoint_response<P: ResponseParent>(
     Some(status)
 }
 
+type UniquePathMap<'a> = HashMap<http::Method, HashMap<Path<'a>, TextRange>>;
+
 /// Validate endpoint and route paths.
 ///
 /// Specifically this checks:
@@ -777,7 +779,7 @@ fn lower_endpoint_response<P: ResponseParent>(
 /// - endpoint path params type matches visible path params
 fn validate_paths<'a>(range_map: &RangeMap, reports: &mut Vec<Report>, spec_ctx: &'a SpecContext) {
     // Unique paths and their ranges.
-    let mut path_unique: HashMap<Path<'a>, TextRange> = HashMap::new();
+    let mut path_unique: UniquePathMap<'a> = HashMap::new();
 
     // Path params extract from path and descendants. Updated during traversal.
     let mut scoped_params: HashMap<&'a str, TextRange> = HashMap::new();
@@ -817,7 +819,7 @@ fn validate_endpoint_path_unique<'a>(
     range_map: &RangeMap,
     reports: &mut Vec<Report>,
     endpoint: &Endpoint<'a>,
-    existing_paths: &mut HashMap<Path<'a>, TextRange>,
+    existing_paths: &mut UniquePathMap<'a>,
 ) {
     let path_id = endpoint.path.id();
     let path_range = range_map
@@ -825,7 +827,10 @@ fn validate_endpoint_path_unique<'a>(
         .get(&path_id)
         .expect("endpoint paths should be inserted into range map");
 
-    if let Some(existing_range) = existing_paths.get(&endpoint.path) {
+    if let Some(existing_range) = existing_paths
+        .get(&endpoint.method)
+        .and_then(|h| h.get(&endpoint.path))
+    {
         reports.push(
             Report::error("duplicated endpoint path".to_string())
                 .add_label(Label::primary(
@@ -838,7 +843,10 @@ fn validate_endpoint_path_unique<'a>(
                 )),
         );
     } else {
-        existing_paths.insert(endpoint.path.clone(), *path_range);
+        existing_paths
+            .entry(endpoint.method.clone())
+            .or_default()
+            .insert(endpoint.path.clone(), *path_range);
     }
 }
 
@@ -849,7 +857,7 @@ fn validate_route_paths_unique<'a>(
     range_map: &RangeMap,
     reports: &mut Vec<Report>,
     route: &Route<'a>,
-    existing_paths: &mut HashMap<Path<'a>, TextRange>,
+    existing_paths: &mut UniquePathMap<'a>,
 ) {
     for endpoint in route.endpoints() {
         validate_endpoint_path_unique(range_map, reports, &endpoint, existing_paths);
