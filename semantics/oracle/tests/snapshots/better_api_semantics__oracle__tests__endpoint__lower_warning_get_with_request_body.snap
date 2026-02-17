@@ -1,0 +1,31 @@
+---
+source: semantics/oracle/tests/endpoint.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Warning,
+        title: "GET request with body",
+        labels: [
+            Label {
+                style: Primary,
+                message: "GET requests should not have a request body",
+                span: Span {
+                    start: 0,
+                    end: 3,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "requestBody defined here",
+                span: Span {
+                    start: 27,
+                    end: 72,
+                },
+            },
+        ],
+        note: Some(
+            "help: consider using POST or PUT instead, or remove the request body",
+        ),
+    },
+]

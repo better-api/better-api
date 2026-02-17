@@ -329,6 +329,32 @@ fn lower_endpoint<P: EndpointParent>(
     let req_body =
         lower_request_body(&mut ctx.ctx, types, values, requires_file, endpoint, &name).ok()?;
 
+    // Check if GET method has a request body
+    if method == Some(http::Method::GET)
+        && let Some(req_body) = endpoint.request_body()
+    {
+        ctx.ctx.reports.push(
+            Report::warning("GET request with body".to_string())
+                .add_label(Label::primary(
+                    "GET requests should not have a request body".to_string(),
+                    endpoint
+                        .method()
+                        .expect("method should be defined")
+                        .syntax()
+                        .text_range()
+                        .into(),
+                ))
+                .add_label(Label::secondary(
+                    "requestBody defined here".to_string(),
+                    req_body.syntax().text_range().into(),
+                ))
+                .with_note(
+                    "help: consider using POST or PUT instead, or remove the request body"
+                        .to_string(),
+                ),
+        );
+    }
+
     // Lower path and start endpoint builder with the lowered path
     let path_token = endpoint.path().map(|p| p.string());
     let endpoint_builder = with_lowered_path(

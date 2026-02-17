@@ -577,6 +577,28 @@ fn lower_invalid_endpoint_missing_response() {
     insta::assert_debug_snapshot!(oracle.reports());
 }
 
+#[test]
+fn lower_warning_get_with_request_body() {
+    let text = indoc! {r#"
+        GET {
+            name: "foo"
+
+            requestBody: rec {
+                foo: string
+            }
+
+            on 200: string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+    insta::assert_debug_snapshot!(oracle.reports());
+}
+
 fn setup_oracle<'a>(root: &'a ast::Root) -> Oracle<'a> {
     let mut oracle = Oracle::new_raw(root);
     oracle.validate_symbols();
