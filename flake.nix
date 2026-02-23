@@ -120,6 +120,18 @@
           );
         };
 
+        packages.test-coverage = craneLib.cargoNextest (
+          commonArgs
+          // {
+            inherit cargoArtifacts;
+            src = testSrc;
+
+            withLlvmCov = true;
+            cargoLlvmCovExtraArgs = "--workspace --html --output-dir $out";
+            LLVM_COV_FLAGS = "-coverage-watermark=80,50";
+          }
+        );
+
         devShells.default = craneLib.devShell {
           checks = self.checks.${system};
 
@@ -127,6 +139,30 @@
             pkgs.rust-analyzer-nightly
           ];
         };
+
+        apps.test-coverage =
+          let
+            isDarwin = pkgs.stdenv.hostPlatform.isDarwin;
+            openCmd = if isDarwin then "open" else "xdg-open";
+
+            preview = pkgs.writeShellApplication {
+              name = "test-coverage";
+
+              runtimeInputs = [
+                pkgs.nix
+              ]
+              ++ (lib.optional (!isDarwin) pkgs.xdg-utils);
+
+              text = ''
+                out="$(nix build ${self}#test-coverage --no-link --print-out-paths)"
+                exec ${openCmd} "file://$out/html/index.html"
+              '';
+            };
+          in
+          {
+            type = "app";
+            program = "${preview}/bin/test-coverage";
+          };
 
         formatter = nixpkgs.legacyPackages.${system}.nixfmt-tree;
       }

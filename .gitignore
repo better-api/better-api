@@ -1,3 +1,4 @@
 /target
 */snapshots/*.new
 /.direnv
+/result
