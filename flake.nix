@@ -10,8 +10,8 @@
 
     crane.url = "github:ipetkov/crane";
 
-    fenix = {
-      url = "github:nix-community/fenix";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -23,7 +23,7 @@
       self,
       nixpkgs,
       crane,
-      fenix,
+      rust-overlay,
       flake-utils,
       ...
     }:
@@ -32,12 +32,20 @@
       let
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [ fenix.overlays.default ];
+          overlays = [ rust-overlay.overlays.default ];
         };
 
         inherit (pkgs) lib;
 
-        craneLib = (crane.mkLib pkgs).overrideToolchain (p: p.fenix.stable.toolchain);
+        craneLib = (crane.mkLib pkgs).overrideToolchain (
+          p:
+          p.rust-bin.stable.latest.default.override {
+            extensions = [
+              "rust-src"
+              "rust-analyzer"
+            ];
+          }
+        );
 
         src = craneLib.cleanCargoSource ./.;
 
@@ -134,10 +142,6 @@
 
         devShells.default = craneLib.devShell {
           checks = self.checks.${system};
-
-          packages = [
-            pkgs.rust-analyzer-nightly
-          ];
         };
 
         apps.test-coverage =
