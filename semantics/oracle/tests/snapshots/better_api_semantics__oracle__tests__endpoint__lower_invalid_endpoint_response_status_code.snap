@@ -1,0 +1,21 @@
+---
+source: semantics/oracle/tests/endpoint.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "invalid response status",
+        labels: [
+            Label {
+                style: Primary,
+                message: "invalid response status",
+                span: Span {
+                    start: 49,
+                    end: 53,
+                },
+            },
+        ],
+        note: None,
+    },
+]

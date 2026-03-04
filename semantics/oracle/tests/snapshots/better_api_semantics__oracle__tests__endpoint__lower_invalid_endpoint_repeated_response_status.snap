@@ -1,0 +1,29 @@
+---
+source: semantics/oracle/tests/endpoint.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "repeated response status 200",
+        labels: [
+            Label {
+                style: Primary,
+                message: "repeated response status",
+                span: Span {
+                    start: 49,
+                    end: 52,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "response with same status first defined here",
+                span: Span {
+                    start: 30,
+                    end: 33,
+                },
+            },
+        ],
+        note: None,
+    },
+]

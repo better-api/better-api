@@ -751,12 +751,7 @@ fn lower_endpoint_response<P: ResponseParent>(
                         None
                     }
                     TypeClass::Response => {
-                        ctx.reports.push(new_invalid_inner_type(
-                            InvalidInnerContext::Response,
-                            InvalidOuterContext::RouteResponse,
-                            &typ,
-                        ));
-                        None
+                        unreachable!("response is handled separately by the outer match statement")
                     }
                 }
             }
