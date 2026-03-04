@@ -3,12 +3,12 @@ use http::{Method, StatusCode};
 use indoc::indoc;
 
 use crate::{
+    Oracle,
     path::PathPart,
     spec::{
         endpoint::{EndpointResponseType, ResponseStatus},
         typ::{InlineTy, PrimitiveTy, ResponseReference, SimpleRecordReference, Type},
     },
-    Oracle,
 };
 
 #[test]
