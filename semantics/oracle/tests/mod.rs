@@ -3,4 +3,4 @@
 mod endpoint;
 mod typ;
 mod validate_symbols;
-// mod value;
+mod value;
