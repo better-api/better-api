@@ -75,7 +75,7 @@ impl<'a> ParsedValue<'a> {
             }
             ast::Value::Float(float) => Self::Primitive(PrimitiveValue::Float(float.float())),
             ast::Value::Bool(bool) => Self::Primitive(PrimitiveValue::Bool(bool.bool())),
-            ast::Value::Null(_) => todo!("handle null"),
+            ast::Value::Null(_) => Self::Primitive(PrimitiveValue::Null),
             ast::Value::Object(obj) => Self::Object(obj),
             ast::Value::Array(arr) => Self::Array(arr),
         }
