@@ -60,6 +60,14 @@ expression: tokens
         "\n",
     ),
     (
+        TOKEN_KW_NULL,
+        "null",
+    ),
+    (
+        TOKEN_EOL,
+        "\n",
+    ),
+    (
         TOKEN_IDENTIFIER,
         "this_is_Ident213890asdf",
     ),

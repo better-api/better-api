@@ -2,7 +2,7 @@
 source: syntax/parser/values.rs
 expression: res.node
 ---
-NODE_ROOT@0..58
+NODE_ROOT@0..69
   NODE_API_NAME@0..12
     TOKEN_IDENTIFIER@0..4 "name"
     TOKEN_COLON@4..5 ":"
@@ -38,3 +38,10 @@ NODE_ROOT@0..58
     NODE_VALUE_FLOAT@53..57
       TOKEN_FLOAT@53..57 "4.20"
     TOKEN_EOL@57..58 "\n"
+  NODE_API_NAME@58..69
+    TOKEN_IDENTIFIER@58..62 "name"
+    TOKEN_COLON@62..63 ":"
+    TOKEN_SPACE@63..64 " "
+    NODE_VALUE_NULL@64..68
+      TOKEN_KW_NULL@64..68 "null"
+    TOKEN_EOL@68..69 "\n"

@@ -410,6 +410,12 @@ impl Bool {
 }
 
 ast_node! {
+    #[from(NODE_VALUE_NULL)]
+    /// Null value.
+    struct Null;
+}
+
+ast_node! {
     #[from(NODE_VALUE_ARRAY)]
     /// Array value.
     struct Array;
@@ -459,6 +465,7 @@ ast_node! {
         Integer,
         Float,
         Bool,
+        Null,
         Array,
         Object,
     )]
@@ -473,6 +480,7 @@ impl std::fmt::Display for Value {
             Value::Integer(_) => "integer",
             Value::Float(_) => "float",
             Value::Bool(_) => "bool",
+            Value::Null(_) => "null",
             Value::Array(_) => "array",
             Value::Object(_) => "object",
         };

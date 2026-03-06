@@ -68,6 +68,8 @@ pub enum Kind {
     TOKEN_KW_TRUE, // true
     #[display("`false`")]
     TOKEN_KW_FALSE, // false
+    #[display("`null`")]
+    TOKEN_KW_NULL, //null
     #[display("`default`")]
     TOKEN_KW_DEFAULT, // default
     #[display("`on`")]
@@ -134,6 +136,7 @@ pub enum Kind {
     NODE_OBJECT_FIELD,
     NODE_VALUE_ARRAY,
     NODE_VALUE_BOOL,
+    NODE_VALUE_NULL,
     NODE_VALUE_STRING,
     NODE_VALUE_INTEGER,
     NODE_VALUE_FLOAT,

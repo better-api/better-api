@@ -227,6 +227,8 @@ impl<'s, 'd> Tokenizer<'s, 'd> {
             "true" => TOKEN_KW_TRUE,
             "false" => TOKEN_KW_FALSE,
 
+            "null" => TOKEN_KW_NULL,
+
             "default" => TOKEN_KW_DEFAULT,
             "on" => TOKEN_KW_ON,
             "for" => TOKEN_KW_FOR,
@@ -381,6 +383,7 @@ mod test {
                 PATCH
                 true
                 false
+                null
                 this_is_Ident213890asdf
                 i32
                 i64

@@ -15,6 +15,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
             Some(TOKEN_INTEGER) => self.with(NODE_VALUE_INTEGER, Self::advance),
             Some(TOKEN_FLOAT) => self.with(NODE_VALUE_FLOAT, Self::advance),
             Some(TOKEN_KW_TRUE) | Some(TOKEN_KW_FALSE) => self.with(NODE_VALUE_BOOL, Self::advance),
+            Some(TOKEN_KW_NULL) => self.with(NODE_VALUE_NULL, Self::advance),
 
             Some(TOKEN_BRACKET_LEFT) => self.parse_array(),
             Some(TOKEN_CURLY_LEFT) => self.parse_object(),
@@ -200,6 +201,7 @@ mod test {
             name: "string"
             name: 69
             name: 4.20
+            name: null
         "#};
 
         let mut diagnostics = vec![];
