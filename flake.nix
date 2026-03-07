@@ -198,15 +198,23 @@
         };
 
         apps = {
-          test-coverage = mkOpenApp {
-            name = "test-coverage";
-            indexPath = "html/index.html";
-          };
+          test-coverage =
+            (mkOpenApp {
+              name = "test-coverage";
+              indexPath = "html/index.html";
+            })
+            // {
+              meta.description = "Generate test coverage and open the report.";
+            };
 
-          docs = mkOpenApp {
-            name = "docs";
-            indexPath = "share/doc/better_api/index.html";
-          };
+          docs =
+            (mkOpenApp {
+              name = "docs";
+              indexPath = "share/doc/better_api/index.html";
+            })
+            // {
+              meta.description = "Generate and open the documentation.";
+            };
         };
 
         formatter = nixpkgs.legacyPackages.${system}.nixfmt-tree;
