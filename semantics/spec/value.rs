@@ -2,13 +2,9 @@
 //!
 //! ## Querying
 //!
-//! Values are queried from [`Spec`](crate::spec::Spec) through
-//! [`SpecContext::get_value`](crate::spec::SpecContext::get_value). Composite
-//! values are represented by [`Array`] and [`Object`], which expose iterators
-//! over items and fields. For field-level lookups use
-//! [`SpecContext::get_object_field`](crate::spec::SpecContext::get_object_field).
-//! MIME type lists are retrieved with
-//! [`SpecContext::get_mime_types`](crate::spec::SpecContext::get_mime_types).
+//! Values are queried from [`Spec`](crate::spec::Spec) through the spec query
+//! context. Composite values are represented by [`Array`] and [`Object`],
+//! which expose iterators over items and fields.
 //!
 //! ## Construction
 //!
@@ -98,7 +94,7 @@ pub struct ObjectField<'a> {
     pub value: Value<'a>,
 }
 
-/// Object value returned by the [`SpecContext`].
+/// Object value stored in the spec value arena.
 #[derive(Debug, Clone)]
 pub struct Object<'a> {
     // Id of the object
@@ -153,14 +149,14 @@ impl<'a> Iterator for ObjectFields<'a> {
 /// Item returned by an [`Array`] iterator.
 #[derive(Debug)]
 pub struct ArrayItem<'a> {
-    /// Id of the item, used for [`SpecContext::get_value`]
+    /// Id of the item in the value arena.
     pub(crate) id: ValueId,
 
     /// Value of the item
     pub value: Value<'a>,
 }
 
-/// Array value returned by the [`SpecContext`].
+/// Array value stored in the spec value arena.
 #[derive(Debug, Clone)]
 pub struct Array<'a> {
     // Id of the array
@@ -214,9 +210,7 @@ enum MimeTypesInner<'a> {
     Array(ArrayItems<'a>),
 }
 
-/// Iterator over mime types that a [`MimeTypesId`] points to.
-///
-/// Returned by [`ValueArena::get_mime_types`].
+/// Iterator over MIME types associated with endpoint or response metadata.
 #[derive(Debug, Clone)]
 pub struct MimeTypes<'a>(MimeTypesInner<'a>);
 

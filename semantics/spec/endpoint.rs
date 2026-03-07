@@ -2,11 +2,8 @@
 //!
 //! ## Querying
 //!
-//! Querying goes through [`Spec`](crate::spec::Spec) by calling [`Spec::ctx`],
-//! which yields a [`SpecContext`](crate::spec::SpecContext). Use
-//! [`SpecContext::get_route`], [`SpecContext::get_endpoint`], and
-//! [`SpecContext::get_response`] to retrieve entries by id. [`Route`] and
-//! [`Endpoint`] provide iterators over nested routes, endpoints, and responses.
+//! Querying starts from [`Spec`](crate::spec::Spec). [`Route`] and [`Endpoint`]
+//! provide iterators over nested routes, endpoints, and responses.
 //!
 //! ## Construction
 //!

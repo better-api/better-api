@@ -2,11 +2,9 @@
 //!
 //! ## Querying
 //!
-//! Types are queried from [`Spec`](crate::spec::Spec) through
-//! [`SpecContext`](crate::spec::SpecContext). Use [`SpecContext::get_type`],
-//! [`SpecContext::get_root_type`], and [`SpecContext::get_response_type`] for
-//! lookups, and [`SpecContext::get_simple_record`] for endpoint parameter
-//! records.
+//! Types are queried from [`Spec`](crate::spec::Spec) through the spec query
+//! context. This module exposes [`Type`], [`RootType`], [`ResponseTy`], and
+//! related reference wrappers used during traversal.
 //!
 //! Within this module, [`Type`] represents the named/composite variants you
 //! typically work with. The full representation, including responses and other
@@ -349,12 +347,12 @@ macro_rules! impl_named_reference {
 
                 /// Resolve named reference until non-reference type.
                 ///
-                /// For example, if we have:
-                /// ```text
-                /// type Foo: string
-                /// type Bar: Foo
-                /// ````
-                /// than `collapse` on `Bar` will return `string` type.
+/// For example, if we have:
+/// ```text
+/// type Foo: string
+/// type Bar: Foo
+/// ```
+/// than `collapse` on `Bar` will return `string` type.
                 ///
                 /// This is different to [`Self::typ`], which returns named
                 /// reference to `Foo` when called on `Bar`.
