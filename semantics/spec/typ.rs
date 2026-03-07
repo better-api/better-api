@@ -265,6 +265,7 @@ impl From<TypeRef> for RootRef {
     }
 }
 
+/// A named reference to another type.
 #[derive(Clone, derive_more::Debug, derive_more::Display)]
 #[display("reference `{name}`")]
 pub struct NamedReference<'a, T> {
@@ -310,40 +311,68 @@ impl<'a, T> NamedReference<'a, T> {
     }
 }
 
-impl<'a> NamedReference<'a, SimpleTy<'a>> {
-    /// Resolve the referenced type.
-    pub fn typ(&self) -> SimpleTy<'a> {
-        self.ctx.resolve_from_slot(self.id)
+fn resolve_named_reference<'a, T: FromSlot<'a>>(r: &NamedReference<'a, T>) -> T {
+    r.ctx.resolve_from_slot(r.id)
+}
+
+fn collapse_named_reference<'a, T: FromSlot<'a>>(r: &NamedReference<'a, T>) -> T {
+    let mut id = r.id;
+
+    loop {
+        let slot = &r.ctx.types.data[id as usize];
+        match slot {
+            Slot::Reference(name_id) => {
+                let def = r
+                    .ctx
+                    .symbol_table
+                    .get(name_id)
+                    .expect("symbol table and type arena should be valid");
+                id = def.typ.0;
+            }
+            _ => return T::from_slot(r.ctx, id, slot),
+        }
     }
 }
 
-impl<'a> NamedReference<'a, Type<'a>> {
-    /// Resolve the referenced type.
-    pub fn typ(&self) -> Type<'a> {
-        self.ctx.resolve_from_slot(self.id)
-    }
+// We want to implement deref methods only for some of the possible
+// generic parameter T of NamedReference, for which we use a macro.
+// It would be nice to have a less "jank" way to do this if I can come
+// up with it...
+macro_rules! impl_named_reference {
+    ($($ty:ty),+ $(,)?) => {
+        $(
+            impl<'a> NamedReference<'a, $ty> {
+                /// Resolve the referenced type.
+                pub fn typ(&self) -> $ty {
+                    resolve_named_reference(self)
+                }
+
+                /// Resolve named reference until non-reference type.
+                ///
+                /// For example, if we have:
+                /// ```text
+                /// type Foo: string
+                /// type Bar: Foo
+                /// ````
+                /// than `collapse` on `Bar` will return `string` type.
+                ///
+                /// This is different to [`Self::typ`], which returns named
+                /// reference to `Foo` when called on `Bar`.
+                pub fn collapse(&self) -> $ty {
+                    collapse_named_reference(self)
+                }
+            }
+        )+
+    };
 }
 
-impl<'a> NamedReference<'a, SimpleRecordReference<'a>> {
-    /// Resolve the referenced type.
-    pub fn typ(&self) -> SimpleRecordReference<'a> {
-        self.ctx.resolve_from_slot(self.id)
-    }
-}
-
-impl<'a> NamedReference<'a, ResponseReference<'a>> {
-    /// Resolve the referenced type.
-    pub fn typ(&self) -> ResponseReference<'a> {
-        self.ctx.resolve_from_slot(self.id)
-    }
-}
-
-impl<'a> NamedReference<'a, RootType<'a>> {
-    /// Resolve the referenced type.
-    pub fn typ(&self) -> RootType<'a> {
-        self.ctx.resolve_from_slot(self.id)
-    }
-}
+impl_named_reference!(
+    SimpleTy<'a>,
+    Type<'a>,
+    SimpleRecordReference<'a>,
+    ResponseReference<'a>,
+    RootType<'a>,
+);
 
 /// Internal representation of record and union field.
 struct TypeFieldInner<'a, T> {
