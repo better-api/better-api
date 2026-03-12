@@ -1,6 +1,7 @@
 use better_api_diagnostic::{Label, Report};
+use better_api_syntax::ast::{self, AstNode};
 
-use super::*;
+use crate::oracle::{Context, symbols};
 
 /// Check if a given value matches the expected type.
 ///
@@ -8,50 +9,57 @@ use super::*;
 /// `false` is returned. If it matches, `true` is returned.
 ///
 /// Caller does not need to handle reporting for mismatched types, as it is done here.
-pub fn value_matches_type<D: Fn(&TypeRef) -> Option<Type>>(
-    val: &Value,
-    typ: &Type,
-    reports: &mut Vec<Report>,
-    deref: &D,
-) -> bool {
+pub(crate) fn value_matches_type(ctx: &mut Context, val: &ast::Value, typ: &ast::Type) -> bool {
     match (val, typ) {
-        (Value::Integer(n), Type::TypeI32(_)) => check_integer::<i32>(n, "i32", reports),
-        (Value::Integer(n), Type::TypeI64(_)) => check_integer::<i64>(n, "i64", reports),
-        (Value::Integer(n), Type::TypeU32(_)) => check_integer::<u32>(n, "u32", reports),
-        (Value::Integer(n), Type::TypeU64(_)) => check_integer::<u64>(n, "u64", reports),
-        (Value::Integer(n), Type::Enum(enm)) => compare_int_enum(n, enm, reports),
-
-        (Value::Float(_), Type::TypeF32(_)) => true,
-        (Value::Float(_), Type::TypeF64(_)) => true,
-
-        (Value::Bool(_), Type::TypeBool(_)) => true,
-
-        (Value::String(_), Type::TypeString(_)) => true,
-        (Value::String(_), Type::TypeDate(_)) => todo!(),
-        (Value::String(_), Type::TypeTimestamp(_)) => todo!(),
-        (Value::String(string), Type::Enum(enm)) => compare_string_enum(string, enm, reports),
-
-        (Value::Array(arr), Type::TypeArray(arr_type)) => {
-            compare_arrays(arr, arr_type, reports, deref)
+        (ast::Value::Integer(n), ast::Type::TypeI32(_)) => {
+            check_integer::<i32>(n, "i32", ctx.reports)
         }
-        (Value::Object(_), Type::Record(_)) => todo!(),
-        (Value::Object(_), Type::Union(_)) => todo!(),
-        (Value::Object(_), Type::TypeResponse(_)) => todo!(),
+        (ast::Value::Integer(n), ast::Type::TypeI64(_)) => {
+            check_integer::<i64>(n, "i64", ctx.reports)
+        }
+        (ast::Value::Integer(n), ast::Type::TypeU32(_)) => {
+            check_integer::<u32>(n, "u32", ctx.reports)
+        }
+        (ast::Value::Integer(n), ast::Type::TypeU64(_)) => {
+            check_integer::<u64>(n, "u64", ctx.reports)
+        }
+        (ast::Value::Integer(n), ast::Type::Enum(enm)) => compare_int_enum(n, enm, ctx.reports),
 
-        // TODO: handle `null` separately, when we get it parsed.
-        (_, Type::TypeOption(opt)) => match opt.typ() {
-            Some(opt) => value_matches_type(val, &opt, reports, deref),
+        (ast::Value::Float(_), ast::Type::TypeF32(_)) => true,
+        (ast::Value::Float(_), ast::Type::TypeF64(_)) => true,
+
+        (ast::Value::Bool(_), ast::Type::TypeBool(_)) => true,
+
+        (ast::Value::String(_), ast::Type::TypeString(_)) => true,
+        (ast::Value::String(_), ast::Type::TypeDate(_)) => todo!(),
+        (ast::Value::String(_), ast::Type::TypeTimestamp(_)) => todo!(),
+        (ast::Value::String(string), ast::Type::Enum(enm)) => {
+            compare_string_enum(string, enm, ctx.reports)
+        }
+
+        (ast::Value::Array(arr), ast::Type::TypeArray(arr_type)) => {
+            compare_arrays(ctx, arr, arr_type)
+        }
+        (ast::Value::Object(_), ast::Type::Record(_)) => todo!(),
+        (ast::Value::Object(_), ast::Type::Union(_)) => todo!(),
+        (ast::Value::Object(_), ast::Type::TypeResponse(_)) => todo!(),
+
+        (ast::Value::Null(_), ast::Type::TypeOption(_)) => true,
+        (_, ast::Type::TypeOption(opt)) => match opt.typ() {
+            Some(opt) => value_matches_type(ctx, val, &opt),
             // Error is reported by parser.
             None => false,
         },
 
-        (_, Type::TypeRef(reference)) => match deref(reference) {
-            Some(typ) => value_matches_type(val, &typ, reports, deref),
-            None => false,
-        },
+        (_, ast::Type::TypeRef(reference)) => {
+            match symbols::deref(ctx.strings, ctx.symbol_map, ctx.root, reference) {
+                Some(typ) => value_matches_type(ctx, val, &typ),
+                None => false,
+            }
+        }
 
         _ => {
-            reports.push(
+            ctx.reports.push(
                 Report::error(format!("expected {typ}, found {val}"))
                     .add_label(Label::primary(
                         format!("expected {typ}, found {val}"),
@@ -67,7 +75,11 @@ pub fn value_matches_type<D: Fn(&TypeRef) -> Option<Type>>(
     }
 }
 
-fn check_integer<I: TryFrom<i128>>(n: &Integer, name: &str, reports: &mut Vec<Report>) -> bool {
+fn check_integer<I: TryFrom<i128>>(
+    n: &ast::Integer,
+    name: &str,
+    reports: &mut Vec<Report>,
+) -> bool {
     if I::try_from(n.integer()).is_ok() {
         true
     } else {
@@ -83,9 +95,9 @@ fn check_integer<I: TryFrom<i128>>(n: &Integer, name: &str, reports: &mut Vec<Re
     }
 }
 
-fn compare_int_enum(n: &Integer, enm: &Enum, reports: &mut Vec<Report>) -> bool {
+fn compare_int_enum(n: &ast::Integer, enm: &ast::Enum, reports: &mut Vec<Report>) -> bool {
     let equal = enm.members().filter_map(|mem| mem.value()).any(|mem| {
-        let Value::Integer(mem_int) = mem else {
+        let ast::Value::Integer(mem_int) = mem else {
             return false;
         };
 
@@ -110,9 +122,9 @@ fn compare_int_enum(n: &Integer, enm: &Enum, reports: &mut Vec<Report>) -> bool 
     equal
 }
 
-fn compare_string_enum(string: &String, enm: &Enum, reports: &mut Vec<Report>) -> bool {
+fn compare_string_enum(string: &ast::String, enm: &ast::Enum, reports: &mut Vec<Report>) -> bool {
     let equal = enm.members().filter_map(|mem| mem.value()).any(|mem| {
-        let Value::String(mem_string) = mem else {
+        let ast::Value::String(mem_string) = mem else {
             return false;
         };
 
@@ -141,16 +153,10 @@ fn compare_string_enum(string: &String, enm: &Enum, reports: &mut Vec<Report>) -
     equal
 }
 
-fn compare_arrays<D: Fn(&TypeRef) -> Option<Type>>(
-    arr: &Array,
-    arr_type: &TypeArray,
-    reports: &mut Vec<Report>,
-    deref: &D,
-) -> bool {
+fn compare_arrays(ctx: &mut Context, arr: &ast::Array, arr_type: &ast::TypeArray) -> bool {
     let Some(typ) = arr_type.typ() else {
         return false;
     };
 
-    arr.values()
-        .all(|val| value_matches_type(&val, &typ, reports, deref))
+    arr.values().all(|val| value_matches_type(ctx, &val, &typ))
 }

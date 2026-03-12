@@ -2,6 +2,7 @@ use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast::AstNode;
 use better_api_syntax::{TextRange, ast};
 
+use crate::oracle::compare::value_matches_type;
 use crate::oracle::symbols::{ResolvedSymbol, deref, report_missing, resolve};
 use crate::oracle::value::{lower_mime_types, lower_value};
 use crate::oracle::{Context, SymbolMap};
@@ -397,12 +398,6 @@ fn lower_enum(
     let enum_type = lower_enum_type(&enum_type_ast, ctx.reports)?;
 
     // Parse enum members
-
-    // Deref is used by a more generic value matches type function. We already checked that
-    // enum_type (which we are matching) is one of the valid types. Since reference is not a
-    // valid type, `deref` closure should never be called.
-    let deref = |_: &ast::TypeRef| unreachable!("enum type should not be a reference");
-
     let mut builder = types.start_enum(enum_type);
     let mut is_valid = true;
     for member in typ.members() {
@@ -412,7 +407,7 @@ fn lower_enum(
             continue;
         };
 
-        if !ast::value_matches_type(&value, &enum_type_ast, ctx.reports, &deref) {
+        if !value_matches_type(ctx, &value, &enum_type_ast) {
             is_valid = false;
             continue;
         }
@@ -753,9 +748,7 @@ fn parse_type_fields(
             let mut default_id = None;
             if typ_valid {
                 if let Some(val) = &default {
-                    let deref =
-                        |node: &ast::TypeRef| deref(ctx.strings, ctx.symbol_map, ctx.root, node);
-                    ast::value_matches_type(val, &typ, ctx.reports, &deref);
+                    value_matches_type(ctx, val, &typ);
                 }
 
                 // Lower default value

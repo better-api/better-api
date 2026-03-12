@@ -12,6 +12,7 @@ use crate::spec::value::ValueArena;
 use crate::spec::{Metadata, SpecContext, SymbolTable};
 use crate::string::{StringId, StringInterner};
 
+mod compare;
 mod endpoint;
 mod metadata;
 mod symbols;
