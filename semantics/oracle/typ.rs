@@ -728,7 +728,7 @@ fn parse_type_fields(
             // Lower name
             let name_id = f
                 .name()
-                .and_then(|n| lower_name(&n, ctx.strings, ctx.reports))?;
+                .and_then(|n| lower_name(&n, ctx.strings, Some(ctx.reports)))?;
 
             // Get default from prologue
             let default = if parse_default {

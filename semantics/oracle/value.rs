@@ -65,7 +65,7 @@ impl<'a> ParsedValue<'a> {
         match value {
             ast::Value::String(string) => {
                 let token = string.string();
-                let parsed_str = parse_string(&token, reports);
+                let parsed_str = parse_string(&token, Some(reports));
                 let str_id = strings.get_or_intern(&parsed_str);
 
                 Self::Primitive(PrimitiveValue::String(str_id))
@@ -103,7 +103,9 @@ fn parse_object_fields(
             // Missing name or value is reported by parser.
             f.value()?;
 
-            let name = f.name().and_then(|n| lower_name(&n, strings, reports))?;
+            let name = f
+                .name()
+                .and_then(|n| lower_name(&n, strings, Some(reports)))?;
             Some(InternedField { name, field: f })
         })
         .collect();
@@ -268,7 +270,7 @@ fn validate_mime_type_aux(
     };
 
     let token = string.string();
-    let string = parse_string(&token, reports);
+    let string = parse_string(&token, Some(reports));
 
     // TODO: Validate it's actually a mime type
 

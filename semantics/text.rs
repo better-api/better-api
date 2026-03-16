@@ -9,21 +9,26 @@ use crate::string::{StringId, StringInterner};
 
 /// Lowers name by parsing, validating and interning it.
 ///
+/// If `reports` is `Some`, parsing/validation reports are emitted into it.
+/// If `reports` is `None`, reports are suppressed.
+///
 /// Returns interned string id of the name if it's valid.
 pub fn lower_name(
     name: &ast::Name,
     strings: &mut StringInterner,
-    reports: &mut Vec<Report>,
+    mut reports: Option<&mut Vec<Report>>,
 ) -> Option<StringId> {
     let token = name.token();
 
     let name_str: Cow<_> = match &token {
         ast::NameToken::Identifier(ident) => ident.text().into(),
-        ast::NameToken::String(string) => parse_string(string, reports),
+        ast::NameToken::String(string) => {
+            parse_string(string, reports.as_mut().map(|reports| &mut **reports))
+        }
     };
 
     if let Err(report) = validate_name(&name_str, token.text_range()) {
-        reports.push(report);
+        maybe_push_report(&mut reports, report);
         return None;
     }
 
@@ -51,9 +56,12 @@ pub fn validate_name(name: &str, range: TextRange) -> Result<(), Report> {
 ///
 /// This removes leading and trailing `"` and escapes the character. Returned
 /// `Cow<'_, str>` is the rust representation of the string itself.
+///
+/// If `reports` is `Some`, invalid escape reports are emitted into it.
+/// If `reports` is `None`, reports are suppressed.
 pub fn parse_string<'a>(
     token: &'a ast::StringToken,
-    diagnostics: &mut Vec<Report>,
+    mut reports: Option<&mut Vec<Report>>,
 ) -> Cow<'a, str> {
     let mut text = token.text();
 
@@ -79,7 +87,8 @@ pub fn parse_string<'a>(
         }
 
         let Some((end, esc)) = chars.next() else {
-            diagnostics.push(
+            maybe_push_report(
+                &mut reports,
                 Report::error("expected escaped character, got '\"'".to_string()).add_label(
                     Label::primary(
                         "expected escaped character".to_string(),
@@ -96,7 +105,8 @@ pub fn parse_string<'a>(
             '"' => res.push('"'),
             '\\' => res.push('\\'),
             _ => {
-                diagnostics.push(
+                maybe_push_report(
+                    &mut reports,
                     Report::error(format!("got invalid escape character `{esc}`")).add_label(
                         Label::primary(
                             "invalid escape character".to_string(),
@@ -110,6 +120,12 @@ pub fn parse_string<'a>(
     }
 
     Cow::Owned(res)
+}
+
+fn maybe_push_report(reports: &mut Option<&mut Vec<Report>>, report: Report) {
+    if let Some(reports) = reports.as_mut() {
+        reports.push(report);
+    }
 }
 
 #[cfg(test)]
@@ -163,7 +179,7 @@ mod test {
         let res = parse(tokens);
         let token = get_string_token(&res);
 
-        let res = parse_string(&token, &mut diags);
+        let res = parse_string(&token, Some(&mut diags));
         assert_eq!(diags, vec![]);
         assert_eq!(res, "foo");
     }
@@ -175,7 +191,7 @@ mod test {
         let res = parse(tokens);
         let token = get_string_token(&res);
 
-        let res = parse_string(&token, &mut diags);
+        let res = parse_string(&token, Some(&mut diags));
         assert_eq!(
             diags,
             vec![
@@ -194,7 +210,7 @@ mod test {
         let res = parse(tokens);
         let token = get_string_token(&res);
 
-        let res = parse_string(&token, &mut diags);
+        let res = parse_string(&token, Some(&mut diags));
         assert_eq!(diags, vec![]);
         assert_eq!(res, "valid \t \n \\ \" foo");
     }
