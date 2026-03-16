@@ -1,7 +1,16 @@
-use better_api_diagnostic::{Label, Report};
-use better_api_syntax::ast::{self, AstNode};
+use std::collections::HashMap;
 
-use crate::oracle::{Context, symbols};
+use better_api_diagnostic::{Label, Report};
+use better_api_syntax::{
+    TextRange,
+    ast::{self, AstNode},
+};
+
+use crate::{
+    oracle::{Context, symbols},
+    string::StringId,
+    text::lower_name,
+};
 
 /// Check if a given value matches the expected type.
 ///
@@ -40,7 +49,7 @@ pub(crate) fn value_matches_type(ctx: &mut Context, val: &ast::Value, typ: &ast:
         (ast::Value::Array(arr), ast::Type::TypeArray(arr_type)) => {
             compare_arrays(ctx, arr, arr_type)
         }
-        (ast::Value::Object(_), ast::Type::Record(_)) => todo!(),
+        (ast::Value::Object(obj), ast::Type::Record(rec)) => compare_object(ctx, obj, rec),
         (ast::Value::Object(_), ast::Type::Union(_)) => todo!(),
         (ast::Value::Object(_), ast::Type::TypeResponse(_)) => todo!(),
 
@@ -159,4 +168,99 @@ fn compare_arrays(ctx: &mut Context, arr: &ast::Array, arr_type: &ast::TypeArray
     };
 
     arr.values().all(|val| value_matches_type(ctx, &val, &typ))
+}
+
+fn compare_object(ctx: &mut Context, obj: &ast::Object, rec: &ast::Record) -> bool {
+    struct FieldData {
+        field_range: TextRange,
+        typ: ast::Type,
+        has_default: bool,
+        in_obj: bool,
+    }
+    let mut rec_fields: HashMap<StringId, FieldData> = HashMap::new();
+    let mut valid = true;
+
+    // Insert record fields
+    for field in rec.fields() {
+        let Some(name) = field.name() else {
+            continue;
+        };
+
+        let Some(typ) = field.typ() else {
+            continue;
+        };
+
+        let has_default = field.prologue().and_then(|p| p.default()).is_some();
+
+        let Some(name_id) = lower_name(&name, ctx.strings, None) else {
+            continue;
+        };
+
+        rec_fields.entry(name_id).or_insert(FieldData {
+            field_range: field.syntax().text_range(),
+            typ,
+            has_default,
+            in_obj: false,
+        });
+    }
+
+    // Compare object fields with record
+    for field in obj.fields() {
+        let Some(name) = field.name() else {
+            continue;
+        };
+
+        let Some(val) = field.value() else {
+            continue;
+        };
+
+        let Some(name_id) = lower_name(&name, ctx.strings, None) else {
+            continue;
+        };
+
+        match rec_fields.get_mut(&name_id) {
+            Some(rec_field) => {
+                rec_field.in_obj = true;
+
+                let matches = value_matches_type(ctx, &val, &rec_field.typ);
+                valid &= matches;
+            }
+            None => {
+                valid = false;
+
+                let name_str = ctx.strings.resolve(name_id);
+                ctx.reports.push(
+                    Report::error(format!("record has no field `{name_str}`")).add_label(
+                        Label::primary(
+                            "no such field".to_string(),
+                            field.syntax().text_range().into(),
+                        ),
+                    ),
+                );
+            }
+        }
+    }
+
+    // Check all record fields exist in object
+    for (name_id, field) in rec_fields
+        .iter()
+        .filter(|(_, f)| !f.in_obj && !f.has_default)
+    {
+        valid = false;
+
+        let name_str = ctx.strings.resolve(*name_id);
+        ctx.reports.push(
+            Report::error(format!("missing record field `{name_str}`"))
+                .add_label(Label::primary(
+                    format!("missing record field `{name_str}`"),
+                    obj.syntax().text_range().into(),
+                ))
+                .add_label(Label::secondary(
+                    "field defined here".to_string(),
+                    field.field_range.into(),
+                )),
+        );
+    }
+
+    valid
 }

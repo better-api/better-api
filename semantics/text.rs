@@ -22,9 +22,7 @@ pub fn lower_name(
 
     let name_str: Cow<_> = match &token {
         ast::NameToken::Identifier(ident) => ident.text().into(),
-        ast::NameToken::String(string) => {
-            parse_string(string, reports.as_mut().map(|reports| &mut **reports))
-        }
+        ast::NameToken::String(string) => parse_string(string, reports.as_deref_mut()),
     };
 
     if let Err(report) = validate_name(&name_str, token.text_range()) {
