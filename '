@@ -277,6 +277,10 @@ fn compare_union(ctx: &mut Context, obj: &ast::Object, union: &ast::Union) -> bo
             continue;
         };
 
+        let Some(val) = field.value() else {
+            continue;
+        };
+
         let Some(name_id) = lower_name(&name, ctx.strings, None) else {
             continue;
         };
@@ -345,43 +349,7 @@ fn compare_union(ctx: &mut Context, obj: &ast::Object, union: &ast::Union) -> bo
     let type_value_str = parse_string(&type_value_token, None);
 
     // Find the type in union
-    let union_field = union.fields().find(|field| {
-        let Some(name_token) = field.name() else {
-            return false;
-        };
+    union.fields().find(|field| )
 
-        let Some(name_id) = lower_name(&name_token, ctx.strings, None) else {
-            return false;
-        };
-
-        let name_str = ctx.strings.resolve(name_id);
-        name_str == type_value_str
-    });
-
-    let Some(union_field) = union_field else {
-        ctx.reports.push(
-            Report::error(format!("`{type_value_str}` is not a valid union option"))
-                .add_label(Label::primary(
-                    "unknown union option".to_string(),
-                    type_value.syntax().text_range().into(),
-                ))
-                .add_label(Label::secondary(
-                    "union defined here".to_string(),
-                    union.syntax().text_range().into(),
-                ))
-                .with_note("help: set `type` to one of the union option names".to_string()),
-        );
-        return false;
-    };
-
-    // Do final comparison
-    let Some(value) = data_field.value() else {
-        return false;
-    };
-
-    let Some(typ) = union_field.typ() else {
-        return false;
-    };
-
-    value_matches_type(ctx, &value, &typ)
+    todo!()
 }
