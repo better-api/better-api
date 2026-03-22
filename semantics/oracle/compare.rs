@@ -51,7 +51,9 @@ pub(crate) fn value_matches_type(ctx: &mut Context, val: &ast::Value, typ: &ast:
         }
         (ast::Value::Object(obj), ast::Type::Record(rec)) => compare_object(ctx, obj, rec),
         (ast::Value::Object(obj), ast::Type::Union(union)) => compare_union(ctx, obj, union),
-        (ast::Value::Object(_), ast::Type::TypeResponse(_)) => todo!(),
+        (ast::Value::Object(obj), ast::Type::TypeResponse(resp)) => {
+            compare_response(ctx, obj, resp)
+        }
 
         (ast::Value::Null(_), ast::Type::TypeOption(_)) => true,
         (_, ast::Type::TypeOption(opt)) => match opt.typ() {
@@ -281,6 +283,7 @@ fn compare_union(ctx: &mut Context, obj: &ast::Object, union: &ast::Union) -> bo
             continue;
         };
 
+        // Repeated fields don't have to be handled here, they are handled during lowering.
         match ctx.strings.resolve(name_id) {
             "type" => type_field = Some(field),
             "data" => data_field = Some(field),
@@ -384,4 +387,88 @@ fn compare_union(ctx: &mut Context, obj: &ast::Object, union: &ast::Union) -> bo
     };
 
     value_matches_type(ctx, &value, &typ)
+}
+
+fn compare_response(ctx: &mut Context, obj: &ast::Object, resp: &ast::TypeResponse) -> bool {
+    let help_str = "help: object representing a response can contain only `headers`, `contentType` and `body` fields";
+
+    // Get fields
+    let mut headers_field = None;
+    let mut body_field = None;
+    let mut content_type_field = None;
+
+    for field in obj.fields() {
+        let Some(name) = field.name() else {
+            continue;
+        };
+
+        let Some(name_id) = lower_name(&name, ctx.strings, None) else {
+            continue;
+        };
+
+        match ctx.strings.resolve(name_id) {
+            "headers" => headers_field = Some(field),
+            "contentType" => content_type_field = Some(field),
+            "body" => body_field = Some(field),
+
+            name_str => ctx.reports.push(
+                Report::error(format!("invalid response field `{name_str}`"))
+                    .add_label(Label::primary(
+                        "invalid response field".to_string(),
+                        field.syntax().text_range().into(),
+                    ))
+                    .with_note(help_str.to_string()),
+            ),
+        }
+    }
+
+    // TODO: I don't know how exactly to do content type validation...
+    // Something to think about.
+    if !is_content_type_valid(ctx, content_type_field.and_then(|f| f.value())) {
+        return false;
+    }
+
+    // TODO: Headers and body comparison
+
+    todo!()
+}
+
+fn is_content_type_valid(ctx: &mut Context, val: Option<ast::Value>) -> bool {
+    let Some(val) = val else {
+        return true;
+    };
+
+    let range = val.syntax().text_range();
+
+    let ast::Value::String(string) = val else {
+        ctx.reports.push(
+            Report::error("response `contentType` field must be a string".to_string()).add_label(
+                Label::primary(
+                    "`contentType` must be a string".to_string(),
+                    val.syntax().text_range().into(),
+                ),
+            ),
+        );
+
+        return false;
+    };
+
+    let token = string.string();
+    let val_str = parse_string(&token, None);
+
+    if val_str == "application/json" {
+        return true;
+    }
+
+    ctx.reports.push(
+        Report::error(format!(
+            "`contentType` should be `application/json`, got `{val_str}`"
+        ))
+        .add_label(Label::primary(
+            "expected `application/json`".to_string(),
+            range.into(),
+        )),
+    );
+
+    false
 }
