@@ -1,16 +1,16 @@
 use std::collections::HashMap;
 
 use better_api_diagnostic::{Label, Report};
-use better_api_syntax::{
-    TextRange,
-    ast::{self, AstNode},
-};
+use better_api_syntax::TextRange;
+use better_api_syntax::ast::{self, AstNode};
 
-use crate::{
-    oracle::{Context, symbols, typ},
-    string::StringId,
-    text::{lower_name, parse_string},
-};
+use time::format_description::well_known::Rfc3339;
+use time::macros::format_description;
+use time::{Date, OffsetDateTime};
+
+use crate::oracle::{Context, symbols};
+use crate::string::StringId;
+use crate::text::{lower_name, parse_string};
 
 /// Check if a given value matches the expected type.
 ///
@@ -40,8 +40,8 @@ pub(crate) fn value_matches_type(ctx: &mut Context, val: &ast::Value, typ: &ast:
         (ast::Value::Bool(_), ast::Type::TypeBool(_)) => true,
 
         (ast::Value::String(_), ast::Type::TypeString(_)) => true,
-        (ast::Value::String(_), ast::Type::TypeDate(_)) => todo!(),
-        (ast::Value::String(_), ast::Type::TypeTimestamp(_)) => todo!(),
+        (ast::Value::String(string), ast::Type::TypeDate(_)) => compare_date(ctx, string),
+        (ast::Value::String(string), ast::Type::TypeTimestamp(_)) => compare_timestamp(ctx, string),
         (ast::Value::String(string), ast::Type::Enum(enm)) => {
             compare_string_enum(string, enm, ctx.reports)
         }
@@ -131,6 +131,47 @@ fn compare_int_enum(n: &ast::Integer, enm: &ast::Enum, reports: &mut Vec<Report>
     }
 
     equal
+}
+
+fn compare_date(ctx: &mut Context, val: &ast::String) -> bool {
+    const DATE_FORMAT: &[time::format_description::FormatItem<'static>] =
+        format_description!("[year]-[month]-[day]");
+
+    let token = val.string();
+    let string = parse_string(&token, None);
+
+    let is_valid = Date::parse(&string, DATE_FORMAT).is_ok();
+    if !is_valid {
+        ctx.reports.push(
+            Report::error("invalid date".to_string())
+                .add_label(Label::primary(
+                    "invalid date".to_string(),
+                    val.syntax().text_range().into(),
+                ))
+                .with_note("help: date has to be in `YYYY-MM-DD` format".to_string()),
+        );
+    }
+
+    is_valid
+}
+
+fn compare_timestamp(ctx: &mut Context, val: &ast::String) -> bool {
+    let token = val.string();
+    let string = parse_string(&token, None);
+
+    let is_valid = OffsetDateTime::parse(&string, &Rfc3339).is_ok();
+    if !is_valid {
+        ctx.reports.push(
+            Report::error("invalid timestamp".to_string())
+                .add_label(Label::primary(
+                    "invalid timestamp".to_string(),
+                    val.syntax().text_range().into(),
+                ))
+                .with_note("help: timestamp has to be in RFC3339 format".to_string()),
+        );
+    }
+
+    is_valid
 }
 
 fn compare_string_enum(string: &ast::String, enm: &ast::Enum, reports: &mut Vec<Report>) -> bool {

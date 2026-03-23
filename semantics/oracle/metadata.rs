@@ -1,6 +1,6 @@
 use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast::AstNode;
-use better_api_syntax::{ast, TextRange};
+use better_api_syntax::{TextRange, ast};
 
 use crate::spec;
 use crate::text::{lower_name, parse_string};
