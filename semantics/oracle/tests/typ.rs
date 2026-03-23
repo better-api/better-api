@@ -812,6 +812,33 @@ fn lower_response_with_custom_content_type() {
 }
 
 #[test]
+fn lower_response_with_mixed_content_type() {
+    let text = indoc! {r#"
+        type Resp: resp {
+            contentType: ["image/png" "application/json"]
+            body: file
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let oracle = setup_oracle(&res.root);
+    insta::assert_debug_snapshot!(oracle.reports());
+
+    let resp = match get_root_type(&oracle, "Resp") {
+        RootType::Response(resp) => resp,
+        typ => panic!("expected response, got {typ:?}"),
+    };
+
+    let content_types: Vec<_> = resp.content_type.clone().unwrap().collect();
+    assert_eq!(content_types, vec!["image/png", "application/json"]);
+    assert!(matches!(resp.body, InlineTy::Primitive(PrimitiveTy::File)));
+    assert!(resp.headers.is_none());
+}
+
+#[test]
 fn lower_response_with_custom_content_type_invalid_body() {
     let text = indoc! {r#"
         type Resp: resp {
