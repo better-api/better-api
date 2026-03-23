@@ -1,0 +1,31 @@
+---
+source: semantics/oracle/tests/compare.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "`bar` is not a valid union option",
+        labels: [
+            Label {
+                style: Primary,
+                message: "unknown union option",
+                span: Span {
+                    start: 90,
+                    end: 95,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "union defined here",
+                span: Span {
+                    start: 14,
+                    end: 36,
+                },
+            },
+        ],
+        note: Some(
+            "help: set `type` to one of the union option names",
+        ),
+    },
+]

@@ -1,0 +1,75 @@
+---
+source: semantics/oracle/tests/compare.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "record has no field `extra`",
+        labels: [
+            Label {
+                style: Primary,
+                message: "no such field",
+                span: Span {
+                    start: 97,
+                    end: 106,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "record defined here",
+                span: Span {
+                    start: 10,
+                    end: 33,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "missing record field `foo`",
+        labels: [
+            Label {
+                style: Primary,
+                message: "missing record field `foo`",
+                span: Span {
+                    start: 148,
+                    end: 150,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "field defined here",
+                span: Span {
+                    start: 20,
+                    end: 32,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected string, found integer",
+        labels: [
+            Label {
+                style: Primary,
+                message: "expected string, found integer",
+                span: Span {
+                    start: 204,
+                    end: 205,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type defined here",
+                span: Span {
+                    start: 25,
+                    end: 31,
+                },
+            },
+        ],
+        note: None,
+    },
+]

@@ -1,0 +1,31 @@
+---
+source: semantics/oracle/tests/compare.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "string `\"beta\"` is not a valid enum member",
+        labels: [
+            Label {
+                style: Primary,
+                message: "not a valid enum member",
+                span: Span {
+                    start: 76,
+                    end: 82,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "enum defined here",
+                span: Span {
+                    start: 11,
+                    end: 40,
+                },
+            },
+        ],
+        note: Some(
+            "help: string has to be equal to one of the enum members",
+        ),
+    },
+]

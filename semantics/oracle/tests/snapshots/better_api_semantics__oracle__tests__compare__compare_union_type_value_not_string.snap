@@ -1,0 +1,23 @@
+---
+source: semantics/oracle/tests/compare.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "union `type` field must be a string naming a union option",
+        labels: [
+            Label {
+                style: Primary,
+                message: "`type` must be a string",
+                span: Span {
+                    start: 90,
+                    end: 91,
+                },
+            },
+        ],
+        note: Some(
+            "help: set `type` to one of the union option names",
+        ),
+    },
+]

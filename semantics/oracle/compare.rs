@@ -40,8 +40,12 @@ pub(crate) fn value_matches_type(ctx: &mut Context, val: &ast::Value, typ: &ast:
         (ast::Value::Bool(_), ast::Type::TypeBool(_)) => true,
 
         (ast::Value::String(_), ast::Type::TypeString(_)) => true,
-        (ast::Value::String(string), ast::Type::TypeDate(_)) => compare_date(ctx, string),
-        (ast::Value::String(string), ast::Type::TypeTimestamp(_)) => compare_timestamp(ctx, string),
+        (ast::Value::String(string), ast::Type::TypeDate(typ)) => {
+            compare_date(ctx, string, typ.syntax().text_range())
+        }
+        (ast::Value::String(string), ast::Type::TypeTimestamp(typ)) => {
+            compare_timestamp(ctx, string, typ.syntax().text_range())
+        }
         (ast::Value::String(string), ast::Type::Enum(enm)) => {
             compare_string_enum(string, enm, ctx.reports)
         }
@@ -107,19 +111,20 @@ fn check_integer<I: TryFrom<i128>>(
 }
 
 fn compare_int_enum(n: &ast::Integer, enm: &ast::Enum, reports: &mut Vec<Report>) -> bool {
+    let int = n.integer();
     let equal = enm.members().filter_map(|mem| mem.value()).any(|mem| {
         let ast::Value::Integer(mem_int) = mem else {
             return false;
         };
 
-        n.integer() == mem_int.integer()
+        int == mem_int.integer()
     });
 
     if !equal {
         reports.push(
-            Report::error("integer is not a valid enum member".to_string())
+            Report::error(format!("integer `{int}` is not a valid enum member"))
                 .add_label(Label::primary(
-                    "integer is not a valid enum member".to_string(),
+                    "not a valid enum member".to_string(),
                     n.syntax().text_range().into(),
                 ))
                 .add_label(Label::secondary(
@@ -133,7 +138,7 @@ fn compare_int_enum(n: &ast::Integer, enm: &ast::Enum, reports: &mut Vec<Report>
     equal
 }
 
-fn compare_date(ctx: &mut Context, val: &ast::String) -> bool {
+fn compare_date(ctx: &mut Context, val: &ast::String, typ_range: TextRange) -> bool {
     const DATE_FORMAT: &[time::format_description::FormatItem<'static>] =
         format_description!("[year]-[month]-[day]");
 
@@ -148,6 +153,10 @@ fn compare_date(ctx: &mut Context, val: &ast::String) -> bool {
                     "invalid date".to_string(),
                     val.syntax().text_range().into(),
                 ))
+                .add_label(Label::secondary(
+                    "type defined here".to_string(),
+                    typ_range.into(),
+                ))
                 .with_note("help: date has to be in `YYYY-MM-DD` format".to_string()),
         );
     }
@@ -155,7 +164,7 @@ fn compare_date(ctx: &mut Context, val: &ast::String) -> bool {
     is_valid
 }
 
-fn compare_timestamp(ctx: &mut Context, val: &ast::String) -> bool {
+fn compare_timestamp(ctx: &mut Context, val: &ast::String, typ_range: TextRange) -> bool {
     let token = val.string();
     let string = parse_string(&token, None);
 
@@ -167,6 +176,10 @@ fn compare_timestamp(ctx: &mut Context, val: &ast::String) -> bool {
                     "invalid timestamp".to_string(),
                     val.syntax().text_range().into(),
                 ))
+                .add_label(Label::secondary(
+                    "type defined here".to_string(),
+                    typ_range.into(),
+                ))
                 .with_note("help: timestamp has to be in RFC3339 format".to_string()),
         );
     }
@@ -175,6 +188,9 @@ fn compare_timestamp(ctx: &mut Context, val: &ast::String) -> bool {
 }
 
 fn compare_string_enum(string: &ast::String, enm: &ast::Enum, reports: &mut Vec<Report>) -> bool {
+    let token = string.string();
+    let text = token.text();
+
     let equal = enm.members().filter_map(|mem| mem.value()).any(|mem| {
         let ast::Value::String(mem_string) = mem else {
             return false;
@@ -184,14 +200,14 @@ fn compare_string_enum(string: &ast::String, enm: &ast::Enum, reports: &mut Vec<
         // characters are unique. None of the escaped characters can be created in two
         // different ways. Ie to have a string that contains '\', you need to provide "\\",
         // no other way to create it. So we can compare raw string containing escapes.
-        string.string().text() == mem_string.string().text()
+        text == mem_string.string().text()
     });
 
     if !equal {
         reports.push(
-            Report::error("string is not a valid enum member".to_string())
+            Report::error(format!("string `{text}` is not a valid enum member"))
                 .add_label(Label::primary(
-                    "string is not a valid enum member".to_string(),
+                    "not a valid enum member".to_string(),
                     string.syntax().text_range().into(),
                 ))
                 .add_label(Label::secondary(
@@ -273,12 +289,15 @@ fn compare_object(ctx: &mut Context, obj: &ast::Object, rec: &ast::Record) -> bo
 
                 let name_str = ctx.strings.resolve(name_id);
                 ctx.reports.push(
-                    Report::error(format!("record has no field `{name_str}`")).add_label(
-                        Label::primary(
+                    Report::error(format!("record has no field `{name_str}`"))
+                        .add_label(Label::primary(
                             "no such field".to_string(),
                             field.syntax().text_range().into(),
-                        ),
-                    ),
+                        ))
+                        .add_label(Label::secondary(
+                            "record defined here".to_string(),
+                            rec.syntax().text_range().into(),
+                        )),
                 );
             }
         }
@@ -342,9 +361,9 @@ fn compare_union(ctx: &mut Context, obj: &ast::Object, union: &ast::Union) -> bo
     // Validate both fields are defined
     if type_field.is_none() {
         ctx.reports.push(
-            Report::error("missing `type` field".to_string())
+            Report::error("missing union `type` field".to_string())
                 .add_label(Label::primary(
-                    "missing `type` field".to_string(),
+                    "missing union `type` field".to_string(),
                     obj.syntax().text_range().into(),
                 ))
                 .with_note(help_str.to_string()),
@@ -353,9 +372,9 @@ fn compare_union(ctx: &mut Context, obj: &ast::Object, union: &ast::Union) -> bo
 
     if data_field.is_none() {
         ctx.reports.push(
-            Report::error("missing `data` field".to_string())
+            Report::error("missing union `data` field".to_string())
                 .add_label(Label::primary(
-                    "missing `data` field".to_string(),
+                    "missing union `data` field".to_string(),
                     obj.syntax().text_range().into(),
                 ))
                 .with_note(help_str.to_string()),

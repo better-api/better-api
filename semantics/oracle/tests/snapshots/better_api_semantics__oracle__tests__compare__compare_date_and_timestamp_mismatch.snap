@@ -1,0 +1,56 @@
+---
+source: semantics/oracle/tests/compare.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "invalid date",
+        labels: [
+            Label {
+                style: Primary,
+                message: "invalid date",
+                span: Span {
+                    start: 34,
+                    end: 46,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type defined here",
+                span: Span {
+                    start: 64,
+                    end: 68,
+                },
+            },
+        ],
+        note: Some(
+            "help: date has to be in `YYYY-MM-DD` format",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "invalid timestamp",
+        labels: [
+            Label {
+                style: Primary,
+                message: "invalid timestamp",
+                span: Span {
+                    start: 83,
+                    end: 100,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type defined here",
+                span: Span {
+                    start: 123,
+                    end: 132,
+                },
+            },
+        ],
+        note: Some(
+            "help: timestamp has to be in RFC3339 format",
+        ),
+    },
+]

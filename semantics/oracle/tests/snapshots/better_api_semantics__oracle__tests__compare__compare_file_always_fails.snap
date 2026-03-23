@@ -1,0 +1,52 @@
+---
+source: semantics/oracle/tests/compare.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "expected file, found string",
+        labels: [
+            Label {
+                style: Primary,
+                message: "expected file, found string",
+                span: Span {
+                    start: 34,
+                    end: 43,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type defined here",
+                span: Span {
+                    start: 63,
+                    end: 67,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected file, found null",
+        labels: [
+            Label {
+                style: Primary,
+                message: "expected file, found null",
+                span: Span {
+                    start: 82,
+                    end: 86,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type defined here",
+                span: Span {
+                    start: 104,
+                    end: 108,
+                },
+            },
+        ],
+        note: None,
+    },
+]

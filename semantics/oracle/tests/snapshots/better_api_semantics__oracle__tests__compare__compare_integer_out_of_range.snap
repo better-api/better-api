@@ -1,0 +1,126 @@
+---
+source: semantics/oracle/tests/compare.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "integer value out of range for i32 type",
+        labels: [
+            Label {
+                style: Primary,
+                message: "integer value out of range for i32 type",
+                span: Span {
+                    start: 34,
+                    end: 44,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "integer value out of range for i32 type",
+        labels: [
+            Label {
+                style: Primary,
+                message: "integer value out of range for i32 type",
+                span: Span {
+                    start: 78,
+                    end: 89,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "integer value out of range for i64 type",
+        labels: [
+            Label {
+                style: Primary,
+                message: "integer value out of range for i64 type",
+                span: Span {
+                    start: 124,
+                    end: 143,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "integer value out of range for i64 type",
+        labels: [
+            Label {
+                style: Primary,
+                message: "integer value out of range for i64 type",
+                span: Span {
+                    start: 177,
+                    end: 197,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "integer value out of range for u32 type",
+        labels: [
+            Label {
+                style: Primary,
+                message: "integer value out of range for u32 type",
+                span: Span {
+                    start: 232,
+                    end: 234,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "integer value out of range for u32 type",
+        labels: [
+            Label {
+                style: Primary,
+                message: "integer value out of range for u32 type",
+                span: Span {
+                    start: 272,
+                    end: 282,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "integer value out of range for u64 type",
+        labels: [
+            Label {
+                style: Primary,
+                message: "integer value out of range for u64 type",
+                span: Span {
+                    start: 316,
+                    end: 318,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "integer value out of range for u64 type",
+        labels: [
+            Label {
+                style: Primary,
+                message: "integer value out of range for u64 type",
+                span: Span {
+                    start: 356,
+                    end: 376,
+                },
+            },
+        ],
+        note: None,
+    },
+]

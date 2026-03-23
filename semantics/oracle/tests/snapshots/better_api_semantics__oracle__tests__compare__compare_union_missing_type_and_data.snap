@@ -1,0 +1,40 @@
+---
+source: semantics/oracle/tests/compare.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "missing union `type` field",
+        labels: [
+            Label {
+                style: Primary,
+                message: "missing union `type` field",
+                span: Span {
+                    start: 72,
+                    end: 95,
+                },
+            },
+        ],
+        note: Some(
+            "help: object representing an union must contain only `type` and `data` fields",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "missing union `data` field",
+        labels: [
+            Label {
+                style: Primary,
+                message: "missing union `data` field",
+                span: Span {
+                    start: 137,
+                    end: 166,
+                },
+            },
+        ],
+        note: Some(
+            "help: object representing an union must contain only `type` and `data` fields",
+        ),
+    },
+]
