@@ -7,7 +7,7 @@ use better_api_syntax::{
 };
 
 use crate::{
-    oracle::{Context, symbols},
+    oracle::{Context, symbols, typ},
     string::StringId,
     text::{lower_name, parse_string},
 };
@@ -392,6 +392,8 @@ fn compare_union(ctx: &mut Context, obj: &ast::Object, union: &ast::Union) -> bo
 fn compare_response(ctx: &mut Context, obj: &ast::Object, resp: &ast::TypeResponse) -> bool {
     let help_str = "help: object representing a response can contain only `headers`, `contentType` and `body` fields";
 
+    let mut is_valid = true;
+
     // Get fields
     let mut headers_field = None;
     let mut body_field = None;
@@ -422,17 +424,88 @@ fn compare_response(ctx: &mut Context, obj: &ast::Object, resp: &ast::TypeRespon
         }
     }
 
-    // TODO: I don't know how exactly to do content type validation...
-    // Something to think about.
+    // Check content type
     if !is_content_type_valid(ctx, content_type_field.and_then(|f| f.value())) {
-        return false;
+        is_valid = false;
     }
 
-    // TODO: Headers and body comparison
+    // Check headers.
+    match (
+        headers_field.and_then(|f| f.value()),
+        resp.headers().and_then(|h| h.typ()),
+    ) {
+        (None, None) => (),
+        (Some(headers_val), None) => {
+            is_valid = false;
 
-    todo!()
+            ctx.reports.push(
+                Report::error("response type has no `headers` field".to_string())
+                    .add_label(Label::primary(
+                        "unexpected `headers` field".to_string(),
+                        headers_val.syntax().text_range().into(),
+                    ))
+                    .add_label(Label::secondary(
+                        "response type defined here".to_string(),
+                        resp.syntax().text_range().into(),
+                    )),
+            );
+        }
+        (None, Some(headers_typ)) => {
+            is_valid = false;
+
+            ctx.reports.push(
+                Report::error("missing `headers` field".to_string())
+                    .add_label(Label::primary(
+                        "missing `headers` field".to_string(),
+                        obj.syntax().text_range().into(),
+                    ))
+                    .add_label(Label::secondary(
+                        "headers type defined here".to_string(),
+                        headers_typ.syntax().text_range().into(),
+                    )),
+            );
+        }
+        (Some(val), Some(typ)) => {
+            let valid = value_matches_type(ctx, &val, &typ);
+            if !valid {
+                is_valid = false;
+            }
+        }
+    }
+
+    // Compare body
+    let Some(body) = body_field.and_then(|f| f.value()) else {
+        ctx.reports
+            .push(
+                Report::error("missin `body` field".to_string()).add_label(Label::primary(
+                    "missin `body` field".to_string(),
+                    obj.syntax().text_range().into(),
+                )),
+            );
+
+        return false;
+    };
+
+    let Some(body_typ) = resp.body().and_then(|b| b.typ()) else {
+        return is_valid;
+    };
+
+    let body_valid = value_matches_type(ctx, &body, &body_typ);
+    if !body_valid {
+        is_valid = false;
+    }
+
+    is_valid
 }
 
+/// Checks if content type is valid.
+///
+/// This is used when comparing object value with response type. At the time of writing this can only
+/// happen when giving an example for a response type. It only makes sense to do so if the body is
+/// a non-file type. In other words, content type of the response has to be `application/json`.
+///
+/// Caller of the main compare function is responsible for checking that comparison even makes sense.
+/// This function assumes that request has contentType of application/json and enforces that.
 fn is_content_type_valid(ctx: &mut Context, val: Option<ast::Value>) -> bool {
     let Some(val) = val else {
         return true;
