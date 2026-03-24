@@ -4,9 +4,6 @@ use crate::{Kind, Language, SyntaxNode, SyntaxToken};
 use rowan::TextRange;
 pub use rowan::ast::{AstNode, AstPtr};
 
-mod compare;
-pub use compare::value_matches_type;
-
 // Helper macros to generator AST nodes as structs.
 macro_rules! ast_node {
     (

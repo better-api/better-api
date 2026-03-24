@@ -239,7 +239,7 @@ fn lower_endpoint<P: EndpointParent>(
     // They all require a name to be inlined.
     let (name_id, name_range) = if let Some(name) = endpoint.name() {
         (
-            text::lower_name(&name, ctx.ctx.strings, ctx.ctx.reports)?,
+            text::lower_name(&name, ctx.ctx.strings, Some(ctx.ctx.reports))?,
             name.syntax().text_range(),
         )
     } else {
@@ -1166,7 +1166,7 @@ where
         .map_or_else(|| fallback_range, |tk| tk.text_range());
     let parsed_str = path_token
         .as_ref()
-        .map(|tk| text::parse_string(tk, ctx.ctx.reports));
+        .map(|tk| text::parse_string(tk, Some(ctx.ctx.reports)));
     let path = match &parsed_str {
         Some(parsed_str) => PathPart::new(
             parsed_str,

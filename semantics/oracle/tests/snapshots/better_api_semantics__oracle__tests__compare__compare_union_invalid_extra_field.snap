@@ -1,0 +1,23 @@
+---
+source: semantics/oracle/tests/compare.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "invalid union field `foo`",
+        labels: [
+            Label {
+                style: Primary,
+                message: "invalid union field",
+                span: Span {
+                    start: 122,
+                    end: 129,
+                },
+            },
+        ],
+        note: Some(
+            "help: object representing an union must contain only `type` and `data` fields",
+        ),
+    },
+]

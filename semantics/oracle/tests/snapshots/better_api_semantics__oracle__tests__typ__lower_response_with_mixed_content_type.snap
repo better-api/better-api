@@ -1,0 +1,39 @@
+---
+source: semantics/oracle/tests/typ.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "invalid mix of `application/json` and non-`application/json` mime types",
+        labels: [
+            Label {
+                style: Primary,
+                message: "invalid mime type array",
+                span: Span {
+                    start: 35,
+                    end: 67,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "`application/json` defined here",
+                span: Span {
+                    start: 48,
+                    end: 66,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "non-`application/json` defined here",
+                span: Span {
+                    start: 36,
+                    end: 47,
+                },
+            },
+        ],
+        note: Some(
+            "help: mime type has to be `application/json`, or only non-`application/json` types",
+        ),
+    },
+]

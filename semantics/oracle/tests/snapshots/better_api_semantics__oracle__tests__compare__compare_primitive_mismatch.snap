@@ -1,0 +1,29 @@
+---
+source: semantics/oracle/tests/compare.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "expected string, found integer",
+        labels: [
+            Label {
+                style: Primary,
+                message: "expected string, found integer",
+                span: Span {
+                    start: 34,
+                    end: 35,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type defined here",
+                span: Span {
+                    start: 48,
+                    end: 54,
+                },
+            },
+        ],
+        note: None,
+    },
+]

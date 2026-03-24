@@ -102,7 +102,7 @@ impl<'a> Oracle<'a> {
         };
 
         let token = str_node.string();
-        let parsed = parse_string(&token, &mut self.reports);
+        let parsed = parse_string(&token, Some(&mut self.reports));
         Some(parsed.to_string())
     }
 
@@ -165,7 +165,7 @@ impl<'a> Oracle<'a> {
             let value = field.value()?;
 
             let name_token = field.name()?;
-            let name_id = lower_name(&name_token, &mut self.strings, &mut self.reports)?;
+            let name_id = lower_name(&name_token, &mut self.strings, Some(&mut self.reports))?;
             if self.strings.resolve(name_id) != field_name {
                 continue;
             }
@@ -197,7 +197,7 @@ impl<'a> Oracle<'a> {
             };
 
             let token = str_node.string();
-            let parsed = parse_string(&token, &mut self.reports);
+            let parsed = parse_string(&token, Some(&mut self.reports));
             res = Some(parsed.to_string())
         }
 

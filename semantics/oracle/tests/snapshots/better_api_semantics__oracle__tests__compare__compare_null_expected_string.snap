@@ -1,0 +1,29 @@
+---
+source: semantics/oracle/tests/compare.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "expected string, found null",
+        labels: [
+            Label {
+                style: Primary,
+                message: "expected string, found null",
+                span: Span {
+                    start: 34,
+                    end: 38,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type defined here",
+                span: Span {
+                    start: 51,
+                    end: 57,
+                },
+            },
+        ],
+        note: None,
+    },
+]

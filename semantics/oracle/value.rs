@@ -65,7 +65,7 @@ impl<'a> ParsedValue<'a> {
         match value {
             ast::Value::String(string) => {
                 let token = string.string();
-                let parsed_str = parse_string(&token, reports);
+                let parsed_str = parse_string(&token, Some(reports));
                 let str_id = strings.get_or_intern(&parsed_str);
 
                 Self::Primitive(PrimitiveValue::String(str_id))
@@ -103,7 +103,9 @@ fn parse_object_fields(
             // Missing name or value is reported by parser.
             f.value()?;
 
-            let name = f.name().and_then(|n| lower_name(&n, strings, reports))?;
+            let name = f
+                .name()
+                .and_then(|n| lower_name(&n, strings, Some(reports)))?;
             Some(InternedField { name, field: f })
         })
         .collect();
@@ -224,14 +226,60 @@ pub(crate) fn lower_mime_types(
             Some(mime_type_id)
         }
         ast::Value::Array(arr) => {
+            let mut file_range = None;
+            let mut json_range = None;
+
             let mut builder = values.start_array();
 
             for item in arr.values() {
                 let string_id = validate_mime_type_aux(strings, reports, &item)?;
                 builder.add_primitive(PrimitiveValue::String(string_id));
+
+                let val_str = strings.resolve(string_id);
+                if val_str == "application/json" {
+                    json_range = Some(item.syntax().text_range());
+                } else {
+                    file_range = Some(item.syntax().text_range());
+                }
             }
 
             let value_id = builder.finish();
+
+            if let Some(file_range) = file_range
+                && let Some(json_range) = json_range
+            {
+                reports.push(
+                    Report::error(
+                        "invalid mix of `application/json` and non-`application/json` mime types"
+                            .to_string(),
+                    )
+                    .add_label(Label::primary(
+                        "invalid mime type array".to_string(),
+                        value.syntax().text_range().into(),
+                    ))
+                    .add_label(Label::secondary(
+                        "`application/json` defined here".to_string(),
+                        json_range.into(),
+                    ))
+                    .add_label(Label::secondary(
+                        "non-`application/json` defined here".to_string(),
+                        file_range.into(),
+                    )).with_note("help: mime type has to be `application/json`, or only non-`application/json` types".to_string()),
+                );
+            }
+
+            if file_range.is_none() && json_range.is_none() {
+                reports.push(
+                    Report::error("empty array is not a valid mime type".to_string())
+                        .add_label(Label::primary(
+                            "empty array is not a valid mime type".to_string(),
+                            value.syntax().text_range().into(),
+                        ))
+                        .with_note(
+                            "help: mime type array has to have at least one value".to_string(),
+                        ),
+                );
+            }
 
             // Safety: We have checked that all values in array are valid mime type strings
             let mime_type_id = unsafe { MimeTypesId::new_unchecked(value_id) };
@@ -268,7 +316,7 @@ fn validate_mime_type_aux(
     };
 
     let token = string.string();
-    let string = parse_string(&token, reports);
+    let string = parse_string(&token, Some(reports));
 
     // TODO: Validate it's actually a mime type
 

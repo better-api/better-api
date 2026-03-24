@@ -1,0 +1,29 @@
+---
+source: semantics/oracle/tests/compare.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "expected i32, found string",
+        labels: [
+            Label {
+                style: Primary,
+                message: "expected i32, found string",
+                span: Span {
+                    start: 38,
+                    end: 44,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "type defined here",
+                span: Span {
+                    start: 62,
+                    end: 65,
+                },
+            },
+        ],
+        note: None,
+    },
+]

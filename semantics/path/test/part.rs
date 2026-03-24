@@ -339,7 +339,7 @@ fn range_interpretation() {
 
     let path = res.root.endpoints().next().unwrap().path().unwrap();
     let token = path.string();
-    let path_str = parse_string(&token, &mut diagnostics);
+    let path_str = parse_string(&token, Some(&mut diagnostics));
     validate_path(&path_str, token.text_range(), &mut diagnostics);
 
     insta::assert_debug_snapshot!(diagnostics);

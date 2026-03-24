@@ -1,0 +1,31 @@
+---
+source: semantics/oracle/tests/compare.rs
+expression: oracle.reports()
+---
+[
+    Report {
+        severity: Error,
+        title: "integer `3` is not a valid enum member",
+        labels: [
+            Label {
+                style: Primary,
+                message: "not a valid enum member",
+                span: Span {
+                    start: 73,
+                    end: 74,
+                },
+            },
+            Label {
+                style: Secondary,
+                message: "enum defined here",
+                span: Span {
+                    start: 11,
+                    end: 37,
+                },
+            },
+        ],
+        note: Some(
+            "help: integer has to be equal to one of the enum members",
+        ),
+    },
+]
