@@ -5,7 +5,7 @@ use smallvec::SmallVec;
 
 use crate::Oracle;
 use crate::oracle::SymbolMap;
-use crate::string::{StringId, StringInterner};
+use crate::text::{StringId, StringInterner};
 
 type ResolvePath = SmallVec<[StringId; 10]>;
 

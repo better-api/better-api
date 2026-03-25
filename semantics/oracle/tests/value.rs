@@ -145,8 +145,8 @@ fn lower_object_fields_are_stable() {
 
         let fields: Vec<_> = object.fields().collect();
         assert_eq!(fields.len(), 2);
-        assert_eq!(fields[0].name, "foo");
-        assert_eq!(fields[1].name, "bar");
+        assert_eq!(fields[0].name.as_str(), "foo");
+        assert_eq!(fields[1].name.as_str(), "bar");
         assert!(matches!(fields[0].value, Value::Integer(10)));
         assert!(matches!(fields[1].value, Value::String("test")));
     }
@@ -177,8 +177,8 @@ fn lower_object_with_string_keys() {
     let fields: Vec<_> = object.fields().collect();
 
     assert_eq!(fields.len(), 2);
-    assert_eq!(fields[0].name, "foo-bar");
-    assert_eq!(fields[1].name, "baz");
+    assert_eq!(fields[0].name.as_str(), "foo-bar");
+    assert_eq!(fields[1].name.as_str(), "baz");
     assert!(matches!(fields[0].value, Value::Integer(10)));
     assert!(matches!(fields[1].value, Value::Integer(20)));
 }
@@ -206,7 +206,7 @@ fn lower_object_skips_missing_value() {
     let fields: Vec<_> = object.fields().collect();
 
     assert_eq!(fields.len(), 1);
-    assert_eq!(fields[0].name, "bar");
+    assert_eq!(fields[0].name.as_str(), "bar");
     assert!(matches!(fields[0].value, Value::Integer(20)));
 }
 
@@ -242,7 +242,7 @@ fn lower_object_reports_invalid_field_name() {
     let fields: Vec<_> = object.fields().collect();
 
     assert_eq!(fields.len(), 1);
-    assert_eq!(fields[0].name, "valid");
+    assert_eq!(fields[0].name.as_str(), "valid");
     assert!(matches!(fields[0].value, Value::Integer(20)));
 }
 
@@ -278,9 +278,9 @@ fn lower_object_reports_duplicate_keys() {
     let fields: Vec<_> = object.fields().collect();
 
     assert_eq!(fields.len(), 3);
-    assert_eq!(fields[0].name, "foo");
-    assert_eq!(fields[1].name, "foo");
-    assert_eq!(fields[2].name, "bar");
+    assert_eq!(fields[0].name.as_str(), "foo");
+    assert_eq!(fields[1].name.as_str(), "foo");
+    assert_eq!(fields[2].name.as_str(), "bar");
     assert!(matches!(fields[0].value, Value::Integer(10)));
     assert!(matches!(fields[1].value, Value::Integer(10)));
     assert!(matches!(fields[2].value, Value::Integer(20)));
@@ -310,7 +310,7 @@ fn lower_nested_object() {
     let fields: Vec<_> = object.fields().collect();
 
     assert_eq!(fields.len(), 1);
-    assert_eq!(fields[0].name, "outer");
+    assert_eq!(fields[0].name.as_str(), "outer");
 
     let inner_object = match fields[0].value.clone() {
         Value::Object(object) => object,
@@ -319,7 +319,7 @@ fn lower_nested_object() {
     let inner_fields: Vec<_> = inner_object.fields().collect();
 
     assert_eq!(inner_fields.len(), 1);
-    assert_eq!(inner_fields[0].name, "inner");
+    assert_eq!(inner_fields[0].name.as_str(), "inner");
     assert!(matches!(inner_fields[0].value, Value::Integer(42)));
 }
 
@@ -358,8 +358,8 @@ fn lower_complex_nested_structure() {
     let fields: Vec<_> = object.fields().collect();
 
     assert_eq!(fields.len(), 2);
-    assert_eq!(fields[0].name, "users");
-    assert_eq!(fields[1].name, "metadata");
+    assert_eq!(fields[0].name.as_str(), "users");
+    assert_eq!(fields[1].name.as_str(), "metadata");
 
     let users = match fields[0].value.clone() {
         Value::Array(array) => array,
@@ -374,8 +374,8 @@ fn lower_complex_nested_structure() {
     };
     let user1_fields: Vec<_> = user1.fields().collect();
     assert_eq!(user1_fields.len(), 2);
-    assert_eq!(user1_fields[0].name, "name");
-    assert_eq!(user1_fields[1].name, "age");
+    assert_eq!(user1_fields[0].name.as_str(), "name");
+    assert_eq!(user1_fields[1].name.as_str(), "age");
     assert!(matches!(user1_fields[0].value, Value::String("alice")));
     assert!(matches!(user1_fields[1].value, Value::Integer(30)));
 
@@ -385,8 +385,8 @@ fn lower_complex_nested_structure() {
     };
     let user2_fields: Vec<_> = user2.fields().collect();
     assert_eq!(user2_fields.len(), 2);
-    assert_eq!(user2_fields[0].name, "name");
-    assert_eq!(user2_fields[1].name, "age");
+    assert_eq!(user2_fields[0].name.as_str(), "name");
+    assert_eq!(user2_fields[1].name.as_str(), "age");
     assert!(matches!(user2_fields[0].value, Value::String("bob")));
     assert!(matches!(user2_fields[1].value, Value::Integer(25)));
 
@@ -396,8 +396,8 @@ fn lower_complex_nested_structure() {
     };
     let metadata_fields: Vec<_> = metadata.fields().collect();
     assert_eq!(metadata_fields.len(), 2);
-    assert_eq!(metadata_fields[0].name, "count");
-    assert_eq!(metadata_fields[1].name, "active");
+    assert_eq!(metadata_fields[0].name.as_str(), "count");
+    assert_eq!(metadata_fields[1].name.as_str(), "active");
     assert!(matches!(metadata_fields[0].value, Value::Integer(2)));
     assert!(matches!(metadata_fields[1].value, Value::Bool(true)));
 }

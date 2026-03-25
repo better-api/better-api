@@ -17,7 +17,7 @@
 
 use crate::spec::SpecContext;
 use crate::spec::value::{self, Value, ValueContext, ValueId};
-use crate::string::StringId;
+use crate::text::{Name, NameId, StringId};
 
 /// Primitive types.
 #[derive(Debug, Clone, Copy, PartialEq, derive_more::Display)]
@@ -375,7 +375,7 @@ impl_named_reference!(
 /// Internal representation of record and union field.
 struct TypeFieldInner<'a, T> {
     id: TypeFieldId,
-    name: &'a str,
+    name: &'a Name,
     default: Option<Value<'a>>,
     docs: Option<&'a str>,
     typ: InlineTy<'a, T>,
@@ -385,7 +385,7 @@ struct TypeFieldInner<'a, T> {
 #[derive(Clone)]
 pub struct RecordField<'a> {
     pub(crate) id: TypeFieldId,
-    pub name: &'a str,
+    pub name: &'a Name,
     pub default: Option<Value<'a>>,
     pub docs: Option<&'a str>,
     pub typ: InlineTy<'a, Type<'a>>,
@@ -408,7 +408,7 @@ impl<'a> From<TypeFieldInner<'a, Type<'a>>> for RecordField<'a> {
 pub struct SimpleRecordField<'a> {
     pub(crate) id: TypeFieldId,
 
-    pub name: &'a str,
+    pub name: &'a Name,
     pub default: Option<Value<'a>>,
     pub docs: Option<&'a str>,
     pub typ: InlineTy<'a, SimpleTy<'a>>,
@@ -430,7 +430,7 @@ impl<'a> From<TypeFieldInner<'a, SimpleTy<'a>>> for SimpleRecordField<'a> {
 #[derive(Clone)]
 pub struct UnionField<'a> {
     pub(crate) id: TypeFieldId,
-    pub name: &'a str,
+    pub name: &'a Name,
     pub docs: Option<&'a str>,
     pub typ: InlineTy<'a, Type<'a>>,
 }
@@ -954,7 +954,7 @@ enum Slot {
     // In TrackedSlot syntax pointer points to the whole field
     // and not just the name.
     TypeField {
-        name: StringId,
+        name: NameId,
         default: Option<value::ValueId>,
         docs: Option<StringId>,
     },
@@ -1014,7 +1014,7 @@ impl<'p> FieldBuilder<'p> {
     /// `default` is a default value stored in the [`value::ValueArena`].
     pub(crate) fn add_primitive(
         &mut self,
-        name: StringId,
+        name: NameId,
         typ: PrimitiveTy,
         default: Option<value::ValueId>,
         docs: Option<StringId>,
@@ -1036,7 +1036,7 @@ impl<'p> FieldBuilder<'p> {
 
     pub(crate) fn add_reference(
         &mut self,
-        name: StringId,
+        name: NameId,
         reference: TypeRef,
         default: Option<value::ValueId>,
         docs: Option<StringId>,
@@ -1063,7 +1063,7 @@ impl<'p> FieldBuilder<'p> {
     /// calling `.finish()` on it, the returned [`TypeFieldId`] will be invalid!
     pub(crate) fn start_array<'a>(
         &'a mut self,
-        name: StringId,
+        name: NameId,
         default: Option<value::ValueId>,
         docs: Option<StringId>,
     ) -> (OptionArrayBuilder<'a>, TypeFieldId) {
@@ -1091,7 +1091,7 @@ impl<'p> FieldBuilder<'p> {
     /// calling `.finish()` on it, the returned [`TypeFieldId`] will be invalid!
     pub(crate) fn start_option<'a>(
         &'a mut self,
-        name: StringId,
+        name: NameId,
         default: Option<value::ValueId>,
         docs: Option<StringId>,
     ) -> (OptionArrayBuilder<'a>, TypeFieldId) {
@@ -1479,7 +1479,7 @@ impl<'a> SpecContext<'a> {
             val => unreachable!("invalid type field in arena for id {id:?}: {val:?}"),
         };
 
-        let name = self.strings.resolve(name_id);
+        let name = self.strings.resolve_name(name_id);
 
         let val_ctx: ValueContext = (*self).into();
         let default = default_id.map(|id| val_ctx.get_value(id));
@@ -1508,6 +1508,7 @@ mod test {
         Spec,
         typ::{InlineTy, TypeDefData, TypeRef},
     };
+    use crate::text::NameId;
 
     #[test]
     fn builds_nested_types() {
@@ -1515,12 +1516,19 @@ mod test {
 
         // Insert some strings
         let id_str = spec.strings.get_or_intern("id");
+        let id_name = unsafe { NameId::from_string_id(id_str) };
         let simple_array_str = spec.strings.get_or_intern("simple_array");
+        let simple_array_name = unsafe { NameId::from_string_id(simple_array_str) };
         let values_str = spec.strings.get_or_intern("values");
+        let values_name = unsafe { NameId::from_string_id(values_str) };
         let metadata_str = spec.strings.get_or_intern("metadata");
+        let metadata_name = unsafe { NameId::from_string_id(metadata_str) };
         let unused_str = spec.strings.get_or_intern("unused");
+        let unused_name = unsafe { NameId::from_string_id(unused_str) };
         let success_str = spec.strings.get_or_intern("success");
+        let success_name = unsafe { NameId::from_string_id(success_str) };
         let error_str = spec.strings.get_or_intern("error");
+        let error_name = unsafe { NameId::from_string_id(error_str) };
 
         // Add some primitive types
         let i32_id = spec.types.add_primitive(PrimitiveTy::I32);
@@ -1535,13 +1543,13 @@ mod test {
         //   metadata: [[bool]?]
         // }
         let mut root = spec.types.start_record();
-        root.add_primitive(id_str, PrimitiveTy::I64, None, None);
+        root.add_primitive(id_name, PrimitiveTy::I64, None, None);
 
-        let (simple_array, simple_array_field_id) = root.start_array(simple_array_str, None, None);
+        let (simple_array, simple_array_field_id) = root.start_array(simple_array_name, None, None);
         simple_array.finish_primitive(PrimitiveTy::F32);
 
         // Build nested array type: [[[string?]]]
-        let (mut values_builder, values_field_id) = root.start_array(values_str, None, None);
+        let (mut values_builder, values_field_id) = root.start_array(values_name, None, None);
         values_builder.start_array();
         values_builder.start_array();
         values_builder.start_option();
@@ -1549,12 +1557,12 @@ mod test {
 
         // Test dropped builder (should not appear in root)
         {
-            let _ = root.start_array(unused_str, None, None);
+            let _ = root.start_array(unused_name, None, None);
             // Dropped without finish
         }
 
         // Build nested array with option: [[bool]?]
-        let (mut metadata_builder, metadata_field_id) = root.start_array(metadata_str, None, None);
+        let (mut metadata_builder, metadata_field_id) = root.start_array(metadata_name, None, None);
         metadata_builder.start_array();
         metadata_builder.start_option();
         metadata_builder.finish_primitive(PrimitiveTy::Bool);
@@ -1564,14 +1572,14 @@ mod test {
         // Test dropped builder (should not appear in arena)
         {
             let mut dropped_union = spec.types.start_union();
-            dropped_union.add_primitive(unused_str, PrimitiveTy::I32, None, None);
+            dropped_union.add_primitive(unused_name, PrimitiveTy::I32, None, None);
             // Dropped without finish
         }
 
         // Build a union type separately
         let mut union_builder = spec.types.start_union();
-        union_builder.add_primitive(success_str, PrimitiveTy::Bool, None, None);
-        union_builder.add_primitive(error_str, PrimitiveTy::String, None, None);
+        union_builder.add_primitive(success_name, PrimitiveTy::Bool, None, None);
+        union_builder.add_primitive(error_name, PrimitiveTy::String, None, None);
         let union_id = union_builder.finish();
 
         // Verify the arena structure
@@ -1581,20 +1589,20 @@ mod test {
             Slot::Primitive(PrimitiveTy::Bool),
             Slot::Record { end: TypeId(20) },
             Slot::TypeField {
-                name: id_str,
+                name: id_name,
                 default: None,
                 docs: None,
             },
             Slot::Primitive(PrimitiveTy::I64),
             Slot::TypeField {
-                name: simple_array_str,
+                name: simple_array_name,
                 default: None,
                 docs: None,
             },
             Slot::Array { end: TypeId(9) },
             Slot::Primitive(PrimitiveTy::F32),
             Slot::TypeField {
-                name: values_str,
+                name: values_name,
                 default: None,
                 docs: None,
             },
@@ -1604,7 +1612,7 @@ mod test {
             Slot::Option { end: TypeId(15) },
             Slot::Primitive(PrimitiveTy::String),
             Slot::TypeField {
-                name: metadata_str,
+                name: metadata_name,
                 default: None,
                 docs: None,
             },
@@ -1614,13 +1622,13 @@ mod test {
             Slot::Primitive(PrimitiveTy::Bool),
             Slot::Union { end: TypeId(25) },
             Slot::TypeField {
-                name: success_str,
+                name: success_name,
                 default: None,
                 docs: None,
             },
             Slot::Primitive(PrimitiveTy::Bool),
             Slot::TypeField {
-                name: error_str,
+                name: error_name,
                 default: None,
                 docs: None,
             },
@@ -1660,7 +1668,7 @@ mod test {
 
         // Check id field
         let id_field = root_record_fields.next().expect("id field");
-        assert!(id_field.name == "id");
+        assert_eq!(id_field.name.as_str(), "id");
         assert!(matches!(
             id_field.typ,
             InlineTy::Primitive(PrimitiveTy::I64)
@@ -1669,7 +1677,7 @@ mod test {
 
         // Check simple_array field
         let simple_array_field = root_record_fields.next().expect("simple_array field");
-        assert!(simple_array_field.name == "simple_array");
+        assert_eq!(simple_array_field.name.as_str(), "simple_array");
         match simple_array_field.typ {
             InlineTy::Array(ref inner) => {
                 assert!(matches!(inner.typ(), InlineTy::Primitive(PrimitiveTy::F32)));
@@ -1679,7 +1687,7 @@ mod test {
 
         // Check values field with nested arrays
         let values_field = root_record_fields.next().expect("values field");
-        assert!(values_field.name == "values");
+        assert_eq!(values_field.name.as_str(), "values");
 
         // Navigate through [[[string?]]]
         let level1 = match values_field.typ {
@@ -1709,7 +1717,7 @@ mod test {
 
         // Check metadata field
         let metadata_field = root_record_fields.next().expect("metadata field");
-        assert!(metadata_field.name == "metadata");
+        assert_eq!(metadata_field.name.as_str(), "metadata");
 
         assert!(root_record_fields.next().is_none());
 
@@ -1721,14 +1729,14 @@ mod test {
         };
 
         let success_field = union_fields.next().expect("success field");
-        assert!(success_field.name == "success");
+        assert_eq!(success_field.name.as_str(), "success");
         assert!(matches!(
             success_field.typ,
             InlineTy::Primitive(PrimitiveTy::Bool)
         ));
 
         let error_field = union_fields.next().expect("error field");
-        assert!(error_field.name == "error");
+        assert_eq!(error_field.name.as_str(), "error");
         assert!(matches!(
             error_field.typ,
             InlineTy::Primitive(PrimitiveTy::String)
@@ -1807,7 +1815,8 @@ mod test {
         // }
 
         let foo_name = spec.strings.get_or_intern("Foo");
-        let name_field = spec.strings.get_or_intern("name");
+        let name_field_str = spec.strings.get_or_intern("name");
+        let name_field_name = unsafe { NameId::from_string_id(name_field_str) };
 
         let foo_typ = spec.types.add_primitive(PrimitiveTy::String);
         spec.symbol_table.insert(
@@ -1820,7 +1829,7 @@ mod test {
         );
 
         let mut bar_builder = spec.types.start_record();
-        bar_builder.add_reference(name_field, TypeRef(foo_name), None, None);
+        bar_builder.add_reference(name_field_name, TypeRef(foo_name), None, None);
         let bar_typ = bar_builder.finish();
 
         // Get Bar type and verify
@@ -1857,8 +1866,11 @@ mod test {
         let open_str = spec.strings.get_or_intern("open");
         let closed_str = spec.strings.get_or_intern("closed");
         let id_str = spec.strings.get_or_intern("id");
+        let id_name = unsafe { NameId::from_string_id(id_str) };
         let title_str = spec.strings.get_or_intern("title");
+        let title_name = unsafe { NameId::from_string_id(title_str) };
         let status_str = spec.strings.get_or_intern("status");
+        let status_name_id = unsafe { NameId::from_string_id(status_str) };
 
         let open_value = spec.values.add_primitive(PrimitiveValue::String(open_str));
         let closed_value = spec
@@ -1880,9 +1892,9 @@ mod test {
         );
 
         let mut record_builder = spec.types.start_record();
-        record_builder.add_primitive(id_str, PrimitiveTy::I64, None, None);
-        record_builder.add_primitive(title_str, PrimitiveTy::String, None, None);
-        let (status_builder, _) = record_builder.start_option(status_str, None, None);
+        record_builder.add_primitive(id_name, PrimitiveTy::I64, None, None);
+        record_builder.add_primitive(title_name, PrimitiveTy::String, None, None);
+        let (status_builder, _) = record_builder.start_option(status_name_id, None, None);
         status_builder.finish_reference(TypeRef(status_name));
         let record_id = record_builder.finish();
 
@@ -1910,21 +1922,21 @@ mod test {
         let mut fields = record.fields();
 
         let id_field = fields.next().expect("id field");
-        assert_eq!(id_field.name, "id");
+        assert_eq!(id_field.name.as_str(), "id");
         assert!(matches!(
             id_field.typ,
             InlineTy::Primitive(PrimitiveTy::I64)
         ));
 
         let title_field = fields.next().expect("title field");
-        assert_eq!(title_field.name, "title");
+        assert_eq!(title_field.name.as_str(), "title");
         assert!(matches!(
             title_field.typ,
             InlineTy::Primitive(PrimitiveTy::String)
         ));
 
         let status_field = fields.next().expect("status field");
-        assert_eq!(status_field.name, "status");
+        assert_eq!(status_field.name.as_str(), "status");
         let option_inner = match status_field.typ {
             InlineTy::Option(ref inner) => inner.typ(),
             other => panic!("expected option for status field, got {other:?}"),

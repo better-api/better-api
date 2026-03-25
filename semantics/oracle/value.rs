@@ -4,15 +4,14 @@ use better_api_syntax::ast::{self, AstNode};
 use crate::spec::value::{
     ArrayBuilder, MimeTypesId, ObjectBuilder, PrimitiveValue, ValueArena, ValueId,
 };
-use crate::string::{StringId, StringInterner};
-use crate::text::{lower_name, parse_string};
+use crate::text::{NameId, StringId, StringInterner, parse_string};
 
 use super::Oracle;
 
 /// Represents object field with interned name.
 #[derive(Clone)]
 struct InternedField {
-    name: StringId,
+    name: NameId,
     field: ast::ObjectField,
 }
 
@@ -105,7 +104,7 @@ fn parse_object_fields(
 
             let name = f
                 .name()
-                .and_then(|n| lower_name(&n, strings, Some(reports)))?;
+                .and_then(|n| strings.lower_name(&n, Some(reports)))?;
             Some(InternedField { name, field: f })
         })
         .collect();
@@ -191,7 +190,7 @@ fn check_object_fields_unique(
             continue;
         }
 
-        let name = strings.resolve(fields[idx].name);
+        let name = strings.resolve_name(fields[idx].name);
 
         let range = fields[idx + 1]
             .field

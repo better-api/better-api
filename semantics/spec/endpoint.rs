@@ -17,7 +17,7 @@ use crate::spec::typ::{
     SimpleRecordReference, SimpleRecordReferenceId, Type,
 };
 use crate::spec::value::{self, MimeTypes, ValueContext};
-use crate::string::StringId;
+use crate::text::{Name, NameId, StringId};
 
 /// Route group representation returned by the [`EndpointArena`].
 #[derive(derive_more::Debug, Clone)]
@@ -84,7 +84,7 @@ pub struct Endpoint<'a> {
     pub method: http::Method,
 
     /// Name assigned to the endpoint.
-    pub name: &'a str,
+    pub name: &'a Name,
 
     /// Path parameter type.
     pub path_param: Option<NamedReference<'a, SimpleRecordReference<'a>>>,
@@ -457,7 +457,7 @@ pub(crate) struct EndpointData {
     pub method: http::Method,
 
     /// Name assigned to the endpoint.
-    pub name: StringId,
+    pub name: NameId,
 
     /// Path parameter type.
     pub path_param: Option<SimpleRecordReferenceId>,
@@ -569,7 +569,7 @@ impl<'a> SpecContext<'a> {
             path: self.endpoints.paths.get(*path),
             docs: data.docs.map(|id| self.strings.resolve(id)),
             method: data.method.clone(),
-            name: self.strings.resolve(data.name),
+            name: self.strings.resolve_name(data.name),
             path_param: data
                 .path_param
                 .map(|id| self.get_simple_record_reference(id)),
@@ -660,6 +660,7 @@ mod test {
         InlineTy, InlineTyId, PrimitiveTy, RootRef, SimpleRecordReference, SimpleRecordReferenceId,
         TypeDefData,
     };
+    use crate::text::NameId;
 
     use http::{Method, StatusCode};
 
@@ -689,9 +690,13 @@ mod test {
         };
 
         let status_name = spec.strings.get_or_intern("status");
+        let status_name_id = unsafe { NameId::from_string_id(status_name) };
         let list_name = spec.strings.get_or_intern("list");
+        let list_name_id = unsafe { NameId::from_string_id(list_name) };
         let create_name = spec.strings.get_or_intern("create");
+        let create_name_id = unsafe { NameId::from_string_id(create_name) };
         let admin_name = spec.strings.get_or_intern("admin");
+        let admin_name_id = unsafe { NameId::from_string_id(admin_name) };
 
         // route {
         //   on default: bool
@@ -758,7 +763,7 @@ mod test {
             EndpointData {
                 docs: None,
                 method: Method::GET,
-                name: status_name,
+                name: status_name_id,
                 path_param: None,
                 query: Some(simple_rec_ref_id),
                 headers: None,
@@ -797,7 +802,7 @@ mod test {
             EndpointData {
                 docs: None,
                 method: Method::GET,
-                name: list_name,
+                name: list_name_id,
                 path_param: None,
                 query: None,
                 headers: None,
@@ -820,7 +825,7 @@ mod test {
             EndpointData {
                 docs: None,
                 method: Method::POST,
-                name: create_name,
+                name: create_name_id,
                 path_param: None,
                 query: None,
                 headers: None,
@@ -852,7 +857,7 @@ mod test {
             EndpointData {
                 docs: None,
                 method: Method::DELETE,
-                name: admin_name,
+                name: admin_name_id,
                 path_param: Some(simple_rec_ref_id),
                 query: None,
                 headers: None,
@@ -897,7 +902,7 @@ mod test {
         // Status endpoint
         let status_endpoint = spec.ctx().get_endpoint(status_endpoint_id);
         assert_eq!(status_endpoint.method, Method::GET);
-        assert_eq!(status_endpoint.name, "status");
+        assert_eq!(status_endpoint.name.as_str(), "status");
         assert_eq!(status_endpoint.path.segments().as_slice(), &["/status"]);
         let status_responses: Vec<_> = status_endpoint
             .responses()

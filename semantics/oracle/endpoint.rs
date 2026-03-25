@@ -22,8 +22,7 @@ use crate::spec::endpoint::{
 };
 use crate::spec::typ::{InlineTyId, ResponseReferenceId, SimpleRecordReference, TypeArena};
 use crate::spec::value::{ValueArena, ValueContext};
-use crate::string::{StringId, StringInterner};
-use crate::text;
+use crate::text::{self, NameId, StringId, StringInterner};
 
 use super::Oracle;
 
@@ -119,7 +118,7 @@ impl ResponseParent for EndpointBuilder<'_> {
 struct EndpointContext<'o, 'a> {
     ctx: Context<'o, 'a>,
     response_statuses: HashMap<ResponseStatus, TextRange>,
-    endpoint_names: HashMap<StringId, TextRange>,
+    endpoint_names: HashMap<NameId, TextRange>,
 }
 
 impl<'a> Oracle<'a> {
@@ -239,7 +238,7 @@ fn lower_endpoint<P: EndpointParent>(
     // They all require a name to be inlined.
     let (name_id, name_range) = if let Some(name) = endpoint.name() {
         (
-            text::lower_name(&name, ctx.ctx.strings, Some(ctx.ctx.reports))?,
+            ctx.ctx.strings.lower_name(&name, Some(ctx.ctx.reports))?,
             name.syntax().text_range(),
         )
     } else {
@@ -256,7 +255,7 @@ fn lower_endpoint<P: EndpointParent>(
 
     // Check that name is unique
     if let Some(existing_range) = ctx.endpoint_names.get(&name_id) {
-        let name = ctx.ctx.strings.resolve(name_id);
+        let name = ctx.ctx.strings.resolve_name(name_id);
         ctx.ctx.reports.push(
             Report::error(format!("repeated endpoint name '{name}'"))
                 .add_label(Label::primary(
@@ -277,7 +276,7 @@ fn lower_endpoint<P: EndpointParent>(
         .header_param()
         .and_then(|h| h.typ())
         .and_then(|typ| {
-            let name = ctx.ctx.strings.resolve(name_id);
+            let name = ctx.ctx.strings.resolve_name(name_id);
             let name = format!("{name}Headers");
             lower_simple_record_param(
                 &mut ctx.ctx,
@@ -298,7 +297,7 @@ fn lower_endpoint<P: EndpointParent>(
         .query_param()
         .and_then(|q| q.typ())
         .and_then(|typ| {
-            let name = ctx.ctx.strings.resolve(name_id);
+            let name = ctx.ctx.strings.resolve_name(name_id);
             let name = format!("{name}Query");
             lower_simple_record_param(
                 &mut ctx.ctx,
@@ -316,7 +315,7 @@ fn lower_endpoint<P: EndpointParent>(
 
     // Lower path params
     let path_param = endpoint.path_param().and_then(|p| p.typ()).and_then(|typ| {
-        let name = ctx.ctx.strings.resolve(name_id);
+        let name = ctx.ctx.strings.resolve_name(name_id);
         let name = format!("{name}Path");
         lower_simple_record_param(
             &mut ctx.ctx,
@@ -351,7 +350,7 @@ fn lower_endpoint<P: EndpointParent>(
     });
 
     // Validate and lower request body.
-    let name = ctx.ctx.strings.resolve(name_id);
+    let name = ctx.ctx.strings.resolve_name(name_id);
     let name = format!("{name}RequestBody");
     let req_body =
         lower_request_body(&mut ctx.ctx, types, values, requires_file, endpoint, &name).ok()?;
@@ -636,7 +635,7 @@ enum LowerResponseBehavior {
     /// Lower responses for endpoint. If a type is not inlined,
     /// we define a new type and use it as a reference. Name of
     /// the new type is based on the endpoint name.
-    Endpoint(StringId),
+    Endpoint(NameId),
 
     /// Lower responses for route. If a type is not inlined,
     /// we report an error.
@@ -955,7 +954,7 @@ impl<'a, 'b> PathParamTypeFields<'a, 'b> {
                 .field_name
                 .get(&field.id)
                 .expect("record field name should be inserted into range map");
-            fields_buf.insert(field.name, *range);
+            fields_buf.insert(field.name.as_str(), *range);
         }
 
         Self::Some {
@@ -1111,10 +1110,10 @@ fn compare_path_params_to_type<'a>(
 /// Name of the auto generated type for endpoint response
 fn endpoint_response_name(
     strings: &StringInterner,
-    endpoint_name_id: StringId,
+    endpoint_name_id: NameId,
     status: Option<ResponseStatus>,
 ) -> String {
-    let endpoint_name = strings.resolve(endpoint_name_id);
+    let endpoint_name = strings.resolve_name(endpoint_name_id);
     match status {
         None => format!("{endpoint_name}DefaultResponse"),
         Some(status) => format!("{endpoint_name}{status}Response"),

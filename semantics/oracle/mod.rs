@@ -7,10 +7,10 @@ use better_api_syntax::{TextRange, ast};
 
 use crate::path::PathId;
 use crate::spec::endpoint::{EndpointArena, EndpointId};
-use crate::spec::typ::{RootTypeId, TypeArena, TypeFieldId};
+use crate::spec::typ::{TypeArena, TypeFieldId};
 use crate::spec::value::ValueArena;
 use crate::spec::{Metadata, SpecContext, SymbolTable};
-use crate::string::{StringId, StringInterner};
+use crate::text::{StringId, StringInterner};
 
 mod compare;
 mod endpoint;

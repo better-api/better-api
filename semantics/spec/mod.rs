@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::string::{StringId, StringInterner};
+use crate::text::{StringId, StringInterner};
 
 pub mod endpoint;
 pub mod typ;

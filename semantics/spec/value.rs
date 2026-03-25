@@ -13,7 +13,7 @@
 
 use crate::{
     spec::SpecContext,
-    string::{StringId, StringInterner},
+    text::{Name, NameId, StringId, StringInterner},
 };
 
 #[derive(Clone, Copy)]
@@ -90,7 +90,7 @@ impl<'a> Value<'a> {
 #[derive(Debug, Clone)]
 pub struct ObjectField<'a> {
     pub(crate) id: ObjectFieldId,
-    pub name: &'a str,
+    pub name: &'a Name,
     pub value: Value<'a>,
 }
 
@@ -361,7 +361,7 @@ impl<'p> ObjectBuilder<'p> {
     }
 
     /// Add a new field to the object with primitive value.
-    pub(crate) fn add_primitive(&mut self, name: StringId, value: PrimitiveValue) -> ObjectFieldId {
+    pub(crate) fn add_primitive(&mut self, name: NameId, value: PrimitiveValue) -> ObjectFieldId {
         let slot_idx = self.data.len() as u32;
 
         self.data.push(Slot::ObjectField(name));
@@ -376,7 +376,7 @@ impl<'p> ObjectBuilder<'p> {
     /// Add a new field to the object with object value.
     pub(crate) fn start_object<'a>(
         &'a mut self,
-        name: StringId,
+        name: NameId,
     ) -> (ObjectBuilder<'a>, ObjectFieldId) {
         let slot_idx = self.data.len() as u32;
 
@@ -392,10 +392,7 @@ impl<'p> ObjectBuilder<'p> {
     }
 
     /// Add a new field to the object with array value.
-    pub(crate) fn start_array<'a>(
-        &'a mut self,
-        name: StringId,
-    ) -> (ArrayBuilder<'a>, ObjectFieldId) {
+    pub(crate) fn start_array<'a>(&'a mut self, name: NameId) -> (ArrayBuilder<'a>, ObjectFieldId) {
         let slot_idx = self.data.len() as u32;
 
         self.data.push(Slot::ObjectField(name));
@@ -513,7 +510,7 @@ enum Slot {
     // Name of the field in the object.
     // In TrackedSlot syntax pointer points to the whole field
     // and not just the name.
-    ObjectField(StringId),
+    ObjectField(NameId),
 }
 
 impl From<PrimitiveValue> for Slot {
@@ -568,7 +565,7 @@ impl<'a> ValueContext<'a> {
             Slot::ObjectField(name) => name,
             val => unreachable!("invalid object field in arena for id {id:?}: {val:?}"),
         };
-        let name = self.strings.resolve(*name_id);
+        let name = self.strings.resolve_name(*name_id);
 
         let value = Value::from_slot(*self, ValueId(id.slot_idx + 1), value_slot);
 
@@ -591,7 +588,10 @@ impl<'a> ValueContext<'a> {
 #[cfg(test)]
 mod test {
     use super::{ArrayItem, ObjectFieldId, PrimitiveValue, Slot, Value, ValueId};
-    use crate::spec::{Spec, value::ValueContext};
+    use crate::{
+        spec::{Spec, value::ValueContext},
+        text::NameId,
+    };
 
     #[test]
     fn builds_nested_values() {
@@ -600,18 +600,28 @@ mod test {
         // Insert some strings
         let hello_str = spec.strings.get_or_intern("hello");
         let flag_str = spec.strings.get_or_intern("flag");
+        let flag_name = unsafe { NameId::from_string_id(flag_str) };
         let container_str = spec.strings.get_or_intern("container");
+        let container_name = unsafe { NameId::from_string_id(container_str) };
         let numbers_str = spec.strings.get_or_intern("numbers");
+        let numbers_name = unsafe { NameId::from_string_id(numbers_str) };
         let deep_str = spec.strings.get_or_intern("deep");
         let unused_str = spec.strings.get_or_intern("unused");
+        let unused_name = unsafe { NameId::from_string_id(unused_str) };
         let value_str = spec.strings.get_or_intern("value");
+        let value_name = unsafe { NameId::from_string_id(value_str) };
         let label_str = spec.strings.get_or_intern("label");
+        let label_name = unsafe { NameId::from_string_id(label_str) };
         let done_str = spec.strings.get_or_intern("done");
         let nested_str = spec.strings.get_or_intern("nested");
+        let nested_name = unsafe { NameId::from_string_id(nested_str) };
         let status_str = spec.strings.get_or_intern("status");
+        let status_name = unsafe { NameId::from_string_id(status_str) };
         let ok_str = spec.strings.get_or_intern("ok");
         let count_str = spec.strings.get_or_intern("count");
+        let count_name = unsafe { NameId::from_string_id(count_str) };
         let active_str = spec.strings.get_or_intern("active");
+        let active_name = unsafe { NameId::from_string_id(active_str) };
 
         let null_id = spec.values.add_primitive(PrimitiveValue::Null);
         let bool_id = spec.values.add_primitive(PrimitiveValue::Bool(true));
@@ -637,10 +647,10 @@ mod test {
         //   }
         // }
         let mut root = spec.values.start_object();
-        root.add_primitive(flag_str, PrimitiveValue::Integer(7));
+        root.add_primitive(flag_name, PrimitiveValue::Integer(7));
 
-        let (mut container, container_field_id) = root.start_object(container_str);
-        let (mut numbers_builder, numbers_field_id) = container.start_array(numbers_str);
+        let (mut container, container_field_id) = root.start_object(container_name);
+        let (mut numbers_builder, numbers_field_id) = container.start_array(numbers_name);
         numbers_builder.add_primitive(PrimitiveValue::Integer(1));
 
         let mut deep_array_builder = numbers_builder.start_array();
@@ -650,30 +660,30 @@ mod test {
 
         let mut array_obj_builder = numbers_builder.start_object();
         {
-            let (mut dropped_array, _) = array_obj_builder.start_array(unused_str);
+            let (mut dropped_array, _) = array_obj_builder.start_array(unused_name);
             dropped_array.add_primitive(PrimitiveValue::Integer(123));
             // Dropped without finish on purpose to ensure cleanup.
         }
 
-        array_obj_builder.add_primitive(value_str, PrimitiveValue::Float(2.5));
-        array_obj_builder.add_primitive(label_str, PrimitiveValue::String(done_str));
+        array_obj_builder.add_primitive(value_name, PrimitiveValue::Float(2.5));
+        array_obj_builder.add_primitive(label_name, PrimitiveValue::String(done_str));
         let array_obj_id = array_obj_builder.finish();
 
         let numbers_id = numbers_builder.finish();
 
         {
-            let (mut dropped_object, _) = container.start_object(unused_str);
-            dropped_object.add_primitive(unused_str, PrimitiveValue::Null);
+            let (mut dropped_object, _) = container.start_object(unused_name);
+            dropped_object.add_primitive(unused_name, PrimitiveValue::Null);
             // Dropped without finish on purpose to ensure cleanup.
         }
 
-        let (mut nested_builder, nested_field_id) = container.start_object(nested_str);
+        let (mut nested_builder, nested_field_id) = container.start_object(nested_name);
         let status_field_id =
-            nested_builder.add_primitive(status_str, PrimitiveValue::String(ok_str));
-        let count_field_id = nested_builder.add_primitive(count_str, PrimitiveValue::Integer(2));
+            nested_builder.add_primitive(status_name, PrimitiveValue::String(ok_str));
+        let count_field_id = nested_builder.add_primitive(count_name, PrimitiveValue::Integer(2));
         let nested_obj_id = nested_builder.finish();
 
-        container.add_primitive(active_str, PrimitiveValue::Bool(false));
+        container.add_primitive(active_name, PrimitiveValue::Bool(false));
         let container_id = container.finish();
 
         let root_id = root.finish();
@@ -684,28 +694,28 @@ mod test {
             Slot::Primitive(PrimitiveValue::Bool(true)),
             Slot::Primitive(PrimitiveValue::String(hello_str)),
             Slot::Object { end: ValueId(27) },
-            Slot::ObjectField(flag_str),
+            Slot::ObjectField(flag_name),
             Slot::Primitive(PrimitiveValue::Integer(7)),
-            Slot::ObjectField(container_str),
+            Slot::ObjectField(container_name),
             Slot::Object { end: ValueId(27) },
-            Slot::ObjectField(numbers_str),
+            Slot::ObjectField(numbers_name),
             Slot::Array { end: ValueId(19) },
             Slot::Primitive(PrimitiveValue::Integer(1)),
             Slot::Array { end: ValueId(14) },
             Slot::Primitive(PrimitiveValue::String(deep_str)),
             Slot::Primitive(PrimitiveValue::Integer(99)),
             Slot::Object { end: ValueId(19) },
-            Slot::ObjectField(value_str),
+            Slot::ObjectField(value_name),
             Slot::Primitive(PrimitiveValue::Float(2.5)),
-            Slot::ObjectField(label_str),
+            Slot::ObjectField(label_name),
             Slot::Primitive(PrimitiveValue::String(done_str)),
-            Slot::ObjectField(nested_str),
+            Slot::ObjectField(nested_name),
             Slot::Object { end: ValueId(25) },
-            Slot::ObjectField(status_str),
+            Slot::ObjectField(status_name),
             Slot::Primitive(PrimitiveValue::String(ok_str)),
-            Slot::ObjectField(count_str),
+            Slot::ObjectField(count_name),
             Slot::Primitive(PrimitiveValue::Integer(2)),
-            Slot::ObjectField(active_str),
+            Slot::ObjectField(active_name),
             Slot::Primitive(PrimitiveValue::Bool(false)),
         ];
 
@@ -733,11 +743,11 @@ mod test {
         let mut root_object_fields = root_object.fields();
 
         let flag_field = root_object_fields.next().expect("flag field");
-        assert_eq!(flag_field.name, "flag");
+        assert_eq!(flag_field.name.as_str(), "flag");
         assert!(matches!(flag_field.value, Value::Integer(7)));
 
         let container_field = root_object_fields.next().expect("container field");
-        assert_eq!(container_field.name, "container");
+        assert_eq!(container_field.name.as_str(), "container");
         let container_object = match container_field.value {
             Value::Object(object) => object,
             other => panic!("expected object for container field, got {other:?}"),
@@ -747,7 +757,7 @@ mod test {
         let mut container_object_fields = container_object.fields();
 
         let numbers_field = container_object_fields.next().expect("numbers field");
-        assert_eq!(numbers_field.name, "numbers");
+        assert_eq!(numbers_field.name.as_str(), "numbers");
         let numbers_array = match numbers_field.value {
             Value::Array(array) => array,
             other => panic!("expected array for numbers field, got {other:?}"),
@@ -797,11 +807,11 @@ mod test {
         let mut array_object_fields = array_object.fields();
 
         let value_field = array_object_fields.next().expect("value field");
-        assert_eq!(value_field.name, "value");
+        assert_eq!(value_field.name.as_str(), "value");
         assert!(matches!(value_field.value, Value::Float(2.5)));
 
         let label_field = array_object_fields.next().expect("label field");
-        assert_eq!(label_field.name, "label");
+        assert_eq!(label_field.name.as_str(), "label");
         assert!(matches!(label_field.value, Value::String("done")));
         assert!(array_object_fields.next().is_none());
 
@@ -810,7 +820,7 @@ mod test {
         // End of number array, continue with next field in container
 
         let nested_field = container_object_fields.next().expect("nested field");
-        assert_eq!(nested_field.name, "nested");
+        assert_eq!(nested_field.name.as_str(), "nested");
         let nested_object = match nested_field.value {
             Value::Object(object) => object,
             other => panic!("expected object for nested field, got {other:?}"),
@@ -820,18 +830,18 @@ mod test {
         let mut nested_object_fields = nested_object.fields();
 
         let status_field = nested_object_fields.next().expect("status field");
-        assert_eq!(status_field.name, "status");
+        assert_eq!(status_field.name.as_str(), "status");
         assert!(matches!(status_field.value, Value::String("ok")));
 
         let count_field = nested_object_fields.next().expect("count field");
-        assert_eq!(count_field.name, "count");
+        assert_eq!(count_field.name.as_str(), "count");
         assert!(matches!(count_field.value, Value::Integer(2)));
         assert!(nested_object_fields.next().is_none());
 
         // End of nested object, continue with active field
 
         let active_field = container_object_fields.next().expect("active field");
-        assert_eq!(active_field.name, "active");
+        assert_eq!(active_field.name.as_str(), "active");
         assert!(matches!(active_field.value, Value::Bool(false)));
         assert!(container_object_fields.next().is_none());
 
@@ -840,7 +850,7 @@ mod test {
             Value::Object(object) => object,
             other => panic!("expected object at inner_id, got {other:?}"),
         };
-        let inner_field_names: Vec<_> = container_get.fields().map(|f| f.name).collect();
+        let inner_field_names: Vec<_> = container_get.fields().map(|f| f.name.as_str()).collect();
         assert_eq!(inner_field_names, vec!["numbers", "nested", "active"]);
 
         // Check getting numbers array directly by id
@@ -897,13 +907,13 @@ mod test {
         let value_field_get = object_from_get_iter_fields
             .next()
             .expect("nested object via get value field");
-        assert_eq!(value_field_get.name, "value");
+        assert_eq!(value_field_get.name.as_str(), "value");
         assert!(matches!(value_field_get.value, Value::Float(2.5)));
 
         let label_field_get = object_from_get_iter_fields
             .next()
             .expect("nested object via get label field");
-        assert_eq!(label_field_get.name, "label");
+        assert_eq!(label_field_get.name.as_str(), "label");
         assert!(matches!(label_field_get.value, Value::String("done")));
         assert!(object_from_get_iter_fields.next().is_none());
         assert!(numbers_from_get_items.next().is_none());
@@ -919,12 +929,12 @@ mod test {
         let value_field_direct = array_obj_from_get_fields
             .next()
             .expect("value field via get");
-        assert_eq!(value_field_direct.name, "value");
+        assert_eq!(value_field_direct.name.as_str(), "value");
         assert!(matches!(value_field_direct.value, Value::Float(2.5)));
         let label_field_direct = array_obj_from_get_fields
             .next()
             .expect("label field via get");
-        assert_eq!(label_field_direct.name, "label");
+        assert_eq!(label_field_direct.name.as_str(), "label");
         assert!(matches!(label_field_direct.value, Value::String("done")));
         assert!(array_obj_from_get_fields.next().is_none());
 

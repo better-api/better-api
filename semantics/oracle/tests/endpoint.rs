@@ -33,7 +33,7 @@ fn lower_simple_endpoint() {
     assert!(root_endpoints.next().is_none());
 
     assert_eq!(endpoint.method, Method::GET);
-    assert_eq!(endpoint.name, "foo");
+    assert_eq!(endpoint.name.as_str(), "foo");
     assert!(endpoint.path.segments().is_empty());
     assert!(endpoint.path_param.is_none());
     assert!(endpoint.query.is_none());
@@ -91,7 +91,7 @@ fn lower_complex_valid_endpoint() {
     assert!(root_endpoints.next().is_none());
 
     assert_eq!(endpoint.method, Method::POST);
-    assert_eq!(endpoint.name, "foo");
+    assert_eq!(endpoint.name.as_str(), "foo");
     assert!(endpoint.path.segments().is_empty());
     assert!(endpoint.path_param.is_none());
     assert!(endpoint.accept.is_none());
@@ -105,7 +105,7 @@ fn lower_complex_valid_endpoint() {
     };
     let query_fields: Vec<_> = query_record.fields().collect();
     assert_eq!(query_fields.len(), 1);
-    assert_eq!(query_fields[0].name, "foo");
+    assert_eq!(query_fields[0].name.as_str(), "foo");
     assert!(matches!(
         query_fields[0].typ,
         InlineTy::Primitive(PrimitiveTy::String)
@@ -123,7 +123,7 @@ fn lower_complex_valid_endpoint() {
     };
     let header_fields: Vec<_> = headers_record.fields().collect();
     assert_eq!(header_fields.len(), 1);
-    assert_eq!(header_fields[0].name, "foo");
+    assert_eq!(header_fields[0].name.as_str(), "foo");
 
     let header_opt = match header_fields[0].typ.clone() {
         InlineTy::Option(opt) => opt,
@@ -153,7 +153,7 @@ fn lower_complex_valid_endpoint() {
 
     let foo_field = request_body_fields
         .iter()
-        .find(|field| field.name == "foo")
+        .find(|field| field.name.as_str() == "foo")
         .expect("expected `foo` field");
     assert!(matches!(
         foo_field.typ,
@@ -162,7 +162,7 @@ fn lower_complex_valid_endpoint() {
 
     let bar_field = request_body_fields
         .iter()
-        .find(|field| field.name == "bar")
+        .find(|field| field.name.as_str() == "bar")
         .expect("expected `bar` field");
     let bar_opt = match bar_field.typ.clone() {
         InlineTy::Option(opt) => opt,
@@ -257,7 +257,7 @@ fn lower_simple_valid_routes() {
     let root_endpoints: Vec<_> = root_route.endpoints().collect();
     assert_eq!(root_endpoints.len(), 1);
     assert_eq!(root_endpoints[0].method, Method::GET);
-    assert_eq!(root_endpoints[0].name, "foo");
+    assert_eq!(root_endpoints[0].name.as_str(), "foo");
     assert!(root_endpoints[0].path.segments().is_empty());
 
     let foo_responses: Vec<_> = root_endpoints[0].responses().collect();
@@ -279,7 +279,7 @@ fn lower_simple_valid_routes() {
     let child_endpoints: Vec<_> = child_routes[0].endpoints().collect();
     assert_eq!(child_endpoints.len(), 1);
     assert_eq!(child_endpoints[0].method, Method::GET);
-    assert_eq!(child_endpoints[0].name, "bar");
+    assert_eq!(child_endpoints[0].name.as_str(), "bar");
     assert_eq!(child_endpoints[0].path.segments().as_slice(), &["/foo"]);
 
     let bar_responses: Vec<_> = child_endpoints[0].responses().collect();

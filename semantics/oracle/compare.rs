@@ -9,8 +9,7 @@ use time::macros::format_description;
 use time::{Date, OffsetDateTime};
 
 use crate::oracle::{Context, symbols};
-use crate::string::StringId;
-use crate::text::{lower_name, parse_string};
+use crate::text::{NameId, parse_string};
 
 /// Check if a given value matches the expected type.
 ///
@@ -236,7 +235,7 @@ fn compare_object(ctx: &mut Context, obj: &ast::Object, rec: &ast::Record) -> bo
         has_default: bool,
         in_obj: bool,
     }
-    let mut rec_fields: HashMap<StringId, FieldData> = HashMap::new();
+    let mut rec_fields: HashMap<NameId, FieldData> = HashMap::new();
     let mut valid = true;
 
     // Insert record fields
@@ -251,7 +250,7 @@ fn compare_object(ctx: &mut Context, obj: &ast::Object, rec: &ast::Record) -> bo
 
         let has_default = field.prologue().and_then(|p| p.default()).is_some();
 
-        let Some(name_id) = lower_name(&name, ctx.strings, None) else {
+        let Some(name_id) = ctx.strings.lower_name(&name, None) else {
             continue;
         };
 
@@ -273,7 +272,7 @@ fn compare_object(ctx: &mut Context, obj: &ast::Object, rec: &ast::Record) -> bo
             continue;
         };
 
-        let Some(name_id) = lower_name(&name, ctx.strings, None) else {
+        let Some(name_id) = ctx.strings.lower_name(&name, None) else {
             continue;
         };
 
@@ -287,7 +286,7 @@ fn compare_object(ctx: &mut Context, obj: &ast::Object, rec: &ast::Record) -> bo
             None => {
                 valid = false;
 
-                let name_str = ctx.strings.resolve(name_id);
+                let name_str = ctx.strings.resolve_name(name_id);
                 ctx.reports.push(
                     Report::error(format!("record has no field `{name_str}`"))
                         .add_label(Label::primary(
@@ -310,7 +309,7 @@ fn compare_object(ctx: &mut Context, obj: &ast::Object, rec: &ast::Record) -> bo
     {
         valid = false;
 
-        let name_str = ctx.strings.resolve(*name_id);
+        let name_str = ctx.strings.resolve_name(*name_id);
         ctx.reports.push(
             Report::error(format!("missing record field `{name_str}`"))
                 .add_label(Label::primary(
@@ -339,12 +338,12 @@ fn compare_union(ctx: &mut Context, obj: &ast::Object, union: &ast::Union) -> bo
             continue;
         };
 
-        let Some(name_id) = lower_name(&name, ctx.strings, None) else {
+        let Some(name_id) = ctx.strings.lower_name(&name, None) else {
             continue;
         };
 
         // Repeated fields don't have to be handled here, they are handled during lowering.
-        match ctx.strings.resolve(name_id) {
+        match ctx.strings.resolve_name(name_id).as_str() {
             "type" => type_field = Some(field),
             "data" => data_field = Some(field),
             name_str => ctx.reports.push(
@@ -413,11 +412,11 @@ fn compare_union(ctx: &mut Context, obj: &ast::Object, union: &ast::Union) -> bo
             return false;
         };
 
-        let Some(name_id) = lower_name(&name_token, ctx.strings, None) else {
+        let Some(name_id) = ctx.strings.lower_name(&name_token, None) else {
             return false;
         };
 
-        let name_str = ctx.strings.resolve(name_id);
+        let name_str = ctx.strings.resolve_name(name_id).as_str();
         name_str == type_value_str
     });
 
@@ -464,11 +463,11 @@ fn compare_response(ctx: &mut Context, obj: &ast::Object, resp: &ast::TypeRespon
             continue;
         };
 
-        let Some(name_id) = lower_name(&name, ctx.strings, None) else {
+        let Some(name_id) = ctx.strings.lower_name(&name, None) else {
             continue;
         };
 
-        match ctx.strings.resolve(name_id) {
+        match ctx.strings.resolve_name(name_id).as_str() {
             "headers" => headers_field = Some(field),
             "contentType" => content_type_field = Some(field),
             "body" => body_field = Some(field),

@@ -318,7 +318,7 @@ fn lower_basic_record() {
         let fields: Vec<_> = rec.fields().collect();
 
         // Check field names are correct
-        let names: Vec<_> = fields.iter().map(|field| field.name).collect();
+        let names: Vec<_> = fields.iter().map(|field| field.name.as_str()).collect();
         assert_eq!(names, vec!["foo", "bar", "baz"]);
 
         // Check field @default's are correct
@@ -520,7 +520,7 @@ fn lower_simple_union() {
     let fields: Vec<_> = union.fields().collect();
 
     // Check field names are correct
-    let names: Vec<_> = fields.iter().map(|field| field.name).collect();
+    let names: Vec<_> = fields.iter().map(|field| field.name.as_str()).collect();
     assert_eq!(names, vec!["foo", "bar"]);
 
     // Check field types are correct
@@ -656,7 +656,7 @@ fn lower_response_with_reference() {
 
     let fields: Vec<_> = record.fields().collect();
     assert_eq!(fields.len(), 1);
-    assert_eq!(fields[0].name, "foo");
+    assert_eq!(fields[0].name.as_str(), "foo");
     assert!(matches!(
         fields[0].typ,
         InlineTy::Primitive(PrimitiveTy::String)
@@ -699,7 +699,7 @@ fn lower_response_with_inline_body() {
 
     let fields: Vec<_> = record.fields().collect();
     assert_eq!(fields.len(), 1);
-    assert_eq!(fields[0].name, "foo");
+    assert_eq!(fields[0].name.as_str(), "foo");
     assert!(matches!(
         fields[0].typ,
         InlineTy::Primitive(PrimitiveTy::I32)
@@ -916,7 +916,7 @@ fn lower_response_with_headers() {
 
     let fields: Vec<_> = simple_record.fields().collect();
     assert_eq!(fields.len(), 1);
-    assert_eq!(fields[0].name, "foo");
+    assert_eq!(fields[0].name.as_str(), "foo");
     assert!(matches!(
         fields[0].typ,
         InlineTy::Primitive(PrimitiveTy::String)
@@ -1037,7 +1037,7 @@ fn lower_response_with_inline_headers() {
 
     let fields: Vec<_> = simple_record.fields().collect();
     assert_eq!(fields.len(), 1);
-    assert_eq!(fields[0].name, "foo");
+    assert_eq!(fields[0].name.as_str(), "foo");
     assert!(matches!(
         fields[0].typ,
         InlineTy::Primitive(PrimitiveTy::String)
@@ -1115,7 +1115,7 @@ fn lower_response_headers_with_option() {
 
     let fields: Vec<_> = simple_record.fields().collect();
     assert_eq!(fields.len(), 1);
-    assert_eq!(fields[0].name, "foo");
+    assert_eq!(fields[0].name.as_str(), "foo");
 
     let opt = match fields[0].typ.clone() {
         InlineTy::Option(opt) => opt,
@@ -1412,7 +1412,7 @@ fn lower_response_headers_with_enum_reference() {
 
     let fields: Vec<_> = simple_record.fields().collect();
     assert_eq!(fields.len(), 1);
-    assert_eq!(fields[0].name, "header");
+    assert_eq!(fields[0].name.as_str(), "header");
 
     let reference = match fields[0].typ.clone() {
         InlineTy::NamedReference(reference) => reference,
@@ -1517,7 +1517,7 @@ fn lower_response_content_type_label_and_union_body() {
 
     let fields: Vec<_> = union.fields().collect();
     assert_eq!(fields.len(), 2);
-    let mut names: Vec<_> = fields.iter().map(|field| field.name).collect();
+    let mut names: Vec<_> = fields.iter().map(|field| field.name.as_str()).collect();
     names.sort();
     assert_eq!(names, vec!["bar", "foo"]);
 }
@@ -1571,7 +1571,7 @@ fn lower_record_default_value_reference() {
 
     let fields: Vec<_> = record.fields().collect();
     assert_eq!(fields.len(), 1);
-    assert_eq!(fields[0].name, "foo");
+    assert_eq!(fields[0].name.as_str(), "foo");
     assert!(matches!(fields[0].default, Some(Value::Integer(1))));
 }
 

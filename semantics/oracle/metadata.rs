@@ -3,7 +3,7 @@ use better_api_syntax::ast::AstNode;
 use better_api_syntax::{TextRange, ast};
 
 use crate::spec;
-use crate::text::{lower_name, parse_string};
+use crate::text::parse_string;
 
 use super::Oracle;
 
@@ -165,8 +165,10 @@ impl<'a> Oracle<'a> {
             let value = field.value()?;
 
             let name_token = field.name()?;
-            let name_id = lower_name(&name_token, &mut self.strings, Some(&mut self.reports))?;
-            if self.strings.resolve(name_id) != field_name {
+            let name_id = self
+                .strings
+                .lower_name(&name_token, Some(&mut self.reports))?;
+            if self.strings.resolve_name(name_id).as_str() != field_name {
                 continue;
             }
 

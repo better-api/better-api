@@ -11,15 +11,14 @@ use crate::spec::typ::{
     RootTypeId, SimpleRecordReferenceId, TypeArena, TypeDefData, TypeId, TypeRef,
 };
 use crate::spec::value::{ValueArena, ValueContext, ValueId};
-use crate::string::{StringId, StringInterner};
-use crate::text::lower_name;
+use crate::text::{NameId, StringId, StringInterner};
 
 use super::Oracle;
 
 /// Represents type field with interned name.
 #[derive(Clone)]
 struct InternedField {
-    name: StringId,
+    name: NameId,
     field: ast::TypeField,
 
     // Prologue
@@ -728,7 +727,7 @@ fn parse_type_fields(
             // Lower name
             let name_id = f
                 .name()
-                .and_then(|n| lower_name(&n, ctx.strings, Some(ctx.reports)))?;
+                .and_then(|n| ctx.strings.lower_name(&n, Some(ctx.reports)))?;
 
             // Get default from prologue
             let default = if parse_default {
@@ -1488,7 +1487,7 @@ fn check_type_fields_unique(
             continue;
         }
 
-        let name = strings.resolve(fields[idx].name);
+        let name = strings.resolve_name(fields[idx].name);
 
         let range = fields[idx + 1]
             .field
