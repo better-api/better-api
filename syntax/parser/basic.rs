@@ -133,10 +133,17 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
     ) {
         match (prologue, prologue_behavior) {
             // TODO: Probably report an error if docs or prologue is given and behaviour is ignore
-            (None, _) | (_, PrologueBehavior::Ignore) => self.builder.start_node(kind.into()),
-            (Some(p), _) => {
-                // If only doc comment should be parsed,
-                // check there is no `@default`.
+            (None, _) => self.builder.start_node(kind.into()),
+            (Some(p), PrologueBehavior::Ignore) => {
+                // TODO: warning for doc comments
+
+                if let Some(report) = p.expect_no_default() {
+                    self.reports.push(report);
+                }
+
+                self.builder.start_node(kind.into())
+            }
+            (Some(p), PrologueBehavior::NoDefault | PrologueBehavior::Full) => {
                 if prologue_behavior == PrologueBehavior::NoDefault
                     && let Some(report) = p.expect_no_default()
                 {

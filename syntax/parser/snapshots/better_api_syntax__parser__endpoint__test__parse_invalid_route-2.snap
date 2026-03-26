@@ -5,6 +5,21 @@ expression: res.reports
 [
     Report {
         severity: Error,
+        title: "unexpected `@default`",
+        labels: [
+            Label {
+                style: Primary,
+                message: "unexpected `@default`",
+                span: Span {
+                    start: 13,
+                    end: 22,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
         title: "expected new line, found an identifier",
         labels: [
             Label {

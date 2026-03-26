@@ -60,7 +60,7 @@ impl<'a> Oracle<'a> {
                 continue;
             };
 
-            // TODO: Validate name with text::something
+            // Name is already an identifier, so we don't have to check anything
             let name_id = self.strings.get_or_intern(name.text());
             if let Some(original_def_ptr) = self.symbol_map.get(&name_id) {
                 let original_def = original_def_ptr.to_node(self.root.syntax());
