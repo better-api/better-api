@@ -75,10 +75,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                         self.builder.start_node(NODE_ERROR.into());
                     }
 
-                    let doc_span = self.parse_default();
-                    if let Some(span) = doc_span {
-                        res.as_mut().unwrap().doc_spans.push(span);
-                    }
+                    self.parse_default();
 
                     if is_duplicated {
                         // Finish error node
@@ -105,9 +102,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
     }
 
     /// Parses `@default` node
-    ///
-    /// Returns span of inline doc comment, if there is any.
-    fn parse_default(&mut self) -> Option<Span> {
+    fn parse_default(&mut self) {
         debug_assert_eq!(self.peek(), Some(TOKEN_DECORATOR_DEFAULT));
         self.builder.start_node(NODE_DEFAULT.into());
 
@@ -118,22 +113,32 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
             self.expect(TOKEN_PAREN_RIGHT);
         }
 
-        // We don't use expect_line_end here, because we don't want to emit
-        // a warning for doc comment. Default is part of the prologue, so
-        // doc comment in here is valid prologue.
-        self.skip_whitespace();
-        self.eat(TOKEN_COMMENT);
+        // We don't use `.expect_line_end` here, because we want to
+        // emit a different report for doc comment
 
-        let mut span = None;
+        self.skip_whitespace();
+
+        self.eat(TOKEN_COMMENT);
+        if self.peek() == Some(TOKEN_COMMENT) {
+            self.advance();
+        }
+
         if self.peek() == Some(TOKEN_DOC_COMMENT) {
-            span = Some(self.peek_span());
+            let span = self.peek_span();
+            self.reports.push(
+                Report::warning("unexpected inline doc comment".to_string()).add_label(Label::primary(
+                    "unexpected inline doc comment".to_string(),
+                    span
+                )).with_note(
+                    "help: Inline doc comment is not valid and will be ignored. Move it to a new line, or use regular comment instead.".to_string()
+                )
+            );
+
             self.advance();
         }
 
         self.expect(TOKEN_EOL);
 
         self.builder.finish_node();
-
-        span
     }
 }

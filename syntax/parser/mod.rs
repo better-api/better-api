@@ -13,6 +13,9 @@ mod prologue;
 mod types;
 mod values;
 
+#[cfg(test)]
+mod test;
+
 /// A parse result contains a node and list of [`Report`]s.
 pub struct Parse {
     /// Root node
@@ -160,42 +163,5 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.expect_line_end();
 
         self.builder.finish_node();
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use indoc::indoc;
-
-    use crate::{parse, tokenize};
-
-    #[test]
-    fn invalid_root_field() {
-        let text = indoc! {r#"
-            invalidField: foobar
-            name: "hello"
-        "#};
-
-        let mut diagnostics = vec![];
-        let tokens = tokenize(text, &mut diagnostics);
-
-        let res = parse(tokens);
-        insta::assert_debug_snapshot!(res.node);
-        insta::assert_debug_snapshot!(res.reports);
-    }
-
-    #[test]
-    fn invalid_token() {
-        let text = indoc! {r#"
-            _invalid_token: foobar
-            name: "hello"
-        "#};
-
-        let mut diagnostics = vec![];
-        let tokens = tokenize(text, &mut diagnostics);
-
-        let res = parse(tokens);
-        insta::assert_debug_snapshot!(res.node);
-        insta::assert_debug_snapshot!(res.reports);
     }
 }

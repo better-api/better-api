@@ -1,0 +1,51 @@
+---
+source: syntax/parser/test.rs
+expression: res.node
+---
+NODE_ROOT@0..148
+  NODE_TYPE_DEF@0..107
+    TOKEN_KW_TYPE@0..4 "type"
+    TOKEN_SPACE@4..5 " "
+    NODE_NAME@5..8
+      TOKEN_IDENTIFIER@5..8 "Foo"
+    TOKEN_COLON@8..9 ":"
+    TOKEN_SPACE@9..10 " "
+    NODE_TYPE_RECORD@10..106
+      TOKEN_KW_REC@10..13 "rec"
+      TOKEN_SPACE@13..14 " "
+      TOKEN_CURLY_LEFT@14..15 "{"
+      TOKEN_EOL@15..16 "\n"
+      TOKEN_SPACE@16..20 "    "
+      NODE_TYPE_FIELD@20..63
+        NODE_NAME@20..25
+          TOKEN_IDENTIFIER@20..25 "first"
+        TOKEN_COLON@25..26 ":"
+        TOKEN_SPACE@26..27 " "
+        NODE_TYPE_STRING@27..33
+          TOKEN_KW_STRING@27..33 "string"
+        TOKEN_SPACE@33..34 " "
+        TOKEN_COMMENT@34..62 "// Inline comment bef ..."
+        TOKEN_EOL@62..63 "\n"
+      TOKEN_SPACE@63..67 "    "
+      NODE_TYPE_FIELD@67..105
+        NODE_NAME@67..73
+          TOKEN_IDENTIFIER@67..73 "second"
+        TOKEN_COLON@73..74 ":"
+        TOKEN_SPACE@74..75 " "
+        NODE_TYPE_I32@75..78
+          TOKEN_KW_I32@75..78 "i32"
+        TOKEN_SPACE@78..79 " "
+        TOKEN_COMMENT@79..104 "// Another inline com ..."
+        TOKEN_EOL@104..105 "\n"
+      TOKEN_CURLY_RIGHT@105..106 "}"
+    TOKEN_EOL@106..107 "\n"
+  TOKEN_EOL@107..108 "\n"
+  NODE_API_NAME@108..148
+    TOKEN_IDENTIFIER@108..112 "name"
+    TOKEN_COLON@112..113 ":"
+    TOKEN_SPACE@113..114 " "
+    NODE_VALUE_STRING@114..121
+      TOKEN_STRING@114..121 "\"hello\""
+    TOKEN_SPACE@121..122 " "
+    TOKEN_COMMENT@122..147 "// Inline comment at  ..."
+    TOKEN_EOL@147..148 "\n"

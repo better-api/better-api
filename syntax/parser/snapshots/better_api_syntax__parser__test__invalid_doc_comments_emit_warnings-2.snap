@@ -1,0 +1,40 @@
+---
+source: syntax/parser/test.rs
+expression: res.reports
+---
+[
+    Report {
+        severity: Warning,
+        title: "unexpected doc comment",
+        labels: [
+            Label {
+                style: Primary,
+                message: "unexpected doc comment",
+                span: Span {
+                    start: 22,
+                    end: 60,
+                },
+            },
+        ],
+        note: Some(
+            "help: This doc comment has no effect and will be ignored. Use regular comment instead.",
+        ),
+    },
+    Report {
+        severity: Warning,
+        title: "unexpected doc comment",
+        labels: [
+            Label {
+                style: Primary,
+                message: "unexpected doc comment",
+                span: Span {
+                    start: 95,
+                    end: 140,
+                },
+            },
+        ],
+        note: Some(
+            "help: This doc comment has no effect and will be ignored. Use regular comment instead.",
+        ),
+    },
+]
