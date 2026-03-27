@@ -30,8 +30,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
         self.parse_type(DefaultCompositeType::None, |_| false);
 
-        self.skip_whitespace();
-        self.expect(TOKEN_EOL);
+        self.expect_line_end();
 
         self.builder.finish_node();
     }
@@ -187,8 +186,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                     self.start_node(NODE_TYPE_ENUM_MEMBER, prologue, PrologueBehavior::NoDefault);
 
                     self.parse_value(|token| token == TOKEN_CURLY_RIGHT);
-                    self.skip_whitespace();
-                    self.expect(TOKEN_EOL);
+                    self.expect_line_end();
 
                     self.builder.finish_node();
                 }
@@ -326,8 +324,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                     self.parse_type(DefaultCompositeType::None, |token| {
                         token == TOKEN_CURLY_RIGHT
                     });
-                    self.skip_whitespace();
-                    self.expect(TOKEN_EOL);
+                    self.expect_line_end();
 
                     self.builder.finish_node();
                 }

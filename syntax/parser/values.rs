@@ -52,6 +52,11 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                     self.advance();
                     self.expect(TOKEN_EOL);
                 }
+                Some(TOKEN_DOC_COMMENT) => {
+                    self.emit_doc_comment_warning();
+                    self.advance();
+                    self.expect(TOKEN_EOL);
+                }
 
                 Some(TOKEN_BRACKET_RIGHT) => {
                     self.advance();
@@ -84,10 +89,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                     ))
                     .add_label(Label::primary(
                         "unexpected token".to_string(),
-                        Span::new(
-                            self.pos,
-                            self.pos + self.peek_value().map_or(1, |s| s.len()),
-                        ),
+                        self.peek_span(),
                     ));
 
                     // Help is appended only if there is more stuff in array (not EOF yet). Otherwise
@@ -135,6 +137,11 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                     self.advance();
                     self.expect(TOKEN_EOL);
                 }
+                Some(TOKEN_DOC_COMMENT) => {
+                    self.emit_doc_comment_warning();
+                    self.advance();
+                    self.expect(TOKEN_EOL);
+                }
 
                 Some(TOKEN_IDENTIFIER) | Some(TOKEN_STRING) => {
                     self.builder.start_node(NODE_OBJECT_FIELD.into());
@@ -146,8 +153,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                     self.assignment();
 
                     self.parse_value(|token| token == TOKEN_CURLY_RIGHT);
-                    self.skip_whitespace();
-                    self.expect(TOKEN_EOL);
+                    self.expect_line_end();
 
                     self.builder.finish_node();
                 }

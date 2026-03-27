@@ -4,6 +4,23 @@ expression: res.reports
 ---
 [
     Report {
+        severity: Warning,
+        title: "unexpected doc comment",
+        labels: [
+            Label {
+                style: Primary,
+                message: "unexpected doc comment",
+                span: Span {
+                    start: 150,
+                    end: 188,
+                },
+            },
+        ],
+        note: Some(
+            "help: This doc comment has no effect and will be ignored. Use regular comment instead.",
+        ),
+    },
+    Report {
         severity: Error,
         title: "invalid response field `invalidField`",
         labels: [

@@ -55,13 +55,11 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
         self.skip_whitespace();
         self.expect(TOKEN_CURLY_LEFT);
-        self.skip_whitespace();
-        self.expect(TOKEN_EOL);
+        self.expect_line_end();
 
         self.parse_endpoint_properties();
 
-        self.skip_whitespace();
-        self.expect(TOKEN_EOL);
+        self.expect_line_end();
 
         self.builder.finish_node();
     }
@@ -107,13 +105,11 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
         self.skip_whitespace();
         self.expect(TOKEN_CURLY_LEFT);
-        self.skip_whitespace();
-        self.expect(TOKEN_EOL);
+        self.expect_line_end();
 
         self.parse_route_properties();
 
-        self.skip_whitespace();
-        self.expect(TOKEN_EOL);
+        self.expect_line_end();
 
         self.builder.finish_node();
     }
@@ -143,8 +139,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                             p.expect(TOKEN_STRING);
                         });
 
-                        self.skip_whitespace();
-                        self.expect(TOKEN_EOL);
+                        self.expect_line_end();
                     }
 
                     Some("path") => {
@@ -333,8 +328,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
             token == TOKEN_CURLY_RIGHT
         });
 
-        self.skip_whitespace();
-        self.expect(TOKEN_EOL);
+        self.expect_line_end();
 
         self.builder.finish_node();
     }
@@ -436,7 +430,7 @@ mod test {
 
         let res = parse(tokens);
         insta::assert_debug_snapshot!(res.node);
-        assert_eq!(res.reports, vec![]);
+        insta::assert_debug_snapshot!(res.reports);
     }
 
     #[test]

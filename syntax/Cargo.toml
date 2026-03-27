@@ -14,6 +14,7 @@ path = "lib.rs"
 better-api-diagnostic = { path = "../diagnostic" }
 derive_more.workspace = true
 rowan.workspace = true
+smallvec.workspace = true
 
 [dev-dependencies]
 insta.workspace = true

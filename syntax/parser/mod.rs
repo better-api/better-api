@@ -160,7 +160,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.advance();
         self.assignment();
         self.parse_value(|_| false);
-        self.expect(TOKEN_EOL);
+        self.expect_line_end();
 
         self.builder.finish_node();
     }
