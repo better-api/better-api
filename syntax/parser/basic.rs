@@ -139,6 +139,26 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.skip_whitespace();
     }
 
+    /// Checks that prologue doesn't contain default.
+    ///
+    /// If it does, it emits an error.
+    #[inline(always)]
+    pub fn check_prologue_no_default(&mut self, prologue: &Prologue) {
+        if let Some(report) = prologue.expect_no_default() {
+            self.reports.push(report);
+        }
+    }
+
+    /// Checks that prologue doesn't contain any doc comments.
+    ///
+    /// If it does, it emits warnings.
+    #[inline(always)]
+    pub fn check_prologue_no_doc_comments(&mut self, prologue: &Prologue) {
+        for span in prologue.doc_spans.iter() {
+            self.emit_doc_comment_warning_with_span(*span);
+        }
+    }
+
     /// Starts a new node with given prologue and it's behavior.
     pub fn start_node(
         &mut self,
@@ -149,21 +169,14 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         match (prologue, prologue_behavior) {
             (None, _) => self.builder.start_node(kind.into()),
             (Some(p), PrologueBehavior::Ignore) => {
-                for span in &p.doc_spans {
-                    self.emit_doc_comment_warning_with_span(*span);
-                }
-
-                if let Some(report) = p.expect_no_default() {
-                    self.reports.push(report);
-                }
+                self.check_prologue_no_doc_comments(&p);
+                self.check_prologue_no_default(&p);
 
                 self.builder.start_node(kind.into())
             }
             (Some(p), PrologueBehavior::NoDefault | PrologueBehavior::Full) => {
-                if prologue_behavior == PrologueBehavior::NoDefault
-                    && let Some(report) = p.expect_no_default()
-                {
-                    self.reports.push(report);
+                if prologue_behavior == PrologueBehavior::NoDefault {
+                    self.check_prologue_no_default(&p);
                 }
 
                 self.builder.start_node_at(p.start, kind.into());

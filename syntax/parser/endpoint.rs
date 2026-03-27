@@ -121,10 +121,8 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
             match self.peek() {
                 Some(TOKEN_CURLY_RIGHT) => {
-                    if let Some(prologue) = prologue
-                        && let Some(report) = prologue.expect_no_default()
-                    {
-                        self.reports.push(report);
+                    if let Some(prologue) = prologue {
+                        self.check_prologue_no_default(&prologue);
                     }
                     self.advance();
                     break;
@@ -230,10 +228,8 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
             match self.peek() {
                 Some(TOKEN_CURLY_RIGHT) => {
-                    if let Some(prologue) = prologue
-                        && let Some(report) = prologue.expect_no_default()
-                    {
-                        self.reports.push(report);
+                    if let Some(prologue) = prologue {
+                        self.check_prologue_no_default(&prologue);
                     }
                     self.advance();
                     break;
