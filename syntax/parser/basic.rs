@@ -93,10 +93,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
             ))
             .add_label(Label::primary(
                 "unexpected token".to_string(),
-                Span::new(
-                    self.pos,
-                    self.pos + self.peek_value().map_or(1, |s| s.len()),
-                ),
+                self.peek_span(),
             ));
             self.reports.push(report);
 
@@ -104,17 +101,35 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         }
     }
 
+    /// Parses line end.
+    ///
+    /// This is done by skipping white space, skipping comment and doc comments
+    /// (if present) and _expecting_ EOL.
+    pub fn expect_line_end(&mut self) -> bool {
+        self.skip_whitespace();
+
+        if self.peek() == Some(TOKEN_COMMENT) {
+            self.advance();
+        }
+
+        if self.peek() == Some(TOKEN_DOC_COMMENT) {
+            self.emit_doc_comment_warning();
+            self.advance();
+        }
+
+        self.expect(TOKEN_EOL)
+    }
+
     /// Parses error node. It advances the tokens until EOF is reached,
     /// or until recovery token is found `is_recovery(token) == true`.
     pub fn parse_error<F: Fn(Kind) -> bool>(&mut self, is_recovery: F) -> Span {
-        let start = self.pos;
-        let end = self.pos + self.peek_value().map_or(1, |val| val.len());
+        let span = self.peek_span();
 
         self.builder.start_node(NODE_ERROR.into());
         self.advance_while(|token| token != TOKEN_EOL && !is_recovery(token));
         self.builder.finish_node();
 
-        Span::new(start, end)
+        span
     }
 
     /// Parses assignment trivia "<whitespace> : <whitespace>"
@@ -122,6 +137,26 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.skip_whitespace();
         self.expect(TOKEN_COLON);
         self.skip_whitespace();
+    }
+
+    /// Checks that prologue doesn't contain default.
+    ///
+    /// If it does, it emits an error.
+    #[inline(always)]
+    pub fn check_prologue_no_default(&mut self, prologue: &Prologue) {
+        if let Some(report) = prologue.expect_no_default() {
+            self.reports.push(report);
+        }
+    }
+
+    /// Checks that prologue doesn't contain any doc comments.
+    ///
+    /// If it does, it emits warnings.
+    #[inline(always)]
+    pub fn check_prologue_no_doc_comments(&mut self, prologue: &Prologue) {
+        for span in prologue.doc_spans.iter() {
+            self.emit_doc_comment_warning_with_span(*span);
+        }
     }
 
     /// Starts a new node with given prologue and it's behavior.
@@ -132,22 +167,16 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         prologue_behavior: PrologueBehavior,
     ) {
         match (prologue, prologue_behavior) {
-            // TODO: Probably report an error if docs or prologue is given and behaviour is ignore
             (None, _) => self.builder.start_node(kind.into()),
             (Some(p), PrologueBehavior::Ignore) => {
-                // TODO: warning for doc comments
-
-                if let Some(report) = p.expect_no_default() {
-                    self.reports.push(report);
-                }
+                self.check_prologue_no_doc_comments(&p);
+                self.check_prologue_no_default(&p);
 
                 self.builder.start_node(kind.into())
             }
             (Some(p), PrologueBehavior::NoDefault | PrologueBehavior::Full) => {
-                if prologue_behavior == PrologueBehavior::NoDefault
-                    && let Some(report) = p.expect_no_default()
-                {
-                    self.reports.push(report);
+                if prologue_behavior == PrologueBehavior::NoDefault {
+                    self.check_prologue_no_default(&p);
                 }
 
                 self.builder.start_node_at(p.start, kind.into());
@@ -172,8 +201,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
 
         inner(self);
 
-        self.skip_whitespace();
-        self.expect(TOKEN_EOL);
+        self.expect_line_end();
 
         self.builder.finish_node();
     }
@@ -182,6 +210,36 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         self.builder.start_node(kind.into());
         inner(self);
         self.builder.finish_node();
+    }
+
+    /// Returns span of the token, currently defined by .peek.
+    ///
+    /// If self.peek is None, it returns span of length one, representing EOF.
+    pub fn peek_span(&mut self) -> Span {
+        Span::new(
+            self.pos,
+            self.pos + self.peek_value().map_or(1, |s| s.len()),
+        )
+    }
+
+    /// Emits a warning that peeked doc comment is invalid.
+    ///
+    /// This should be called before consuming the doc comment with .advance().
+    pub fn emit_doc_comment_warning(&mut self) {
+        let span = self.peek_span();
+        self.emit_doc_comment_warning_with_span(span);
+    }
+
+    /// Emits a warning that doc comment is invalid.
+    pub fn emit_doc_comment_warning_with_span(&mut self, span: Span) {
+        self.reports.push(
+            Report::warning("unexpected doc comment".to_string()).add_label(Label::primary(
+                "unexpected doc comment".to_string(),
+                span
+            )).with_note(
+                "help: This doc comment has no effect and will be ignored. Use regular comment instead.".to_string()
+            )
+        );
     }
 }
 

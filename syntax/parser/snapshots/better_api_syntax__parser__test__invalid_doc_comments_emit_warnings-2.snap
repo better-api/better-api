@@ -1,5 +1,5 @@
 ---
-source: syntax/parser/types.rs
+source: syntax/parser/test.rs
 expression: res.reports
 ---
 [
@@ -11,8 +11,8 @@ expression: res.reports
                 style: Primary,
                 message: "unexpected doc comment",
                 span: Span {
-                    start: 150,
-                    end: 188,
+                    start: 22,
+                    end: 60,
                 },
             },
         ],
@@ -21,20 +21,20 @@ expression: res.reports
         ),
     },
     Report {
-        severity: Error,
-        title: "invalid response field `invalidField`",
+        severity: Warning,
+        title: "unexpected doc comment",
         labels: [
             Label {
                 style: Primary,
-                message: "invalid response field",
+                message: "unexpected doc comment",
                 span: Span {
-                    start: 260,
-                    end: 272,
+                    start: 95,
+                    end: 140,
                 },
             },
         ],
         note: Some(
-            "help: valid response fields are `body`, `contentType` and `headers`",
+            "help: This doc comment has no effect and will be ignored. Use regular comment instead.",
         ),
     },
 ]

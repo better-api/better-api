@@ -1,0 +1,40 @@
+---
+source: syntax/parser/test.rs
+expression: res.node
+---
+NODE_ROOT@0..141
+  NODE_TYPE_DEF@0..80
+    TOKEN_KW_TYPE@0..4 "type"
+    TOKEN_SPACE@4..5 " "
+    NODE_NAME@5..9
+      TOKEN_IDENTIFIER@5..9 "Resp"
+    TOKEN_COLON@9..10 ":"
+    TOKEN_SPACE@10..11 " "
+    NODE_TYPE_RESPONSE@11..79
+      TOKEN_KW_RESP@11..15 "resp"
+      TOKEN_SPACE@15..16 " "
+      TOKEN_CURLY_LEFT@16..17 "{"
+      TOKEN_EOL@17..18 "\n"
+      TOKEN_SPACE@18..22 "    "
+      TOKEN_DOC_COMMENT@22..60 "/// This doc comment  ..."
+      TOKEN_EOL@60..61 "\n"
+      TOKEN_SPACE@61..65 "    "
+      NODE_TYPE_RESP_BODY@65..78
+        TOKEN_IDENTIFIER@65..69 "body"
+        TOKEN_COLON@69..70 ":"
+        TOKEN_SPACE@70..71 " "
+        NODE_TYPE_STRING@71..77
+          TOKEN_KW_STRING@71..77 "string"
+        TOKEN_EOL@77..78 "\n"
+      TOKEN_CURLY_RIGHT@78..79 "}"
+    TOKEN_EOL@79..80 "\n"
+  TOKEN_EOL@80..81 "\n"
+  NODE_API_NAME@81..141
+    TOKEN_IDENTIFIER@81..85 "name"
+    TOKEN_COLON@85..86 ":"
+    TOKEN_SPACE@86..87 " "
+    NODE_VALUE_STRING@87..94
+      TOKEN_STRING@87..94 "\"hello\""
+    TOKEN_SPACE@94..95 " "
+    TOKEN_DOC_COMMENT@95..140 "/// This inline doc c ..."
+    TOKEN_EOL@140..141 "\n"

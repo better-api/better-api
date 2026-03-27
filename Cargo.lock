@@ -37,6 +37,7 @@ dependencies = [
  "indoc",
  "insta",
  "rowan",
+ "smallvec",
 ]
 
 [[package]]

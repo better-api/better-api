@@ -1,4 +1,5 @@
 use better_api_diagnostic::{Label, Report, Span};
+use smallvec::SmallVec;
 
 use super::Parser;
 use crate::Kind::*;
@@ -9,6 +10,9 @@ pub struct Prologue {
 
     /// Span of the first `@default`
     pub default: Option<Span>,
+
+    /// Spans of doc comments.
+    pub doc_spans: SmallVec<[Span; 2]>,
 }
 
 impl Prologue {
@@ -45,8 +49,11 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                         res = Some(Prologue {
                             start: self.builder.checkpoint(),
                             default: None,
+                            doc_spans: SmallVec::new(),
                         });
                     }
+
+                    res.as_mut().unwrap().doc_spans.push(self.peek_span());
 
                     self.advance();
                     self.expect(TOKEN_EOL);
@@ -57,6 +64,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                         res = Some(Prologue {
                             start: self.builder.checkpoint(),
                             default: None,
+                            doc_spans: SmallVec::new(),
                         });
                     }
 
@@ -105,7 +113,30 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
             self.expect(TOKEN_PAREN_RIGHT);
         }
 
+        // We don't use `.expect_line_end` here, because we want to
+        // emit a different report for doc comment
+
         self.skip_whitespace();
+
+        self.eat(TOKEN_COMMENT);
+        if self.peek() == Some(TOKEN_COMMENT) {
+            self.advance();
+        }
+
+        if self.peek() == Some(TOKEN_DOC_COMMENT) {
+            let span = self.peek_span();
+            self.reports.push(
+                Report::warning("unexpected inline doc comment".to_string()).add_label(Label::primary(
+                    "unexpected inline doc comment".to_string(),
+                    span
+                )).with_note(
+                    "help: Inline doc comment is not valid and will be ignored. Move it to a new line, or use regular comment instead.".to_string()
+                )
+            );
+
+            self.advance();
+        }
+
         self.expect(TOKEN_EOL);
 
         self.builder.finish_node();

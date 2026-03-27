@@ -1,0 +1,23 @@
+---
+source: syntax/parser/test.rs
+expression: res.reports
+---
+[
+    Report {
+        severity: Warning,
+        title: "unexpected inline doc comment",
+        labels: [
+            Label {
+                style: Primary,
+                message: "unexpected inline doc comment",
+                span: Span {
+                    start: 38,
+                    end: 80,
+                },
+            },
+        ],
+        note: Some(
+            "help: Inline doc comment is not valid and will be ignored. Move it to a new line, or use regular comment instead.",
+        ),
+    },
+]

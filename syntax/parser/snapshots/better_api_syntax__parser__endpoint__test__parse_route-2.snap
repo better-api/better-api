@@ -1,0 +1,23 @@
+---
+source: syntax/parser/endpoint.rs
+expression: res.reports
+---
+[
+    Report {
+        severity: Warning,
+        title: "unexpected doc comment",
+        labels: [
+            Label {
+                style: Primary,
+                message: "unexpected doc comment",
+                span: Span {
+                    start: 0,
+                    end: 26,
+                },
+            },
+        ],
+        note: Some(
+            "help: This doc comment has no effect and will be ignored. Use regular comment instead.",
+        ),
+    },
+]
