@@ -232,9 +232,6 @@ pub enum EndpointResponseType<'a> {
 /// Response definition
 #[derive(Debug, Clone)]
 pub struct EndpointResponse<'a> {
-    /// Id of the response
-    pub(crate) id: EndpointResponseId,
-
     /// Status code of the response.
     pub status: ResponseStatus,
 
@@ -520,11 +517,6 @@ pub struct EndpointArena {
 }
 
 impl EndpointArena {
-    /// Create a new endpoint arena.
-    pub(crate) fn new() -> Self {
-        Self::default()
-    }
-
     fn parent<'a>(&'a mut self) -> Parent<'a> {
         Parent {
             data: &mut self.data,
@@ -641,7 +633,6 @@ impl<'a> SpecContext<'a> {
         };
 
         EndpointResponse {
-            id,
             status: *status,
             typ,
             docs: docs.map(|id| self.strings.resolve(id)),
@@ -1002,7 +993,6 @@ mod test {
 
         // Root route 404 response
         let root_not_found = spec.ctx().get_endpoint_response(root_not_found_id);
-        assert_eq!(root_not_found.id, root_not_found_id);
         assert_eq!(
             root_not_found.status,
             ResponseStatus::Code(StatusCode::NOT_FOUND)
@@ -1010,7 +1000,6 @@ mod test {
 
         // Admin ban 404 response
         let admin_no_content = spec.ctx().get_endpoint_response(admin_no_content_id);
-        assert_eq!(admin_no_content.id, admin_no_content_id);
         assert_eq!(
             admin_no_content.status,
             ResponseStatus::Code(StatusCode::NO_CONTENT)

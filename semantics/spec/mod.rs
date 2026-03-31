@@ -27,7 +27,7 @@ pub struct Spec {
 }
 
 /// Metadata of Better API spec
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Metadata {
     pub better_api_version: String,
 

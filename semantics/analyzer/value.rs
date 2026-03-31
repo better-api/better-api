@@ -1,12 +1,11 @@
 use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast::{self, AstNode};
 
+use crate::analyzer::Analyzer;
 use crate::spec::value::{
     ArrayBuilder, MimeTypesId, ObjectBuilder, PrimitiveValue, ValueArena, ValueId,
 };
 use crate::text::{NameId, StringId, StringInterner, parse_string};
-
-use super::Oracle;
 
 /// Represents object field with interned name.
 #[derive(Clone)]
@@ -15,7 +14,7 @@ struct InternedField {
     field: ast::ObjectField,
 }
 
-impl<'a> Oracle<'a> {
+impl<'a> Analyzer<'a> {
     /// Sugar method for lowering a value. Calls [`lower_value`].
     pub(crate) fn lower_value(&mut self, value: &ast::Value) -> ValueId {
         lower_value(

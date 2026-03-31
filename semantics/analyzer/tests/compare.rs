@@ -1,7 +1,7 @@
 use better_api_syntax::{Parse, ast, parse, tokenize};
 use indoc::indoc;
 
-use crate::Oracle;
+use crate::analyzer::Analyzer;
 
 #[test]
 fn compare_happy_path_primitives() {
@@ -40,8 +40,8 @@ fn compare_happy_path_primitives() {
     "#};
 
     let res = parse_text(text);
-    let oracle = setup_oracle(&res.root);
-    assert!(oracle.reports().is_empty());
+    let analyzer = setup_analyzer(&res.root);
+    assert!(analyzer.reports.is_empty());
 }
 
 #[test]
@@ -90,8 +90,8 @@ fn compare_happy_path_composite_types() {
     "#};
 
     let res = parse_text(text);
-    let oracle = setup_oracle(&res.root);
-    assert!(oracle.reports().is_empty());
+    let analyzer = setup_analyzer(&res.root);
+    assert!(analyzer.reports.is_empty());
 }
 
 #[test]
@@ -110,8 +110,8 @@ fn compare_happy_path_integer_enum() {
     "#};
 
     let res = parse_text(text);
-    let oracle = setup_oracle(&res.root);
-    assert!(oracle.reports().is_empty());
+    let analyzer = setup_analyzer(&res.root);
+    assert!(analyzer.reports.is_empty());
 }
 
 #[test]
@@ -129,8 +129,8 @@ fn compare_integer_enum_mismatch() {
     "#};
 
     let res = parse_text(text);
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -160,8 +160,8 @@ fn compare_happy_path_reference_cycle() {
     "#};
 
     let res = parse_text(text);
-    let oracle = setup_oracle(&res.root);
-    assert!(oracle.reports().is_empty());
+    let analyzer = setup_analyzer(&res.root);
+    assert!(analyzer.reports.is_empty());
 }
 
 #[test]
@@ -195,8 +195,8 @@ fn compare_integer_ranges_are_validated() {
     "#};
 
     let res = parse_text(text);
-    let oracle = setup_oracle(&res.root);
-    assert!(oracle.reports().is_empty());
+    let analyzer = setup_analyzer(&res.root);
+    assert!(analyzer.reports.is_empty());
 }
 
 #[test]
@@ -230,8 +230,8 @@ fn compare_integer_out_of_range() {
     "#};
 
     let res = parse_text(text);
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -244,8 +244,8 @@ fn compare_primitive_mismatch() {
     "#};
 
     let res = parse_text(text);
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -261,8 +261,8 @@ fn compare_file_always_fails() {
     "#};
 
     let res = parse_text(text);
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -275,8 +275,8 @@ fn compare_null_expected_string() {
     "#};
 
     let res = parse_text(text);
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -289,8 +289,8 @@ fn compare_array_mismatch() {
     "#};
 
     let res = parse_text(text);
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -303,8 +303,8 @@ fn compare_option_inner_mismatch() {
     "#};
 
     let res = parse_text(text);
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -320,8 +320,8 @@ fn compare_date_and_timestamp_mismatch() {
     "#};
 
     let res = parse_text(text);
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -338,8 +338,8 @@ fn compare_enum_mismatch() {
     "#};
 
     let res = parse_text(text);
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -367,8 +367,8 @@ fn compare_object_record_field_mismatches() {
     "#};
 
     let res = parse_text(text);
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -392,8 +392,8 @@ fn compare_union_missing_type_and_data() {
     "#};
 
     let res = parse_text(text);
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -413,8 +413,8 @@ fn compare_union_invalid_type() {
     "#};
 
     let res = parse_text(text);
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -434,8 +434,8 @@ fn compare_union_invalid_data() {
     "#};
 
     let res = parse_text(text);
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -456,8 +456,8 @@ fn compare_union_invalid_extra_field() {
     "#};
 
     let res = parse_text(text);
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -477,8 +477,8 @@ fn compare_union_type_value_not_string() {
     "#};
 
     let res = parse_text(text);
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 fn parse_text(text: &str) -> Parse {
@@ -499,9 +499,9 @@ fn parse_text(text: &str) -> Parse {
     res
 }
 
-fn setup_oracle<'a>(root: &'a ast::Root) -> Oracle<'a> {
-    let mut oracle = Oracle::new_raw(root);
-    oracle.validate_symbols();
-    oracle.lower_type_definitions();
-    oracle
+fn setup_analyzer<'a>(root: &'a ast::Root) -> Analyzer<'a> {
+    let mut analyzer = Analyzer::new(root);
+    analyzer.validate_symbols();
+    analyzer.lower_type_definitions();
+    analyzer
 }

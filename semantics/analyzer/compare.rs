@@ -8,7 +8,7 @@ use time::format_description::well_known::Rfc3339;
 use time::macros::format_description;
 use time::{Date, OffsetDateTime};
 
-use crate::oracle::{Context, symbols};
+use crate::analyzer::{Context, symbols};
 use crate::text::{NameId, parse_string};
 
 /// Check if a given value matches the expected type.

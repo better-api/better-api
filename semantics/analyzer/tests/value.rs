@@ -2,10 +2,8 @@ use better_api_diagnostic::{Label, Report, Span};
 use better_api_syntax::{Parse, ast, parse, tokenize};
 use indoc::indoc;
 
-use crate::{
-    Oracle,
-    spec::value::{Value, ValueContext, ValueId},
-};
+use crate::analyzer::Analyzer;
+use crate::spec::value::{Value, ValueContext, ValueId};
 
 #[test]
 fn lower_primitive_values() {
@@ -19,13 +17,13 @@ fn lower_primitive_values() {
 
     let res = parse_text(text);
 
-    let mut oracle = Oracle::new_raw(&res.root);
-    let values: Vec<_> = lower_values(&mut oracle, &res.root)
+    let mut analyzer = Analyzer::new(&res.root);
+    let values: Vec<_> = lower_values(&mut analyzer, &res.root)
         .into_iter()
-        .map(|id| get_value(&oracle, id))
+        .map(|id| get_value(&analyzer, id))
         .collect();
 
-    assert!(oracle.reports().is_empty());
+    assert!(analyzer.reports.is_empty());
     assert!(matches!(values[0], Value::Integer(10)));
     assert!(matches!(values[1], Value::Float(4.2)));
     assert!(matches!(values[2], Value::Bool(true)));
@@ -42,13 +40,13 @@ fn lower_string_values() {
 
     let res = parse_text(text);
 
-    let mut oracle = Oracle::new_raw(&res.root);
-    let values: Vec<_> = lower_values(&mut oracle, &res.root)
+    let mut analyzer = Analyzer::new(&res.root);
+    let values: Vec<_> = lower_values(&mut analyzer, &res.root)
         .into_iter()
-        .map(|id| get_value(&oracle, id))
+        .map(|id| get_value(&analyzer, id))
         .collect();
 
-    assert!(oracle.reports().is_empty());
+    assert!(analyzer.reports.is_empty());
     assert!(matches!(values[0], Value::String("hello world")));
     assert!(matches!(values[1], Value::String("hello\nworld\t\"\\")));
 }
@@ -63,12 +61,12 @@ fn lower_array_values() {
 
     let res = parse_text(text);
 
-    let mut oracle = Oracle::new_raw(&res.root);
-    let ids = lower_values(&mut oracle, &res.root);
+    let mut analyzer = Analyzer::new(&res.root);
+    let ids = lower_values(&mut analyzer, &res.root);
 
-    assert!(oracle.reports().is_empty());
+    assert!(analyzer.reports.is_empty());
 
-    let simple = match get_value(&oracle, ids[0]) {
+    let simple = match get_value(&analyzer, ids[0]) {
         Value::Array(array) => array,
         value => panic!("expected array, got {value:?}"),
     };
@@ -78,13 +76,13 @@ fn lower_array_values() {
     assert!(matches!(simple_items[1], Value::Integer(2)));
     assert!(matches!(simple_items[2], Value::Integer(3)));
 
-    let empty = match get_value(&oracle, ids[1]) {
+    let empty = match get_value(&analyzer, ids[1]) {
         Value::Array(array) => array,
         value => panic!("expected array, got {value:?}"),
     };
     assert_eq!(empty.items().count(), 0);
 
-    let nested = match get_value(&oracle, ids[2]) {
+    let nested = match get_value(&analyzer, ids[2]) {
         Value::Array(array) => array,
         value => panic!("expected array, got {value:?}"),
     };
@@ -107,12 +105,12 @@ fn lower_array_values() {
 fn lower_empty_object() {
     let res = parse_text("name: {}");
 
-    let mut oracle = Oracle::new_raw(&res.root);
-    let id = lower_first_value(&mut oracle, &res.root);
+    let mut analyzer = Analyzer::new(&res.root);
+    let id = lower_first_value(&mut analyzer, &res.root);
 
-    assert!(oracle.reports().is_empty());
+    assert!(analyzer.reports.is_empty());
 
-    let object = match get_value(&oracle, id) {
+    let object = match get_value(&analyzer, id) {
         Value::Object(object) => object,
         value => panic!("expected object, got {value:?}"),
     };
@@ -135,10 +133,10 @@ fn lower_object_fields_are_stable() {
 
     let res = parse_text(text);
 
-    let mut oracle = Oracle::new_raw(&res.root);
+    let mut analyzer = Analyzer::new(&res.root);
 
-    for id in lower_values(&mut oracle, &res.root) {
-        let object = match get_value(&oracle, id) {
+    for id in lower_values(&mut analyzer, &res.root) {
+        let object = match get_value(&analyzer, id) {
             Value::Object(object) => object,
             value => panic!("expected object, got {value:?}"),
         };
@@ -151,7 +149,7 @@ fn lower_object_fields_are_stable() {
         assert!(matches!(fields[1].value, Value::String("test")));
     }
 
-    assert!(oracle.reports().is_empty());
+    assert!(analyzer.reports.is_empty());
 }
 
 #[test]
@@ -165,12 +163,12 @@ fn lower_object_with_string_keys() {
 
     let res = parse_text(text);
 
-    let mut oracle = Oracle::new_raw(&res.root);
-    let id = lower_first_value(&mut oracle, &res.root);
+    let mut analyzer = Analyzer::new(&res.root);
+    let id = lower_first_value(&mut analyzer, &res.root);
 
-    assert!(oracle.reports().is_empty());
+    assert!(analyzer.reports.is_empty());
 
-    let object = match get_value(&oracle, id) {
+    let object = match get_value(&analyzer, id) {
         Value::Object(object) => object,
         value => panic!("expected object, got {value:?}"),
     };
@@ -194,12 +192,12 @@ fn lower_object_skips_missing_value() {
 
     let res = parse_text(text);
 
-    let mut oracle = Oracle::new_raw(&res.root);
-    let id = lower_first_value(&mut oracle, &res.root);
+    let mut analyzer = Analyzer::new(&res.root);
+    let id = lower_first_value(&mut analyzer, &res.root);
 
-    assert!(oracle.reports().is_empty());
+    assert!(analyzer.reports.is_empty());
 
-    let object = match get_value(&oracle, id) {
+    let object = match get_value(&analyzer, id) {
         Value::Object(object) => object,
         value => panic!("expected object, got {value:?}"),
     };
@@ -221,11 +219,11 @@ fn lower_object_reports_invalid_field_name() {
 
     let res = parse_text(text);
 
-    let mut oracle = Oracle::new_raw(&res.root);
-    let id = lower_first_value(&mut oracle, &res.root);
+    let mut analyzer = Analyzer::new(&res.root);
+    let id = lower_first_value(&mut analyzer, &res.root);
 
     assert_eq!(
-        oracle.reports(),
+        analyzer.reports,
         vec![
             Report::error("invalid name".to_string())
                 .add_label(Label::primary("invalid name".to_string(), Span::new(12, 26)))
@@ -235,7 +233,7 @@ fn lower_object_reports_invalid_field_name() {
         ]
     );
 
-    let object = match get_value(&oracle, id) {
+    let object = match get_value(&analyzer, id) {
         Value::Object(object) => object,
         value => panic!("expected object, got {value:?}"),
     };
@@ -258,11 +256,11 @@ fn lower_object_reports_duplicate_keys() {
 
     let res = parse_text(text);
 
-    let mut oracle = Oracle::new_raw(&res.root);
-    let id = lower_first_value(&mut oracle, &res.root);
+    let mut analyzer = Analyzer::new(&res.root);
+    let id = lower_first_value(&mut analyzer, &res.root);
 
     assert_eq!(
-        oracle.reports(),
+        analyzer.reports,
         vec![
             Report::error("repeated object key `foo`".to_string()).add_label(Label::primary(
                 "repeated object key".to_string(),
@@ -271,7 +269,7 @@ fn lower_object_reports_duplicate_keys() {
         ]
     );
 
-    let object = match get_value(&oracle, id) {
+    let object = match get_value(&analyzer, id) {
         Value::Object(object) => object,
         value => panic!("expected object, got {value:?}"),
     };
@@ -298,12 +296,12 @@ fn lower_nested_object() {
 
     let res = parse_text(text);
 
-    let mut oracle = Oracle::new_raw(&res.root);
-    let id = lower_first_value(&mut oracle, &res.root);
+    let mut analyzer = Analyzer::new(&res.root);
+    let id = lower_first_value(&mut analyzer, &res.root);
 
-    assert!(oracle.reports().is_empty());
+    assert!(analyzer.reports.is_empty());
 
-    let object = match get_value(&oracle, id) {
+    let object = match get_value(&analyzer, id) {
         Value::Object(object) => object,
         value => panic!("expected object, got {value:?}"),
     };
@@ -346,12 +344,12 @@ fn lower_complex_nested_structure() {
 
     let res = parse_text(text);
 
-    let mut oracle = Oracle::new_raw(&res.root);
-    let id = lower_first_value(&mut oracle, &res.root);
+    let mut analyzer = Analyzer::new(&res.root);
+    let id = lower_first_value(&mut analyzer, &res.root);
 
-    assert!(oracle.reports().is_empty());
+    assert!(analyzer.reports.is_empty());
 
-    let object = match get_value(&oracle, id) {
+    let object = match get_value(&analyzer, id) {
         Value::Object(object) => object,
         value => panic!("expected object, got {value:?}"),
     };
@@ -412,21 +410,21 @@ fn parse_text(text: &str) -> Parse {
     parse(tokens.into_iter())
 }
 
-fn lower_first_value<'a>(oracle: &mut Oracle<'a>, root: &'a ast::Root) -> ValueId {
+fn lower_first_value<'a>(analyzer: &mut Analyzer<'a>, root: &'a ast::Root) -> ValueId {
     root.api_names()
         .next()
         .unwrap()
         .value()
-        .map(|value| oracle.lower_value(&value))
+        .map(|value| analyzer.lower_value(&value))
         .unwrap()
 }
 
-fn lower_values<'a>(oracle: &mut Oracle<'a>, root: &'a ast::Root) -> Vec<ValueId> {
+fn lower_values<'a>(analyzer: &mut Analyzer<'a>, root: &'a ast::Root) -> Vec<ValueId> {
     root.api_names()
-        .map(|name| oracle.lower_value(&name.value().unwrap()))
+        .map(|name| analyzer.lower_value(&name.value().unwrap()))
         .collect()
 }
 
-fn get_value<'a>(oracle: &'a Oracle<'a>, id: ValueId) -> Value<'a> {
-    ValueContext::from(oracle.spec_ctx()).get_value(id)
+fn get_value<'a>(analyzer: &'a Analyzer<'a>, id: ValueId) -> Value<'a> {
+    ValueContext::from(analyzer.spec_ctx()).get_value(id)
 }

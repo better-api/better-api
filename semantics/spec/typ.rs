@@ -124,7 +124,6 @@ impl<'a> FromSlot<'a> for SimpleTy<'a> {
             }
             Slot::Enum { typ, end } => {
                 let enm = Enum {
-                    id: TypeId(slot_idx),
                     typ: *typ,
                     members: EnumMemberIterator {
                         ctx,
@@ -181,7 +180,6 @@ impl<'a> FromSlot<'a> for Type<'a> {
             }
             Slot::Enum { typ, end } => {
                 let enm = Enum {
-                    id: TypeId(slot_idx),
                     typ: *typ,
                     members: EnumMemberIterator {
                         ctx,
@@ -192,7 +190,6 @@ impl<'a> FromSlot<'a> for Type<'a> {
                 Self::Enum(enm)
             }
             Slot::Record { end } => Type::Record(Record {
-                id: TypeId(slot_idx),
                 fields: TypeFieldIterator {
                     ctx,
                     current: slot_idx + 1,
@@ -202,7 +199,6 @@ impl<'a> FromSlot<'a> for Type<'a> {
                 },
             }),
             Slot::Union { end } => Type::Union(Union {
-                id: TypeId(slot_idx),
                 fields: TypeFieldIterator {
                     ctx,
                     current: slot_idx + 1,
@@ -303,12 +299,6 @@ impl<'a, T> FromSlot<'a> for NamedReference<'a, T> {
     }
 }
 
-impl<'a, T> NamedReference<'a, T> {
-    pub(crate) fn id(&self) -> RootTypeId {
-        RootTypeId(self.id)
-    }
-}
-
 fn resolve_named_reference<'a, T: FromSlot<'a>>(r: &NamedReference<'a, T>) -> T {
     r.ctx.resolve_from_slot(r.id)
 }
@@ -384,7 +374,6 @@ struct TypeFieldInner<'a, T> {
 /// Record field.
 #[derive(Clone)]
 pub struct RecordField<'a> {
-    pub(crate) id: TypeFieldId,
     pub name: &'a Name,
     pub default: Option<Value<'a>>,
     pub docs: Option<&'a str>,
@@ -394,7 +383,6 @@ pub struct RecordField<'a> {
 impl<'a> From<TypeFieldInner<'a, Type<'a>>> for RecordField<'a> {
     fn from(value: TypeFieldInner<'a, Type<'a>>) -> Self {
         Self {
-            id: value.id,
             name: value.name,
             default: value.default,
             docs: value.docs,
@@ -429,7 +417,6 @@ impl<'a> From<TypeFieldInner<'a, SimpleTy<'a>>> for SimpleRecordField<'a> {
 /// Union field.
 #[derive(Clone)]
 pub struct UnionField<'a> {
-    pub(crate) id: TypeFieldId,
     pub name: &'a Name,
     pub docs: Option<&'a str>,
     pub typ: InlineTy<'a, Type<'a>>,
@@ -438,7 +425,6 @@ pub struct UnionField<'a> {
 impl<'a> From<TypeFieldInner<'a, Type<'a>>> for UnionField<'a> {
     fn from(value: TypeFieldInner<'a, Type<'a>>) -> Self {
         Self {
-            id: value.id,
             name: value.name,
             docs: value.docs,
             typ: value.typ,
@@ -494,9 +480,6 @@ impl<'a, T> Iterator for TypeFieldIterator<'a, T> {
 /// Fields are exposed through [`Record::fields`].
 #[derive(Debug, Clone)]
 pub struct Record<'a> {
-    // Id of the record
-    pub(crate) id: TypeId,
-
     fields: TypeFieldIterator<'a, Type<'a>>,
 }
 
@@ -546,9 +529,6 @@ impl<'a> SimpleRecord<'a> {
 /// Fields are exposed through [`Union::fields`].
 #[derive(Debug, Clone)]
 pub struct Union<'a> {
-    // Id of the union
-    pub(crate) id: TypeId,
-
     fields: TypeFieldIterator<'a, Type<'a>>,
 }
 
@@ -579,9 +559,6 @@ pub enum EnumTy {
 /// Field `typ` describes the type of enum values.
 #[derive(Debug, Clone)]
 pub struct Enum<'a> {
-    // Id of the enum
-    pub(crate) id: TypeId,
-
     /// Type of the enum members
     pub typ: EnumTy,
 
@@ -812,17 +789,6 @@ impl From<SimpleRecordReferenceId> for RootTypeId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct TypeId(u32);
 
-impl TypeId {
-    /// Treat a [`RootTypeId`] as a [`TypeId`] without validation.
-    ///
-    /// ## Safety
-    ///
-    /// The caller must ensure the id does not refer to a response type.
-    pub(crate) unsafe fn new_unchecked(id: RootTypeId) -> Self {
-        Self(id.0)
-    }
-}
-
 /// Id of a inline type stored in the [`TypeArena`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct InlineTyId(u32);
@@ -884,18 +850,6 @@ pub(crate) struct TypeFieldId {
 
     /// Index of the slot in the arena
     slot_idx: u32,
-}
-
-impl TypeFieldId {
-    /// Get [`TypeId`] of the record or union that contains this field.
-    pub(crate) fn container_id(&self) -> TypeId {
-        self.container_id
-    }
-
-    /// Get [`TypeId`] of the field's type.
-    pub(crate) fn type_id(&self) -> TypeId {
-        TypeId(self.slot_idx + 1)
-    }
 }
 
 /// Slot in the type arena.
@@ -1170,9 +1124,6 @@ pub(crate) struct OptionArrayBuilder<'p> {
 
 /// Result returned when [`OptionArrayBuilder`] is finished.
 pub(crate) struct OptionArray {
-    /// Id of the final leaf type inserted into the builder.
-    pub primitive_id: TypeId,
-
     /// Id of the constructed Option or Array.
     pub container_id: TypeId,
 }
@@ -1242,7 +1193,6 @@ impl<'p> OptionArrayBuilder<'p> {
         self.data.push(slot);
 
         OptionArray {
-            primitive_id: TypeId(len as u32),
             container_id: self.start,
         }
     }
@@ -1340,11 +1290,6 @@ pub(crate) struct TypeArena {
 }
 
 impl TypeArena {
-    /// Create a new type arena.
-    pub(crate) fn new() -> Self {
-        Self::default()
-    }
-
     /// Add a primitive type to the arena.
     ///
     /// Returns the [`TypeId`] assigned to the new type.
@@ -1775,8 +1720,6 @@ mod test {
             }
             other => panic!("expected array at values_id, got {other:?}"),
         }
-
-        assert!(values_id.primitive_id == TypeId(14));
 
         // Check field ids
         assert!(

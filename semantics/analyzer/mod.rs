@@ -2,14 +2,14 @@
 
 use std::collections::HashMap;
 
-use better_api_diagnostic::Report;
+use better_api_diagnostic::{Report, Severity};
 use better_api_syntax::{TextRange, ast};
 
 use crate::path::PathId;
 use crate::spec::endpoint::{EndpointArena, EndpointId};
 use crate::spec::typ::{TypeArena, TypeFieldId};
 use crate::spec::value::ValueArena;
-use crate::spec::{Metadata, SpecContext, SymbolTable};
+use crate::spec::{Metadata, Spec, SpecContext, SymbolTable};
 use crate::text::{StringId, StringInterner};
 
 mod compare;
@@ -22,16 +22,35 @@ mod value;
 #[cfg(test)]
 mod tests;
 
+/// Result returned by the analyzer.
+///
+/// If the whole analysis was successful a final [`Spec`] is returned,
+/// otherwise spec is `None`. Analysis is successful if there are no reports,
+/// or the reports are only warnings.
+///
+/// In other words, if any of the reports is an error, returned spec is None.
+pub struct AnalyzeResult {
+    pub spec: Option<Spec>,
+    pub reports: Vec<Report>,
+}
+
+/// Analyzes the AST and returns all reports and semantic representation of the Spec.
+pub fn analyze(root: &ast::Root) -> AnalyzeResult {
+    let mut analyzer = Analyzer::new(root);
+    analyzer.analyze();
+    analyzer.to_spec()
+}
+
 type SymbolMap = HashMap<StringId, ast::AstPtr<ast::TypeDefinition>>;
 
 /// Core type responsible for semantic analysis.
 #[derive(Clone)]
-pub struct Oracle<'a> {
+pub(crate) struct Analyzer<'a> {
     // Valid spec data being constructed
     strings: StringInterner,
     spec_symbol_table: SymbolTable,
 
-    metadata: Option<Metadata>,
+    metadata: Metadata,
 
     values: ValueArena,
     types: TypeArena,
@@ -90,17 +109,17 @@ struct Context<'o, 'a> {
     root: &'a ast::Root,
 }
 
-impl<'a> Oracle<'a> {
+impl<'a> Analyzer<'a> {
     /// Create a new oracle.
     ///
     /// Runs semantic analysis on the given AST and creates an oracle
     /// that can be queried for semantics info.
-    pub fn new(root: &'a ast::Root) -> Self {
-        let mut oracle = Self {
+    fn new(root: &'a ast::Root) -> Self {
+        Self {
             strings: Default::default(),
             spec_symbol_table: Default::default(),
 
-            metadata: None,
+            metadata: Default::default(),
 
             values: Default::default(),
             types: Default::default(),
@@ -112,15 +131,7 @@ impl<'a> Oracle<'a> {
             reports: Default::default(),
 
             range_map: Default::default(),
-        };
-
-        oracle.analyze();
-        oracle
-    }
-
-    /// Get semantic problems.
-    pub fn reports(&self) -> &[Report] {
-        &self.reports
+        }
     }
 
     /// Get [view](SpecContext) over a spec.
@@ -144,32 +155,31 @@ impl<'a> Oracle<'a> {
         self.validate_symbols();
 
         self.lower_type_definitions();
-
         self.lower_endpoints_and_routes();
-
         self.validate_paths();
     }
 
-    #[cfg(test)]
-    /// Create a new [`Oracle`] without calling analyze on it.
-    /// Only used for testing.
-    fn new_raw(root: &'a ast::Root) -> Self {
-        Self {
-            strings: Default::default(),
-            spec_symbol_table: Default::default(),
+    fn to_spec(self) -> AnalyzeResult {
+        // Construct the final spec
+        if self.reports.iter().any(|r| r.severity == Severity::Error) {
+            AnalyzeResult {
+                spec: None,
+                reports: self.reports,
+            }
+        } else {
+            let spec = Spec {
+                strings: self.strings,
+                symbol_table: self.spec_symbol_table,
+                metadata: self.metadata,
+                values: self.values,
+                types: self.types,
+                endpoints: self.endpoints,
+            };
 
-            metadata: None,
-
-            values: Default::default(),
-            types: Default::default(),
-            endpoints: Default::default(),
-
-            symbol_map: Default::default(),
-            root,
-
-            reports: Default::default(),
-
-            range_map: Default::default(),
+            AnalyzeResult {
+                spec: Some(spec),
+                reports: self.reports,
+            }
         }
     }
 }

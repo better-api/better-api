@@ -2,13 +2,9 @@ use better_api_diagnostic::{Label, Report, Span};
 use better_api_syntax::{ast, parse, tokenize};
 use indoc::indoc;
 
-use crate::{
-    Oracle,
-    spec::{
-        typ::{EnumTy, InlineTy, PrimitiveTy, RootType, SimpleRecordReference, Type},
-        value::Value,
-    },
-};
+use crate::analyzer::Analyzer;
+use crate::spec::typ::{EnumTy, InlineTy, PrimitiveTy, RootType, SimpleRecordReference, Type};
+use crate::spec::value::Value;
 
 #[test]
 fn lower_primitives() {
@@ -33,14 +29,14 @@ fn lower_primitives() {
         let tokens = tokenize(&text, &mut diagnostics);
         let res = parse(tokens);
 
-        let mut oracle = Oracle::new_raw(&res.root);
+        let mut analyzer = Analyzer::new(&res.root);
 
         let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-        let id = oracle.lower_type(&typ).unwrap();
+        let id = analyzer.lower_type(&typ).unwrap();
 
-        assert_eq!(oracle.reports(), vec![]);
+        assert_eq!(analyzer.reports, vec![]);
 
-        let actual = oracle.spec_ctx().get_root_type(id);
+        let actual = analyzer.spec_ctx().get_root_type(id);
         assert!(matches!(
             actual,
             RootType::Type(Type::Inline(InlineTy::Primitive(actual_prim)))
@@ -63,16 +59,16 @@ fn lower_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = Oracle::new_raw(&res.root);
-    oracle.validate_symbols();
-    assert!(oracle.reports().is_empty());
+    let mut analyzer = Analyzer::new(&res.root);
+    analyzer.validate_symbols();
+    assert!(analyzer.reports.is_empty());
 
-    oracle.lower_type_definitions();
-    assert!(oracle.reports().is_empty());
+    analyzer.lower_type_definitions();
+    assert!(analyzer.reports.is_empty());
 
-    let name_id = oracle.strings.get("Foo").unwrap();
-    let type_def = oracle.spec_symbol_table.get(&name_id).unwrap();
-    let actual = oracle.spec_ctx().get_root_type(type_def.typ);
+    let name_id = analyzer.strings.get("Foo").unwrap();
+    let type_def = analyzer.spec_symbol_table.get(&name_id).unwrap();
+    let actual = analyzer.spec_ctx().get_root_type(type_def.typ);
 
     match actual {
         RootType::NamedReference(reference) => {
@@ -96,14 +92,14 @@ fn lower_simple_array() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = Oracle::new_raw(&res.root);
+    let mut analyzer = Analyzer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.lower_type(&typ).unwrap();
+    let id = analyzer.lower_type(&typ).unwrap();
 
-    assert_eq!(oracle.reports(), vec![]);
+    assert_eq!(analyzer.reports, vec![]);
 
-    let arr = match oracle.spec_ctx().get_root_type(id) {
+    let arr = match analyzer.spec_ctx().get_root_type(id) {
         RootType::Type(Type::Inline(InlineTy::Array(arr))) => arr,
         typ => panic!("expected array, got: {typ:?}"),
     };
@@ -120,14 +116,14 @@ fn lower_nested_array() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = Oracle::new_raw(&res.root);
+    let mut analyzer = Analyzer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.lower_type(&typ).unwrap();
+    let id = analyzer.lower_type(&typ).unwrap();
 
-    assert_eq!(oracle.reports(), vec![]);
+    assert_eq!(analyzer.reports, vec![]);
 
-    let arr = match oracle.spec_ctx().get_root_type(id) {
+    let arr = match analyzer.spec_ctx().get_root_type(id) {
         RootType::Type(Type::Inline(InlineTy::Array(arr))) => arr,
         typ => panic!("expected array, got: {typ:?}"),
     };
@@ -152,13 +148,13 @@ fn lower_empty_array() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = Oracle::new_raw(&res.root);
+    let mut analyzer = Analyzer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.lower_type(&typ);
+    let id = analyzer.lower_type(&typ);
     assert_eq!(id, None);
 
-    assert_eq!(oracle.reports(), vec![]);
+    assert_eq!(analyzer.reports, vec![]);
 }
 
 #[test]
@@ -171,14 +167,14 @@ fn lower_invalid_array() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = Oracle::new_raw(&res.root);
+    let mut analyzer = Analyzer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.lower_type(&typ);
+    let id = analyzer.lower_type(&typ);
     assert_eq!(id, None);
 
     assert_eq!(
-            oracle.reports(),
+            analyzer.reports,
             vec![
                 Report::error("inline union not allowed in array".to_string()).add_label(
                     Label::primary("inline union type not allowed".to_string(), Span::new(11, 19))
@@ -197,14 +193,14 @@ fn lower_simple_option() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = Oracle::new_raw(&res.root);
+    let mut analyzer = Analyzer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.lower_type(&typ).unwrap();
+    let id = analyzer.lower_type(&typ).unwrap();
 
-    assert_eq!(oracle.reports(), vec![]);
+    assert_eq!(analyzer.reports, vec![]);
 
-    let opt = match oracle.spec_ctx().get_root_type(id) {
+    let opt = match analyzer.spec_ctx().get_root_type(id) {
         RootType::Type(Type::Inline(InlineTy::Option(opt))) => opt,
         _ => panic!(),
     };
@@ -223,14 +219,14 @@ fn lower_nested_option() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = Oracle::new_raw(&res.root);
+    let mut analyzer = Analyzer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.lower_type(&typ).unwrap();
+    let id = analyzer.lower_type(&typ).unwrap();
 
-    assert_eq!(oracle.reports(), vec![]);
+    assert_eq!(analyzer.reports, vec![]);
 
-    let opt = match oracle.spec_ctx().get_root_type(id) {
+    let opt = match analyzer.spec_ctx().get_root_type(id) {
         RootType::Type(Type::Inline(InlineTy::Option(opt))) => opt,
         _ => panic!(),
     };
@@ -250,14 +246,14 @@ fn lower_invalid_option() {
     assert!(diagnostics.is_empty());
     assert!(res.reports.is_empty());
 
-    let mut oracle = Oracle::new_raw(&res.root);
+    let mut analyzer = Analyzer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.lower_type(&typ);
+    let id = analyzer.lower_type(&typ);
     assert_eq!(id, None);
 
     assert_eq!(
-            oracle.reports(),
+            analyzer.reports,
             vec![
                 Report::error("inline record not allowed in option".to_string())
                     .add_label(Label::primary(
@@ -299,18 +295,18 @@ fn lower_basic_record() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = Oracle::new_raw(&res.root);
+    let mut analyzer = Analyzer::new(&res.root);
 
     assert_eq!(res.root.type_definitions().count(), 2);
 
     for typ in res.root.type_definitions() {
         let typ = typ.typ().unwrap();
-        let id = oracle.lower_type(&typ).unwrap();
+        let id = analyzer.lower_type(&typ).unwrap();
 
-        assert_eq!(oracle.reports(), vec![]);
+        assert_eq!(analyzer.reports, vec![]);
 
         // Check record was inserted
-        let rec = match oracle.spec_ctx().get_root_type(id) {
+        let rec = match analyzer.spec_ctx().get_root_type(id) {
             RootType::Type(Type::Record(rec)) => rec,
             _ => panic!(),
         };
@@ -340,14 +336,14 @@ fn lower_empty_record() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = Oracle::new_raw(&res.root);
+    let mut analyzer = Analyzer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.lower_type(&typ).unwrap();
+    let id = analyzer.lower_type(&typ).unwrap();
 
-    assert_eq!(oracle.reports(), vec![]);
+    assert_eq!(analyzer.reports, vec![]);
 
-    let rec = match oracle.spec_ctx().get_root_type(id) {
+    let rec = match analyzer.spec_ctx().get_root_type(id) {
         RootType::Type(Type::Record(rec)) => rec,
         _ => panic!(),
     };
@@ -367,13 +363,13 @@ fn lower_invalid_record() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = Oracle::new_raw(&res.root);
+    let mut analyzer = Analyzer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.lower_type(&typ).unwrap();
+    let id = analyzer.lower_type(&typ).unwrap();
 
     assert_eq!(
-        oracle.reports(),
+        analyzer.reports,
         vec![
             Report::error("inline record not allowed in record field".to_string()).add_label(
                 Label::primary("inline record type not allowed".to_string(), Span::new(29, 35))
@@ -381,7 +377,7 @@ fn lower_invalid_record() {
         ]
     );
 
-    let rec = match oracle.spec_ctx().get_root_type(id) {
+    let rec = match analyzer.spec_ctx().get_root_type(id) {
         RootType::Type(Type::Record(rec)) => rec,
         _ => panic!(),
     };
@@ -403,15 +399,15 @@ fn lower_simple_enum() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = Oracle::new_raw(&res.root);
+    let mut analyzer = Analyzer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.lower_type(&typ).unwrap();
+    let id = analyzer.lower_type(&typ).unwrap();
 
-    assert_eq!(oracle.reports(), vec![]);
+    assert_eq!(analyzer.reports, vec![]);
 
     // Check enum was inserted and is in source map
-    let enum_type = match oracle.spec_ctx().get_root_type(id) {
+    let enum_type = match analyzer.spec_ctx().get_root_type(id) {
         RootType::Type(Type::Enum(e)) => e,
         _ => panic!(),
     };
@@ -438,14 +434,14 @@ fn lower_empty_enum() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = Oracle::new_raw(&res.root);
+    let mut analyzer = Analyzer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.lower_type(&typ).unwrap();
+    let id = analyzer.lower_type(&typ).unwrap();
 
-    assert_eq!(oracle.reports(), vec![]);
+    assert_eq!(analyzer.reports, vec![]);
 
-    let enum_type = match oracle.spec_ctx().get_root_type(id) {
+    let enum_type = match analyzer.spec_ctx().get_root_type(id) {
         RootType::Type(Type::Enum(e)) => e,
         _ => panic!(),
     };
@@ -466,14 +462,14 @@ fn lower_invalid_enum() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = Oracle::new_raw(&res.root);
+    let mut analyzer = Analyzer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.lower_type(&typ);
+    let id = analyzer.lower_type(&typ);
     assert!(id.is_none());
 
     assert_eq!(
-        oracle.reports(),
+        analyzer.reports,
         vec![
             Report::error("invalid enum type `array`".to_string())
                 .add_label(Label::primary(
@@ -504,15 +500,15 @@ fn lower_simple_union() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = Oracle::new_raw(&res.root);
+    let mut analyzer = Analyzer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.lower_type(&typ).unwrap();
+    let id = analyzer.lower_type(&typ).unwrap();
 
-    assert!(oracle.reports().is_empty());
+    assert!(analyzer.reports.is_empty());
 
     // Check union was inserted
-    let union = match oracle.spec_ctx().get_root_type(id) {
+    let union = match analyzer.spec_ctx().get_root_type(id) {
         RootType::Type(Type::Union(u)) => u,
         _ => panic!(),
     };
@@ -544,14 +540,14 @@ fn lower_empty_union() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = Oracle::new_raw(&res.root);
+    let mut analyzer = Analyzer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.lower_type(&typ).unwrap();
+    let id = analyzer.lower_type(&typ).unwrap();
 
-    assert_eq!(oracle.reports(), vec![]);
+    assert_eq!(analyzer.reports, vec![]);
 
-    let union = match oracle.spec_ctx().get_root_type(id) {
+    let union = match analyzer.spec_ctx().get_root_type(id) {
         RootType::Type(Type::Union(u)) => u,
         _ => panic!(),
     };
@@ -572,13 +568,13 @@ fn lower_invalid_union() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = Oracle::new_raw(&res.root);
+    let mut analyzer = Analyzer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.lower_type(&typ);
+    let id = analyzer.lower_type(&typ);
     assert!(id.is_none());
 
-    insta::assert_debug_snapshot!(oracle.reports());
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -593,10 +589,10 @@ fn lower_simple_response() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    assert!(oracle.reports().is_empty());
+    let analyzer = setup_analyzer(&res.root);
+    assert!(analyzer.reports.is_empty());
 
-    let resp = match get_root_type(&oracle, "Resp") {
+    let resp = match get_root_type(&analyzer, "Resp") {
         RootType::Response(resp) => resp,
         typ => panic!("expected response, got {typ:?}"),
     };
@@ -627,10 +623,10 @@ fn lower_response_with_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    assert!(oracle.reports().is_empty());
+    let analyzer = setup_analyzer(&res.root);
+    assert!(analyzer.reports.is_empty());
 
-    let resp = match get_root_type(&oracle, "Resp") {
+    let resp = match get_root_type(&analyzer, "Resp") {
         RootType::Response(resp) => resp,
         typ => panic!("expected response, got {typ:?}"),
     };
@@ -677,10 +673,10 @@ fn lower_response_with_inline_body() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    assert!(oracle.reports().is_empty());
+    let analyzer = setup_analyzer(&res.root);
+    assert!(analyzer.reports.is_empty());
 
-    let resp = match get_root_type(&oracle, "Resp") {
+    let resp = match get_root_type(&analyzer, "Resp") {
         RootType::Response(resp) => resp,
         typ => panic!("expected response, got {typ:?}"),
     };
@@ -722,10 +718,10 @@ fn lower_response_invalid_body_response() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
+    let analyzer = setup_analyzer(&res.root);
 
     assert_eq!(
-        oracle.reports(),
+        analyzer.reports,
         vec![
             Report::error("invalid usage of `response` type".to_string())
                 .add_label(Label::primary(
@@ -739,8 +735,8 @@ fn lower_response_invalid_body_response() {
         ]
     );
 
-    let name_id = oracle.strings.get("Resp").unwrap();
-    assert!(!oracle.spec_symbol_table.contains_key(&name_id));
+    let name_id = analyzer.strings.get("Resp").unwrap();
+    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -759,11 +755,11 @@ fn lower_response_invalid_body_file() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
+    let analyzer = setup_analyzer(&res.root);
 
-    assert_eq!(oracle.reports().len(), 1);
+    assert_eq!(analyzer.reports.len(), 1);
     assert_eq!(
-        oracle.reports(),
+        analyzer.reports,
         vec![
             Report::error("invalid response body type".to_string())
                 .add_label(Label::primary(
@@ -780,8 +776,8 @@ fn lower_response_invalid_body_file() {
         ]
     );
 
-    let name_id = oracle.strings.get("Resp").unwrap();
-    assert!(!oracle.spec_symbol_table.contains_key(&name_id));
+    let name_id = analyzer.strings.get("Resp").unwrap();
+    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -797,10 +793,10 @@ fn lower_response_with_custom_content_type() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    assert!(oracle.reports().is_empty());
+    let analyzer = setup_analyzer(&res.root);
+    assert!(analyzer.reports.is_empty());
 
-    let resp = match get_root_type(&oracle, "Resp") {
+    let resp = match get_root_type(&analyzer, "Resp") {
         RootType::Response(resp) => resp,
         typ => panic!("expected response, got {typ:?}"),
     };
@@ -824,10 +820,10 @@ fn lower_response_with_mixed_content_type() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 
-    let resp = match get_root_type(&oracle, "Resp") {
+    let resp = match get_root_type(&analyzer, "Resp") {
         RootType::Response(resp) => resp,
         typ => panic!("expected response, got {typ:?}"),
     };
@@ -851,11 +847,11 @@ fn lower_response_with_custom_content_type_invalid_body() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
+    let analyzer = setup_analyzer(&res.root);
 
-    assert_eq!(oracle.reports().len(), 1);
+    assert_eq!(analyzer.reports.len(), 1);
     assert_eq!(
-        oracle.reports(),
+        analyzer.reports,
         vec![
             Report::error("invalid response body type".to_string())
                 .add_label(Label::primary(
@@ -872,8 +868,8 @@ fn lower_response_with_custom_content_type_invalid_body() {
         ]
     );
 
-    let name_id = oracle.strings.get("Resp").unwrap();
-    assert!(!oracle.spec_symbol_table.contains_key(&name_id));
+    let name_id = analyzer.strings.get("Resp").unwrap();
+    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -893,10 +889,10 @@ fn lower_response_with_headers() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    assert!(oracle.reports().is_empty());
+    let analyzer = setup_analyzer(&res.root);
+    assert!(analyzer.reports.is_empty());
 
-    let resp = match get_root_type(&oracle, "Resp") {
+    let resp = match get_root_type(&analyzer, "Resp") {
         RootType::Response(resp) => resp,
         typ => panic!("expected response, got {typ:?}"),
     };
@@ -936,11 +932,11 @@ fn lower_response_invalid_header_type() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
+    let analyzer = setup_analyzer(&res.root);
 
-    assert_eq!(oracle.reports().len(), 1);
+    assert_eq!(analyzer.reports.len(), 1);
     assert_eq!(
-        oracle.reports(),
+        analyzer.reports,
         vec![
             Report::error("invalid headers type".to_string())
                 .add_label(Label::primary(
@@ -951,8 +947,8 @@ fn lower_response_invalid_header_type() {
         ]
     );
 
-    let name_id = oracle.strings.get("Resp").unwrap();
-    assert!(!oracle.spec_symbol_table.contains_key(&name_id));
+    let name_id = analyzer.strings.get("Resp").unwrap();
+    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -976,11 +972,11 @@ fn lower_response_invalid_header_type_nested_record() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
+    let analyzer = setup_analyzer(&res.root);
 
-    assert_eq!(oracle.reports().len(), 1);
+    assert_eq!(analyzer.reports.len(), 1);
     assert_eq!(
-        oracle.reports(),
+        analyzer.reports,
         vec![
             Report::error("invalid headers type".to_string())
                 .add_label(Label::primary(
@@ -994,8 +990,8 @@ fn lower_response_invalid_header_type_nested_record() {
         ]
     );
 
-    let name_id = oracle.strings.get("Resp").unwrap();
-    assert!(!oracle.spec_symbol_table.contains_key(&name_id));
+    let name_id = analyzer.strings.get("Resp").unwrap();
+    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1014,10 +1010,10 @@ fn lower_response_with_inline_headers() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    assert!(oracle.reports().is_empty());
+    let analyzer = setup_analyzer(&res.root);
+    assert!(analyzer.reports.is_empty());
 
-    let resp = match get_root_type(&oracle, "Resp") {
+    let resp = match get_root_type(&analyzer, "Resp") {
         RootType::Response(resp) => resp,
         typ => panic!("expected response, got {typ:?}"),
     };
@@ -1060,10 +1056,10 @@ fn lower_response_headers_with_file() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
+    let analyzer = setup_analyzer(&res.root);
 
     assert_eq!(
-        oracle.reports(),
+        analyzer.reports,
         vec![
             Report::error("invalid headers type".to_string())
                 .add_label(Label::primary(
@@ -1077,8 +1073,8 @@ fn lower_response_headers_with_file() {
         ]
     );
 
-    let name_id = oracle.strings.get("Resp").unwrap();
-    assert!(!oracle.spec_symbol_table.contains_key(&name_id));
+    let name_id = analyzer.strings.get("Resp").unwrap();
+    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1097,10 +1093,10 @@ fn lower_response_headers_with_option() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    assert!(oracle.reports().is_empty());
+    let analyzer = setup_analyzer(&res.root);
+    assert!(analyzer.reports.is_empty());
 
-    let resp = match get_root_type(&oracle, "Resp") {
+    let resp = match get_root_type(&analyzer, "Resp") {
         RootType::Response(resp) => resp,
         typ => panic!("expected response, got {typ:?}"),
     };
@@ -1143,10 +1139,10 @@ fn lower_response_headers_with_array_invalid() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
+    let analyzer = setup_analyzer(&res.root);
 
     assert_eq!(
-        oracle.reports(),
+        analyzer.reports,
         vec![
             Report::error("invalid headers type".to_string())
                 .add_label(Label::primary(
@@ -1160,8 +1156,8 @@ fn lower_response_headers_with_array_invalid() {
         ]
     );
 
-    let name_id = oracle.strings.get("Resp").unwrap();
-    assert!(!oracle.spec_symbol_table.contains_key(&name_id));
+    let name_id = analyzer.strings.get("Resp").unwrap();
+    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1178,10 +1174,10 @@ fn lower_response_missing_body() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
+    let analyzer = setup_analyzer(&res.root);
 
     assert_eq!(
-        oracle.reports(),
+        analyzer.reports,
         vec![
             Report::error("missing response body".to_string())
                 .add_label(Label::primary(
@@ -1192,8 +1188,8 @@ fn lower_response_missing_body() {
         ]
     );
 
-    let name_id = oracle.strings.get("Resp").unwrap();
-    assert!(!oracle.spec_symbol_table.contains_key(&name_id));
+    let name_id = analyzer.strings.get("Resp").unwrap();
+    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1216,10 +1212,10 @@ fn lower_response_body_file_in_nested_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
+    let analyzer = setup_analyzer(&res.root);
 
     assert_eq!(
-        oracle.reports(),
+        analyzer.reports,
         vec![
             Report::error("invalid response body type".to_string())
                 .add_label(Label::primary(
@@ -1236,8 +1232,8 @@ fn lower_response_body_file_in_nested_reference() {
         ]
     );
 
-    let name_id = oracle.strings.get("Resp").unwrap();
-    assert!(!oracle.spec_symbol_table.contains_key(&name_id));
+    let name_id = analyzer.strings.get("Resp").unwrap();
+    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1253,14 +1249,14 @@ fn lower_enum_invalid_member() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = Oracle::new_raw(&res.root);
+    let mut analyzer = Analyzer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = oracle.lower_type(&typ);
+    let id = analyzer.lower_type(&typ);
     assert!(id.is_none());
 
     assert_eq!(
-        oracle.reports(),
+        analyzer.reports,
         vec![
             Report::error("expected i32, found string".to_string())
                 .add_label(Label::primary(
@@ -1291,10 +1287,10 @@ fn lower_response_inline_body_name_collision() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
+    let analyzer = setup_analyzer(&res.root);
 
     assert_eq!(
-        oracle.reports(),
+        analyzer.reports,
         vec![
             Report::error("name `RespBody` collides with auto generated name".to_string())
                 .add_label(Label::primary(
@@ -1308,8 +1304,8 @@ fn lower_response_inline_body_name_collision() {
         ]
     );
 
-    let name_id = oracle.strings.get("Resp").unwrap();
-    assert!(!oracle.spec_symbol_table.contains_key(&name_id));
+    let name_id = analyzer.strings.get("Resp").unwrap();
+    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1322,10 +1318,10 @@ fn lower_missing_symbol() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
+    let analyzer = setup_analyzer(&res.root);
 
     assert_eq!(
-        oracle.reports(),
+        analyzer.reports,
         vec![
             Report::error("undefined symbol `Bar`".to_string()).add_label(Label::primary(
                 "symbol `Bar` is not defined".to_string(),
@@ -1334,8 +1330,8 @@ fn lower_missing_symbol() {
         ]
     );
 
-    let name_id = oracle.strings.get("Foo").unwrap();
-    assert!(!oracle.spec_symbol_table.contains_key(&name_id));
+    let name_id = analyzer.strings.get("Foo").unwrap();
+    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1352,10 +1348,10 @@ fn lower_array_option_response_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
+    let analyzer = setup_analyzer(&res.root);
 
     assert_eq!(
-        oracle.reports(),
+        analyzer.reports,
         vec![
             Report::error("invalid usage of `response` type".to_string())
                 .add_label(Label::primary(
@@ -1369,8 +1365,8 @@ fn lower_array_option_response_reference() {
         ]
     );
 
-    let name_id = oracle.strings.get("Bar").unwrap();
-    assert!(!oracle.spec_symbol_table.contains_key(&name_id));
+    let name_id = analyzer.strings.get("Bar").unwrap();
+    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1394,10 +1390,10 @@ fn lower_response_headers_with_enum_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    assert!(oracle.reports().is_empty());
+    let analyzer = setup_analyzer(&res.root);
+    assert!(analyzer.reports.is_empty());
 
-    let resp = match get_root_type(&oracle, "Resp") {
+    let resp = match get_root_type(&analyzer, "Resp") {
         RootType::Response(resp) => resp,
         typ => panic!("expected response, got {typ:?}"),
     };
@@ -1445,13 +1441,13 @@ fn lower_enum_type_variants() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = Oracle::new_raw(&res.root);
+    let mut analyzer = Analyzer::new(&res.root);
 
     for def in res.root.type_definitions() {
         let typ = def.typ().unwrap();
-        let id = oracle.lower_type(&typ).unwrap();
+        let id = analyzer.lower_type(&typ).unwrap();
 
-        let enum_type = match oracle.spec_ctx().get_root_type(id) {
+        let enum_type = match analyzer.spec_ctx().get_root_type(id) {
             RootType::Type(Type::Enum(enm)) => enm,
             other => panic!("expected enum, got {other:?}"),
         };
@@ -1466,7 +1462,7 @@ fn lower_enum_type_variants() {
         assert_eq!(enum_type.typ, expected);
     }
 
-    assert!(oracle.reports().is_empty());
+    assert!(analyzer.reports.is_empty());
 }
 
 #[test]
@@ -1491,14 +1487,14 @@ fn lower_response_content_type_label_and_union_body() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
+    let analyzer = setup_analyzer(&res.root);
 
-    insta::assert_debug_snapshot!(oracle.reports());
+    insta::assert_debug_snapshot!(analyzer.reports);
 
-    let name_id = oracle.strings.get("RespJson").unwrap();
-    assert!(!oracle.spec_symbol_table.contains_key(&name_id));
+    let name_id = analyzer.strings.get("RespJson").unwrap();
+    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
 
-    let resp = match get_root_type(&oracle, "RespUnion") {
+    let resp = match get_root_type(&analyzer, "RespUnion") {
         RootType::Response(resp) => resp,
         typ => panic!("expected response, got {typ:?}"),
     };
@@ -1538,12 +1534,12 @@ fn lower_union_nested_file_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
+    let analyzer = setup_analyzer(&res.root);
 
-    insta::assert_debug_snapshot!(oracle.reports());
+    insta::assert_debug_snapshot!(analyzer.reports);
 
-    let name_id = oracle.strings.get("Foo").unwrap();
-    assert!(!oracle.spec_symbol_table.contains_key(&name_id));
+    let name_id = analyzer.strings.get("Foo").unwrap();
+    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1561,10 +1557,10 @@ fn lower_record_default_value_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    assert!(oracle.reports().is_empty());
+    let analyzer = setup_analyzer(&res.root);
+    assert!(analyzer.reports.is_empty());
 
-    let record = match get_root_type(&oracle, "Rec") {
+    let record = match get_root_type(&analyzer, "Rec") {
         RootType::Type(Type::Record(record)) => record,
         typ => panic!("expected record, got {typ:?}"),
     };
@@ -1589,11 +1585,11 @@ fn lower_array_reference_and_invalid_inners() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
+    let analyzer = setup_analyzer(&res.root);
 
-    insta::assert_debug_snapshot!(oracle.reports());
+    insta::assert_debug_snapshot!(analyzer.reports);
 
-    let arr = match get_root_type(&oracle, "ArrRef") {
+    let arr = match get_root_type(&analyzer, "ArrRef") {
         RootType::Type(Type::Inline(InlineTy::Array(arr))) => arr,
         typ => panic!("expected array, got: {typ:?}"),
     };
@@ -1632,10 +1628,10 @@ fn lower_cycle_reference_handling() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = setup_oracle(&res.root);
+    let mut analyzer = setup_analyzer(&res.root);
 
-    oracle.reports.sort_by_key(|rep| rep.labels[0].span.start);
-    insta::assert_debug_snapshot!(oracle.reports());
+    analyzer.reports.sort_by_key(|rep| rep.labels[0].span.start);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -1657,12 +1653,12 @@ fn lower_headers_reference_response() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
+    let analyzer = setup_analyzer(&res.root);
 
-    insta::assert_debug_snapshot!(oracle.reports());
+    insta::assert_debug_snapshot!(analyzer.reports);
 
-    let name_id = oracle.strings.get("Out").unwrap();
-    assert!(!oracle.spec_symbol_table.contains_key(&name_id));
+    let name_id = analyzer.strings.get("Out").unwrap();
+    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1694,9 +1690,9 @@ fn lower_record_invalid_inline_types_and_response_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
+    let analyzer = setup_analyzer(&res.root);
 
-    insta::assert_debug_snapshot!(oracle.reports());
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -1713,10 +1709,10 @@ fn lower_reference_to_response() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    assert!(oracle.reports().is_empty());
+    let analyzer = setup_analyzer(&res.root);
+    assert!(analyzer.reports.is_empty());
 
-    let alias = match get_root_type(&oracle, "Alias") {
+    let alias = match get_root_type(&analyzer, "Alias") {
         RootType::NamedReference(reference) => reference,
         typ => panic!("expected named reference, got {typ:?}"),
     };
@@ -1740,12 +1736,12 @@ fn lower_repeated_field_names() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = Oracle::new_raw(&res.root);
+    let mut analyzer = Analyzer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let _ = oracle.lower_type(&typ).unwrap();
+    let _ = analyzer.lower_type(&typ).unwrap();
 
-    insta::assert_debug_snapshot!(oracle.reports());
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -1761,8 +1757,8 @@ fn is_simple_type_edges() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut oracle = Oracle::new_raw(&res.root);
-    oracle.validate_symbols();
+    let mut analyzer = Analyzer::new(&res.root);
+    analyzer.validate_symbols();
 
     let opt = res
         .root
@@ -1796,21 +1792,21 @@ fn is_simple_type_edges() {
         .typ()
         .unwrap();
 
-    assert!(!oracle.is_simple_type(&opt, false, false).unwrap());
-    assert!(oracle.is_simple_type(&arr, true, true).unwrap());
-    assert!(oracle.is_simple_type(&empty_arr, true, true).unwrap());
-    assert!(oracle.is_simple_type(&missing, true, true).unwrap());
+    assert!(!analyzer.is_simple_type(&opt, false, false).unwrap());
+    assert!(analyzer.is_simple_type(&arr, true, true).unwrap());
+    assert!(analyzer.is_simple_type(&empty_arr, true, true).unwrap());
+    assert!(analyzer.is_simple_type(&missing, true, true).unwrap());
 }
 
-fn setup_oracle<'a>(root: &'a ast::Root) -> Oracle<'a> {
-    let mut oracle = Oracle::new_raw(root);
-    oracle.validate_symbols();
-    oracle.lower_type_definitions();
-    oracle
+fn setup_analyzer<'a>(root: &'a ast::Root) -> Analyzer<'a> {
+    let mut analyzer = Analyzer::new(root);
+    analyzer.validate_symbols();
+    analyzer.lower_type_definitions();
+    analyzer
 }
 
-fn get_root_type<'a>(oracle: &'a Oracle<'_>, name: &str) -> RootType<'a> {
-    let name_id = oracle.strings.get(name).unwrap();
-    let type_def = oracle.spec_symbol_table.get(&name_id).unwrap();
-    oracle.spec_ctx().get_root_type(type_def.typ)
+fn get_root_type<'a>(analyzer: &'a Analyzer<'_>, name: &str) -> RootType<'a> {
+    let name_id = analyzer.strings.get(name).unwrap();
+    let type_def = analyzer.spec_symbol_table.get(&name_id).unwrap();
+    analyzer.spec_ctx().get_root_type(type_def.typ)
 }

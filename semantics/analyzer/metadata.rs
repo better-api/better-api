@@ -2,12 +2,11 @@ use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast::AstNode;
 use better_api_syntax::{TextRange, ast};
 
+use crate::analyzer::Analyzer;
 use crate::spec;
 use crate::text::parse_string;
 
-use super::Oracle;
-
-impl<'a> Oracle<'a> {
+impl<'a> Analyzer<'a> {
     pub(crate) fn lower_metadata(&mut self) {
         let mut res_version = None;
         for (idx, version) in self.root.api_versions().enumerate() {
@@ -70,7 +69,7 @@ impl<'a> Oracle<'a> {
         if let (Some(version), Some(name), Some(api_version)) =
             (res_version, res_name, res_api_version)
         {
-            self.metadata = Some(spec::Metadata {
+            self.metadata = spec::Metadata {
                 better_api_version: api_version,
                 version,
                 name,
@@ -78,7 +77,7 @@ impl<'a> Oracle<'a> {
 
                 // TODO: Get description
                 description: None,
-            })
+            }
         }
     }
 
@@ -223,7 +222,7 @@ mod test {
     use better_api_syntax::{parse, tokenize};
     use indoc::indoc;
 
-    use crate::Oracle;
+    use crate::analyzer::Analyzer;
 
     #[test]
     fn lower_basic_metadata() {
@@ -258,10 +257,11 @@ mod test {
         let tokens = tokenize(text, &mut diagnostics);
         let res = parse(tokens);
 
-        let oracle = Oracle::new(&res.root);
-        insta::assert_debug_snapshot!(oracle.reports());
+        let mut oracle = Analyzer::new(&res.root);
+        oracle.analyze();
+        insta::assert_debug_snapshot!(oracle.reports);
 
-        let metadata = oracle.metadata.as_ref().expect("metadata should be set");
+        let metadata = &oracle.metadata;
         assert_eq!(metadata.version, "1.2");
         assert_eq!(metadata.name, "test");
         assert_eq!(metadata.better_api_version, "0.1");

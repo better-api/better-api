@@ -6,14 +6,14 @@ use better_api_diagnostic::{Label, Report};
 use better_api_syntax::TextRange;
 use better_api_syntax::ast::{self, AstNode};
 
-use crate::oracle::symbols::deref;
-use crate::oracle::typ::{
+use crate::analyzer::symbols::deref;
+use crate::analyzer::typ::{
     InvalidInnerContext, InvalidOuterContext, SimpleRecordParamConfig, TypeClass, ensure_inline,
     lower_response, lower_simple_record_param, lower_type, new_invalid_inner_type, require_no_file,
     require_not_response, require_with_deref,
 };
-use crate::oracle::value::lower_mime_types;
-use crate::oracle::{Context, RangeMap};
+use crate::analyzer::value::lower_mime_types;
+use crate::analyzer::{Analyzer, Context, RangeMap};
 use crate::path::{Path, PathId, PathParamIterator, PathPart};
 use crate::spec::SpecContext;
 use crate::spec::endpoint::{
@@ -23,8 +23,6 @@ use crate::spec::endpoint::{
 use crate::spec::typ::{InlineTyId, ResponseReferenceId, SimpleRecordReference, TypeArena};
 use crate::spec::value::{ValueArena, ValueContext};
 use crate::text::{self, NameId, StringId, StringInterner};
-
-use super::Oracle;
 
 /// Helper trait to unify endpoint arena and route builder.
 trait EndpointParent {
@@ -121,7 +119,7 @@ struct EndpointContext<'o, 'a> {
     endpoint_names: HashMap<NameId, TextRange>,
 }
 
-impl<'a> Oracle<'a> {
+impl<'a> Analyzer<'a> {
     /// Lowers routes and endpoints
     pub(crate) fn lower_endpoints_and_routes(&mut self) {
         let mut ctx = EndpointContext {

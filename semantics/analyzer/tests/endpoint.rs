@@ -2,14 +2,10 @@ use better_api_syntax::{ast, parse, tokenize};
 use http::{Method, StatusCode};
 use indoc::indoc;
 
-use crate::{
-    Oracle,
-    path::PathPart,
-    spec::{
-        endpoint::{EndpointResponseType, ResponseStatus},
-        typ::{InlineTy, PrimitiveTy, ResponseReference, SimpleRecordReference, Type},
-    },
-};
+use crate::analyzer::Analyzer;
+use crate::path::PathPart;
+use crate::spec::endpoint::{EndpointResponseType, ResponseStatus};
+use crate::spec::typ::{InlineTy, PrimitiveTy, ResponseReference, SimpleRecordReference, Type};
 
 #[test]
 fn lower_simple_endpoint() {
@@ -25,10 +21,10 @@ fn lower_simple_endpoint() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    assert_eq!(oracle.reports(), vec![]);
+    let analyzer = setup_analyzer(&res.root);
+    assert_eq!(analyzer.reports, vec![]);
 
-    let mut root_endpoints = oracle.spec_ctx().root_endpoints();
+    let mut root_endpoints = analyzer.spec_ctx().root_endpoints();
     let endpoint = root_endpoints.next().expect("expected endpoint");
     assert!(root_endpoints.next().is_none());
 
@@ -49,7 +45,7 @@ fn lower_simple_endpoint() {
         EndpointResponseType::InlineType(InlineTy::Primitive(PrimitiveTy::String))
     ));
 
-    assert_eq!(oracle.spec_ctx().root_routes().count(), 0);
+    assert_eq!(analyzer.spec_ctx().root_routes().count(), 0);
 }
 
 #[test]
@@ -83,10 +79,10 @@ fn lower_complex_valid_endpoint() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    assert_eq!(oracle.reports(), vec![]);
+    let analyzer = setup_analyzer(&res.root);
+    assert_eq!(analyzer.reports, vec![]);
 
-    let mut root_endpoints = oracle.spec_ctx().root_endpoints();
+    let mut root_endpoints = analyzer.spec_ctx().root_endpoints();
     let endpoint = root_endpoints.next().expect("expected endpoint");
     assert!(root_endpoints.next().is_none());
 
@@ -233,12 +229,12 @@ fn lower_simple_valid_routes() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    assert_eq!(oracle.reports(), vec![]);
+    let analyzer = setup_analyzer(&res.root);
+    assert_eq!(analyzer.reports, vec![]);
 
-    assert_eq!(oracle.spec_ctx().root_endpoints().count(), 0);
+    assert_eq!(analyzer.spec_ctx().root_endpoints().count(), 0);
 
-    let mut root_routes = oracle.spec_ctx().root_routes();
+    let mut root_routes = analyzer.spec_ctx().root_routes();
     let root_route = root_routes.next().expect("expected root route");
     assert!(root_routes.next().is_none());
 
@@ -306,8 +302,8 @@ fn lower_invalid_endpoint_missing_name() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -325,8 +321,8 @@ fn lower_invalid_endpoint_repeated_response_status() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -342,8 +338,8 @@ fn lower_invalid_route_repeated_response_status() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -372,8 +368,8 @@ fn lower_invalid_route_non_inline_response_types() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -391,8 +387,8 @@ fn lower_invalid_endpoint_response_status_code() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -411,8 +407,8 @@ fn lower_invalid_endpoint_headers_param() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -431,8 +427,8 @@ fn lower_invalid_endpoint_accept_type() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -451,8 +447,8 @@ fn lower_invalid_endpoint_missing_request_body() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -474,8 +470,8 @@ fn lower_invalid_endpoint_request_body_not_file() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -500,8 +496,8 @@ fn lower_invalid_endpoint_request_body_contains_file() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -521,12 +517,12 @@ fn lower_invalid_endpoint_request_body_file_with_json_accept() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
+    let analyzer = setup_analyzer(&res.root);
     assert!(
-        format!("{:?}", oracle.reports()).contains("`accept` defined here"),
+        format!("{:?}", analyzer.reports).contains("`accept` defined here"),
         "expected `accept` location to be present in report"
     );
-    insta::assert_debug_snapshot!(oracle.reports());
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -547,8 +543,8 @@ fn lower_invalid_endpoint_request_body_is_response() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -573,8 +569,8 @@ fn lower_invalid_endpoint_paths_not_unique() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -599,8 +595,8 @@ fn lower_invalid_endpoint_paths_params_not_unique() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -617,8 +613,8 @@ fn lower_invalid_endpoint_paths_missing_path_attribute() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -645,8 +641,8 @@ fn lower_invalid_endpoint_paths_attribute_mismatch() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -667,8 +663,8 @@ fn lower_invalid_endpoint_path_params_option_or_array() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -683,8 +679,8 @@ fn lower_invalid_endpoint_missing_response() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -705,8 +701,8 @@ fn lower_warning_get_with_request_body() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -727,8 +723,8 @@ fn lower_invalid_endpoint_repeated_name() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    insta::assert_debug_snapshot!(oracle.reports());
+    let analyzer = setup_analyzer(&res.root);
+    insta::assert_debug_snapshot!(analyzer.reports);
 }
 
 #[test]
@@ -749,15 +745,15 @@ fn lower_valid_endpoint_same_path_different_method() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let oracle = setup_oracle(&res.root);
-    assert!(oracle.reports().is_empty());
+    let analyzer = setup_analyzer(&res.root);
+    assert!(analyzer.reports.is_empty());
 }
 
-fn setup_oracle<'a>(root: &'a ast::Root) -> Oracle<'a> {
-    let mut oracle = Oracle::new_raw(root);
-    oracle.validate_symbols();
-    oracle.lower_type_definitions();
-    oracle.lower_endpoints_and_routes();
-    oracle.validate_paths();
-    oracle
+fn setup_analyzer<'a>(root: &'a ast::Root) -> Analyzer<'a> {
+    let mut analyzer = Analyzer::new(root);
+    analyzer.validate_symbols();
+    analyzer.lower_type_definitions();
+    analyzer.lower_endpoints_and_routes();
+    analyzer.validate_paths();
+    analyzer
 }

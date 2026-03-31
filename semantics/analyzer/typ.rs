@@ -2,18 +2,16 @@ use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast::AstNode;
 use better_api_syntax::{TextRange, ast};
 
-use crate::oracle::compare::value_matches_type;
-use crate::oracle::symbols::{ResolvedSymbol, deref, report_missing, resolve};
-use crate::oracle::value::{lower_mime_types, lower_value};
-use crate::oracle::{Context, SymbolMap};
+use crate::analyzer::compare::value_matches_type;
+use crate::analyzer::symbols::{ResolvedSymbol, deref, report_missing, resolve};
+use crate::analyzer::value::{lower_mime_types, lower_value};
+use crate::analyzer::{Analyzer, Context, SymbolMap};
 use crate::spec::typ::{
     EnumTy, FieldBuilder, InlineTyId, OptionArrayBuilder, PrimitiveTy, ResponseTyId, RootRef,
     RootTypeId, SimpleRecordReferenceId, TypeArena, TypeDefData, TypeId, TypeRef,
 };
 use crate::spec::value::{ValueArena, ValueContext, ValueId};
 use crate::text::{NameId, StringId, StringInterner};
-
-use super::Oracle;
 
 /// Represents type field with interned name.
 #[derive(Clone)]
@@ -94,7 +92,7 @@ impl<'a> ParsedType<'a> {
     }
 }
 
-impl<'a> Oracle<'a> {
+impl<'a> Analyzer<'a> {
     /// Lowers type definitions.
     pub(crate) fn lower_type_definitions(&mut self) {
         let mut ctx = Context {
