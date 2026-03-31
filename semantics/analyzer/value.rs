@@ -16,6 +16,13 @@ struct InternedField {
 
 impl<'a> Analyzer<'a> {
     /// Sugar method for lowering a value. Calls [`lower_value`].
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Should be used later on by semantic analysis APIs"
+        )
+    )]
     pub(crate) fn lower_value(&mut self, value: &ast::Value) -> ValueId {
         lower_value(
             &mut self.values,

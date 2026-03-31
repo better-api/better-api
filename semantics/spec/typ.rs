@@ -758,8 +758,16 @@ pub struct TypeDef<'a> {
 /// Stores the doc comment for a named type definition.
 #[derive(Debug, Clone)]
 pub(crate) struct TypeDefData {
+    #[expect(
+        dead_code,
+        reason = "Stored for future semantic queries and diagnostics"
+    )]
     pub docs: Option<StringId>,
     pub typ: RootTypeId,
+    #[expect(
+        dead_code,
+        reason = "Stored for future semantic queries and diagnostics"
+    )]
     pub name: StringId,
 }
 
@@ -1375,6 +1383,10 @@ impl<'a> SpecContext<'a> {
     }
 
     /// Get [`Type`] by id.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "Should be used later on by semantic query APIs")
+    )]
     pub(crate) fn get_type(&self, id: TypeId) -> Type<'a> {
         self.resolve_from_slot(id.0)
     }
@@ -1401,11 +1413,16 @@ impl<'a> SpecContext<'a> {
     }
 
     /// Get [`ResponseTy`] type by id.
+    #[expect(dead_code, reason = "Should be used later on by semantic query APIs")]
     pub(crate) fn get_response_type(&self, id: ResponseTyId) -> ResponseTy<'a> {
         self.resolve_from_slot(id.0)
     }
 
     /// Get [`RootType`] by id.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "Should be used later on by semantic query APIs")
+    )]
     pub(crate) fn get_root_type(&self, id: RootTypeId) -> RootType<'a> {
         self.resolve_from_slot(id.0)
     }

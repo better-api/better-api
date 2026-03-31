@@ -49,6 +49,13 @@ pub struct Server {
 
 impl Spec {
     /// Get [view](SpecContext) over a spec.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Used by internal tests and upcoming crate consumers"
+        )
+    )]
     pub(crate) fn ctx<'a>(&'a self) -> SpecContext<'a> {
         SpecContext {
             strings: &self.strings,

@@ -36,6 +36,10 @@ impl<'a> Analyzer<'a> {
     ///
     /// Errors are not reported. For detecting missing symbols, use [`Self::resolve`] which reports
     /// errors.
+    #[expect(
+        dead_code,
+        reason = "Should be used later on by semantic analysis APIs"
+    )]
     pub(crate) fn deref(&self, node: &ast::TypeRef) -> Option<ast::Type> {
         deref(&self.strings, &self.symbol_map, self.root, node)
     }
@@ -43,6 +47,10 @@ impl<'a> Analyzer<'a> {
     /// Resolve a symbol. Sugar for [`resolve`]
     ///
     /// In most cases, [`Self::deref`] should be used.
+    #[expect(
+        dead_code,
+        reason = "Should be used later on by semantic analysis APIs"
+    )]
     pub(crate) fn resolve(&self, name: StringId, range: TextRange) -> ResolvedSymbol {
         resolve(&self.strings, &self.symbol_map, self.root, name, range)
     }

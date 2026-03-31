@@ -119,6 +119,13 @@ impl<'a> Analyzer<'a> {
     /// Use [`Oracle::lower_response`] for lowering response.
     ///
     /// **Note:** You can should use this method to lower a _reference_ to a response.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Should be used later on by semantic analysis APIs"
+        )
+    )]
     pub(crate) fn lower_type(&mut self, typ: &ast::Type) -> Option<RootTypeId> {
         let mut ctx = Context {
             strings: &mut self.strings,
@@ -142,6 +149,13 @@ impl<'a> Analyzer<'a> {
     /// ```
     ///
     /// are both simple types
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Should be used later on by semantic analysis APIs"
+        )
+    )]
     pub(crate) fn is_simple_type(
         &self,
         typ: &ast::Type,
@@ -164,6 +178,10 @@ impl<'a> Analyzer<'a> {
     ///
     /// Parameter `name` is the name of the response type being lowered. It's used to generate
     /// header and body names.
+    #[expect(
+        dead_code,
+        reason = "Should be used later on by semantic analysis APIs"
+    )]
     pub(crate) fn lower_response(
         &mut self,
         resp: &ast::TypeResponse,
@@ -194,6 +212,10 @@ impl<'a> Analyzer<'a> {
     /// - `typ_name`: name of the type used in reports. This should be `headers`, `path`, ...
     /// - `ref_name`: name used for created type definition. This should be `FooHeaders`,
     ///   `BarPath`, ...
+    #[expect(
+        dead_code,
+        reason = "Should be used later on by semantic analysis APIs"
+    )]
     pub(crate) fn lower_simple_record_param(
         &mut self,
         node: &ast::Type,

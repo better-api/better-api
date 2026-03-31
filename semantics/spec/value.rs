@@ -89,6 +89,7 @@ impl<'a> Value<'a> {
 /// A field inside of the object.
 #[derive(Debug, Clone)]
 pub struct ObjectField<'a> {
+    #[expect(dead_code, reason = "Should be used later on by semantic query APIs")]
     pub(crate) id: ObjectFieldId,
     pub name: &'a Name,
     pub value: Value<'a>,
@@ -98,6 +99,7 @@ pub struct ObjectField<'a> {
 #[derive(Debug, Clone)]
 pub struct Object<'a> {
     // Id of the object
+    #[expect(dead_code, reason = "Should be used later on by semantic query APIs")]
     pub(crate) id: ValueId,
 
     /// Iterator over fields.
@@ -150,6 +152,10 @@ impl<'a> Iterator for ObjectFields<'a> {
 #[derive(Debug)]
 pub struct ArrayItem<'a> {
     /// Id of the item in the value arena.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "Should be used later on by semantic query APIs")
+    )]
     pub(crate) id: ValueId,
 
     /// Value of the item
@@ -160,6 +166,7 @@ pub struct ArrayItem<'a> {
 #[derive(Debug, Clone)]
 pub struct Array<'a> {
     // Id of the array
+    #[expect(dead_code, reason = "Should be used later on by semantic query APIs")]
     pub(crate) id: ValueId,
 
     items: ArrayItems<'a>,
@@ -465,6 +472,7 @@ impl MimeTypesId {
     }
 
     /// Return value id
+    #[expect(dead_code, reason = "Should be used later on by semantic query APIs")]
     pub(crate) fn value_id(&self) -> ValueId {
         self.0
     }
@@ -483,11 +491,13 @@ pub(crate) struct ObjectFieldId {
 
 impl ObjectFieldId {
     /// Get [`ValueId`] of the object that contains this field.
+    #[expect(dead_code, reason = "Should be used later on by semantic query APIs")]
     pub(crate) fn object_id(&self) -> ValueId {
         self.object_id
     }
 
     /// Get [`ValueId`] of the field's value.
+    #[expect(dead_code, reason = "Should be used later on by semantic query APIs")]
     pub(crate) fn value_id(&self) -> ValueId {
         ValueId(self.slot_idx + 1)
     }
@@ -527,6 +537,7 @@ pub(crate) struct ValueArena {
 
 impl ValueArena {
     /// Create a new value arena.
+    #[expect(dead_code, reason = "Should be used later on by semantic query APIs")]
     pub(crate) fn new() -> Self {
         Self::default()
     }

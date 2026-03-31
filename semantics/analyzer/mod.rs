@@ -9,8 +9,11 @@ use crate::path::PathId;
 use crate::spec::endpoint::{EndpointArena, EndpointId};
 use crate::spec::typ::{TypeArena, TypeFieldId};
 use crate::spec::value::ValueArena;
-use crate::spec::{Metadata, Spec, SpecContext, SymbolTable};
+use crate::spec::{Metadata, Spec, SymbolTable};
 use crate::text::{StringId, StringInterner};
+
+#[cfg(test)]
+use crate::spec::SpecContext;
 
 mod compare;
 mod endpoint;
@@ -38,7 +41,7 @@ pub struct AnalyzeResult {
 pub fn analyze(root: &ast::Root) -> AnalyzeResult {
     let mut analyzer = Analyzer::new(root);
     analyzer.analyze();
-    analyzer.to_spec()
+    analyzer.into_spec()
 }
 
 type SymbolMap = HashMap<StringId, ast::AstPtr<ast::TypeDefinition>>;
@@ -135,6 +138,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Get [view](SpecContext) over a spec.
+    #[cfg(test)]
     fn spec_ctx<'s>(&'s self) -> SpecContext<'s> {
         SpecContext {
             strings: &self.strings,
@@ -159,7 +163,7 @@ impl<'a> Analyzer<'a> {
         self.validate_paths();
     }
 
-    fn to_spec(self) -> AnalyzeResult {
+    fn into_spec(self) -> AnalyzeResult {
         // Construct the final spec
         if self.reports.iter().any(|r| r.severity == Severity::Error) {
             AnalyzeResult {
