@@ -4,9 +4,8 @@ use std::collections::HashMap;
 
 use crate::text::{StringId, StringInterner};
 
-pub mod endpoint;
-pub mod typ;
-pub mod value;
+pub(crate) mod arena;
+pub mod view;
 
 pub(crate) type SymbolTable = HashMap<StringId, typ::TypeDefData>;
 
@@ -21,9 +20,9 @@ pub struct Spec {
 
     pub metadata: Metadata,
 
-    pub(crate) values: value::ValueArena,
-    pub(crate) types: typ::TypeArena,
-    pub(crate) endpoints: endpoint::EndpointArena,
+    pub(crate) values: arena::value::ValueArena,
+    pub(crate) types: arena::typ::TypeArena,
+    pub(crate) endpoints: arena::endpoint::EndpointArena,
 }
 
 /// Metadata of Better API spec
