@@ -2,7 +2,10 @@
 
 use std::collections::HashMap;
 
-use crate::text::{StringId, StringInterner};
+use crate::{
+    spec::arena::typ,
+    text::{StringId, StringInterner},
+};
 
 pub(crate) mod arena;
 pub mod view;

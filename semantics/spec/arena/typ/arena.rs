@@ -1,17 +1,24 @@
-use crate::{spec::arena::typ::PrimitiveTy, text::StringId};
+use std::any::TypeId;
+
+use crate::spec::SymbolTable;
+use crate::spec::arena::typ::id::{InlineTypeId, RootTypeId, SimpleRecordReferenceId};
+use crate::spec::arena::typ::slot::Slot;
+use crate::spec::arena::typ::{EnumTy, PrimitiveTy};
+use crate::spec::arena::value::ValueId;
+use crate::text::StringId;
 
 /// Data of option type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct OptionData<Id> {
+pub(crate) struct OptionData {
     /// Id of the option's inner type
-    pub inner_id: Id,
+    pub inner_id: InlineTypeId,
 }
 
 /// Data of array type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct ArrayData<Id> {
+pub(crate) struct ArrayData {
     /// Id of the array's inner type
-    pub inner_id: Id,
+    pub inner_id: InlineTypeId,
 }
 
 /// Data of enum type
@@ -38,7 +45,7 @@ pub(crate) struct EnumMemberData {
 /// Data for response type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct ResponseData {
-    body: InlineTyId,
+    body: InlineTypeId,
     headers: Option<SimpleRecordReferenceId>,
 
     // TODO: Mime type
@@ -59,13 +66,20 @@ pub(crate) struct UnionRange {
     end: u32,
 }
 
+/// Data for a reference to target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct ReferenceData<Id> {
+    pub name: StringId,
+    pub target: Id,
+}
+
 // Data of a inline type in arena
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum InlineTypeData<Id> {
+pub(crate) enum InlineTypeData {
     Primitive(PrimitiveTy),
-    Reference(StringId), // TODO: Reference data instead of stringid
-    Option(OptionData<Id>),
-    Array(ArrayData<Id>),
+    Reference(ReferenceData<TypeId>),
+    Option(OptionData),
+    Array(ArrayData),
 }
 
 /// Data of a type in arena.
@@ -82,8 +96,48 @@ pub(crate) enum TypeData {
 pub(crate) enum RootTypeData {
     Type(TypeData),
     Response(ResponseData),
+    Reference(ReferenceData<RootTypeId>),
 }
 
-/// Range of the fields in a simple record
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct SimpleRecordRange(RecordRange);
+struct ReferenceSlot {
+    name: StringId,
+    target: u32,
+}
+
+/// Type arena that holds semantic types
+pub(crate) struct TypeArena {
+    data: Vec<Slot<ReferenceSlot>>,
+}
+
+impl TypeArena {
+    /// Constructs arena from data in [`TypeArenaBuilder`](super::builder::TypeArenaBuilder).
+    ///
+    /// **Note:** This function shouldn't be called directly. Instead
+    /// [`TypeArenaBuilder::finish`](super::builder::TypeArenaBuilder::finish) should be called.
+    ///
+    /// If any of the references in the builder are not valid, an error is returned. The error
+    /// is the name of the reference that couldn't be resolved.
+    pub(super) fn from_builder_data(
+        data: Vec<Slot<StringId>>,
+        table: &SymbolTable,
+    ) -> Result<Self, StringId> {
+        let final_data: Result<Vec<Slot<ReferenceSlot>>, StringId> = data
+            .into_iter()
+            .map(|slot| {
+                slot.map_ref(|name| {
+                    if let Some(def) = table.get(&name) {
+                        Ok(ReferenceSlot {
+                            name,
+                            target: def.typ.0,
+                        })
+                    } else {
+                        Err(name)
+                    }
+                })
+            })
+            .collect();
+
+        Ok(Self { data: final_data? })
+    }
+}
