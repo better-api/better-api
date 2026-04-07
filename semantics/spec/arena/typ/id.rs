@@ -41,10 +41,28 @@ pub(crate) struct TypeFieldId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct SimpleTypeId(u32);
 
+impl From<SimpleTypeId> for TypeId {
+    fn from(value: SimpleTypeId) -> Self {
+        Self(value.0)
+    }
+}
+
 /// Id of a named reference to stored in the [`TypeArena`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct SimpleRecordReferenceId(u32);
 
+impl From<SimpleRecordReferenceId> for TypeId {
+    fn from(value: SimpleRecordReferenceId) -> Self {
+        Self(value.0)
+    }
+}
+
 /// Id of a named reference to stored in the [`TypeArena`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct ResponseReferenceId(u32);
+
+impl From<ResponseReferenceId> for RootTypeId {
+    fn from(value: ResponseReferenceId) -> Self {
+        Self(value.0)
+    }
+}

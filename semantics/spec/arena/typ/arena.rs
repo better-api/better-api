@@ -200,7 +200,7 @@ impl RootTypeData {
 }
 
 /// Helper data structure for type field data.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 struct TypeFieldData {
     id: TypeFieldId,
     name: NameId,
@@ -210,7 +210,7 @@ struct TypeFieldData {
 }
 
 /// Data of a field in a record
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct RecordFieldData {
     pub id: TypeFieldId,
     pub name: NameId,
@@ -232,7 +232,7 @@ impl From<TypeFieldData> for RecordFieldData {
 }
 
 /// Data of a field in a union
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct UnionFieldData {
     pub id: TypeFieldId,
     pub name: NameId,
@@ -274,13 +274,14 @@ pub(crate) struct RecordCursor(TypeFieldCursor);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct UnionCursor(TypeFieldCursor);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct ReferenceSlot {
     name: StringId,
     target: u32,
 }
 
 /// Type arena that holds semantic types
+#[derive(Debug, Clone)]
 pub(crate) struct TypeArena {
     data: Vec<Slot<ReferenceSlot>>,
 }
@@ -329,6 +330,11 @@ impl TypeArena {
     pub(crate) fn get_response(&self, id: ResponseTypeId) -> ResponseData {
         let slot = self.data[id.0 as usize];
         ResponseData::from_slot(slot).expect("invalid slot for ResponseTypeId")
+    }
+
+    pub(crate) fn get_root_type(&self, id: RootTypeId) -> RootTypeData {
+        let slot = self.data[id.0 as usize];
+        RootTypeData::from_slot(slot, id.0).expect("invalid slot for RootTypeId")
     }
 
     /// Get cursor pointing to the first member of the enum

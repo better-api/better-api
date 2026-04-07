@@ -24,6 +24,9 @@ pub(crate) mod id;
 
 mod slot;
 
+pub(crate) use arena::TypeArena;
+pub(crate) use builder::TypeArenaBuilder;
+
 /// Primitive types.
 #[derive(Debug, Clone, Copy, PartialEq, derive_more::Display)]
 pub enum PrimitiveTy {

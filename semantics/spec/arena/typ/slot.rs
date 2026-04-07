@@ -14,7 +14,7 @@ use crate::text::{NameId, StringId};
 /// For example, `[i32]` is `[Slot::Array, Slot::Primitive(_)]`.
 /// The `end` field marks the slot after the whole nesting so field
 /// iteration can skip the full inline tree.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) enum Slot<Ref> {
     Primitive(PrimitiveTy),
     Reference(Ref),
