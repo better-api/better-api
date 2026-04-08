@@ -161,6 +161,12 @@ impl<'a> Iterator for ArrayItemIter<'a> {
     }
 }
 
+impl Spec {
+    pub(crate) fn get_value<'a>(&'a self, id: ValueId) -> ValueView<'a> {
+        ValueView::new(self, id)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::ValueView;

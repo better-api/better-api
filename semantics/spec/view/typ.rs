@@ -1,6 +1,9 @@
 use crate::spec::Spec;
 use crate::spec::arena::typ::EnumTy;
 use crate::spec::arena::typ::PrimitiveTy;
+use crate::spec::arena::typ::arena::EnumCursor;
+use crate::spec::arena::typ::arena::RecordCursor;
+use crate::spec::arena::typ::arena::UnionCursor;
 use crate::spec::arena::typ::arena::{
     EnumData, InlineTypeData, RecordRange, ReferenceData, ResponseData, RootTypeData, TypeData,
     UnionRange,
@@ -176,67 +179,137 @@ pub struct UnionFieldView<'a> {
 /// Semantic representation of a record.
 ///
 /// Fields are exposed through [`Record::fields`].
-#[derive(Debug, Clone)]
+#[derive(derive_more::Debug, Clone)]
 pub struct RecordView<'a> {
+    range: RecordRange,
+
+    #[debug(skip)]
     spec: &'a Spec,
+}
+
+#[derive(derive_more::Debug, Clone)]
+pub struct RecordFieldIter<'a> {
+    #[debug(skip)]
+    spec: &'a Spec,
+    cursor: RecordCursor,
 }
 
 impl<'a> RecordView<'a> {
     fn from_data(spec: &'a Spec, data: RecordRange) -> Self {
-        Self { spec }
+        Self { spec, range: data }
     }
-    // /// Returns iterator over [record fields](RecordField).
-    // pub fn fields(&self) -> impl Iterator<Item = RecordFieldView<'a>> + use<'a> {
-    //     self.fields.clone().map(|it| it.into())
-    // }
+
+    pub fn fields(&self) -> RecordFieldIter<'a> {
+        let cursor = self.spec.types.record_cursor(self.range);
+        RecordFieldIter {
+            spec: self.spec,
+            cursor,
+        }
+    }
+}
+
+impl<'a> Iterator for RecordFieldIter<'a> {
+    type Item = RecordFieldView<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (field, next) = self.spec.types.next_record_field(self.cursor)?;
+
+        let name = self.spec.strings.resolve_name(field.name);
+        let default = field.default.map(|id| self.spec.get_value(id));
+        let typ = InlineTyView::from_data(self.spec, field.typ);
+        let docs = field.docs.map(|id| self.spec.strings.resolve(id));
+
+        self.cursor = next;
+        Some(RecordFieldView {
+            name,
+            default,
+            docs,
+            typ,
+        })
+    }
 }
 
 /// Semantic representation of a tagged union.
 ///
 /// Fields are exposed through [`Union::fields`].
-#[derive(Debug, Clone)]
+#[derive(derive_more::Debug, Clone)]
 pub struct UnionView<'a> {
+    range: UnionRange,
+
+    #[debug(skip)]
     spec: &'a Spec,
+}
+
+#[derive(derive_more::Debug, Clone)]
+pub struct UnionFieldIter<'a> {
+    #[debug(skip)]
+    spec: &'a Spec,
+    cursor: UnionCursor,
 }
 
 impl<'a> UnionView<'a> {
     fn from_data(spec: &'a Spec, data: UnionRange) -> Self {
-        Self { spec }
+        Self { spec, range: data }
     }
 
-    // /// Returns iterator over [union fields](UnionField).
-    // pub fn fields(&self) -> impl Iterator<Item = UnionFieldView<'a>> + use<'a> {
-    //     self.fields.clone().map(|it| it.into())
-    // }
+    pub fn fields(&self) -> UnionFieldIter<'a> {
+        let cursor = self.spec.types.union_cursor(self.range);
+        UnionFieldIter {
+            spec: self.spec,
+            cursor,
+        }
+    }
+}
+
+impl<'a> Iterator for UnionFieldIter<'a> {
+    type Item = UnionFieldView<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (field, next) = self.spec.types.next_union_field(self.cursor)?;
+
+        let name = self.spec.strings.resolve_name(field.name);
+        let typ = InlineTyView::from_data(self.spec, field.typ);
+        let docs = field.docs.map(|id| self.spec.strings.resolve(id));
+
+        self.cursor = next;
+        Some(UnionFieldView { name, docs, typ })
+    }
 }
 
 /// Semantic representation of an enum.
 ///
 /// Field `typ` describes the type of enum values.
-#[derive(Debug, Clone)]
+#[derive(derive_more::Debug, Clone)]
 pub struct EnumView<'a> {
     /// Type of the enum members
     pub typ: EnumTy,
 
-    members: EnumMemberIter<'a>,
+    #[debug(skip)]
+    spec: &'a Spec,
+    data: EnumData,
 }
 
 impl<'a> EnumView<'a> {
     fn from_data(spec: &'a Spec, data: EnumData) -> Self {
         Self {
             typ: data.typ,
-            members: todo!(),
+            spec,
+            data,
         }
     }
 
     pub fn members(&self) -> EnumMemberIter<'a> {
-        self.members.clone()
+        let cursor = self.spec.types.enum_cursor(self.data);
+        EnumMemberIter {
+            spec: self.spec,
+            cursor,
+        }
     }
 }
 
 /// A single valid value of an enum.
 #[derive(Debug, Clone)]
-pub struct EnumMember<'a> {
+pub struct EnumMemberView<'a> {
     pub value: ValueView<'a>,
     pub docs: Option<&'a str>,
 }
@@ -247,8 +320,21 @@ pub struct EnumMemberIter<'a> {
     #[debug(skip)]
     spec: &'a Spec,
 
-    current: TypeId,
-    end: TypeId,
+    cursor: EnumCursor,
+}
+
+impl<'a> Iterator for EnumMemberIter<'a> {
+    type Item = EnumMemberView<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (data, next) = self.spec.types.next_enum_member(self.cursor)?;
+
+        let value = self.spec.get_value(data.value);
+        let docs = data.docs.map(|id| self.spec.strings.resolve(id));
+
+        self.cursor = next;
+        Some(EnumMemberView { value, docs })
+    }
 }
 
 /// Semantic information about a response type.
