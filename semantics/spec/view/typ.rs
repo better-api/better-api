@@ -393,3 +393,5 @@ pub struct TypeDefView<'a> {
     pub typ: RootTypeView<'a>,
     pub name: &'a str,
 }
+
+impl Spec {}

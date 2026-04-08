@@ -50,23 +50,27 @@ pub struct Server {
 }
 
 impl Spec {
-    // #[cfg(test)]
-    // pub(crate) fn new_test() -> Self {
-    //     Self {
-    //         strings: Default::default(),
-    //         symbol_table: Default::default(),
-    //
-    //         values: Default::default(),
-    //         types: Default::default(),
-    //         endpoints: Default::default(),
-    //
-    //         metadata: Metadata {
-    //             better_api_version: "0.1.0".to_string(),
-    //             version: "1.0".to_string(),
-    //             name: "test spec".to_string(),
-    //             description: None,
-    //             servers: vec![],
-    //         },
-    //     }
-    // }
+    #[cfg(test)]
+    pub(crate) fn new_test() -> Self {
+        let symbol_table = SymbolTable::default();
+        let types = typ::TypeArenaBuilder::default()
+            .finish(&symbol_table)
+            .expect("empty type arena builder should always finish");
+
+        Self {
+            strings: Default::default(),
+            symbol_table,
+
+            values: Default::default(),
+            types,
+            // endpoints: Default::default(),
+            metadata: Metadata {
+                better_api_version: "0.1.0".to_string(),
+                version: "1.0".to_string(),
+                name: "test spec".to_string(),
+                description: None,
+                servers: vec![],
+            },
+        }
+    }
 }

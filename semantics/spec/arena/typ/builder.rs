@@ -1,4 +1,3 @@
-use crate::spec::SymbolTable;
 use crate::spec::arena::typ::arena::TypeArena;
 use crate::spec::arena::typ::id::{
     InlineTypeId, ResponseTypeId, RootTypeId, SimpleRecordReferenceId, TypeFieldId, TypeId,
@@ -6,6 +5,7 @@ use crate::spec::arena::typ::id::{
 use crate::spec::arena::typ::slot::Slot;
 use crate::spec::arena::typ::{EnumTy, PrimitiveTy};
 use crate::spec::arena::value::ValueId;
+use crate::spec::SymbolTable;
 use crate::text::{NameId, StringId};
 
 /// Reference to a named [`Type`] definition.
