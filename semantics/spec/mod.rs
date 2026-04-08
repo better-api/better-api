@@ -53,7 +53,7 @@ impl Spec {
     #[cfg(test)]
     pub(crate) fn new_test() -> Self {
         let symbol_table = SymbolTable::default();
-        let types = typ::TypeArenaBuilder::default()
+        let types = typ::builder::TypeArenaBuilder::default()
             .finish(&symbol_table)
             .expect("empty type arena builder should always finish");
 

@@ -2,6 +2,19 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct InlineTypeId(pub(super) u32);
 
+#[cfg(test)]
+impl InlineTypeId {
+    pub(crate) fn from_root_type_id(id: RootTypeId) -> Self {
+        Self(id.0)
+    }
+}
+
+impl From<InlineTypeId> for TypeId {
+    fn from(value: InlineTypeId) -> Self {
+        Self(value.0)
+    }
+}
+
 /// Id of a type stored in the arena.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct TypeId(pub(super) u32);
@@ -13,6 +26,12 @@ pub(crate) struct ResponseTypeId(pub(super) u32);
 /// Id of any type including response.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct RootTypeId(pub(super) u32);
+
+impl From<InlineTypeId> for RootTypeId {
+    fn from(value: InlineTypeId) -> Self {
+        Self(value.0)
+    }
+}
 
 impl From<TypeId> for RootTypeId {
     fn from(value: TypeId) -> Self {

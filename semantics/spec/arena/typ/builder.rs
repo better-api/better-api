@@ -1,3 +1,4 @@
+use crate::spec::SymbolTable;
 use crate::spec::arena::typ::arena::TypeArena;
 use crate::spec::arena::typ::id::{
     InlineTypeId, ResponseTypeId, RootTypeId, SimpleRecordReferenceId, TypeFieldId, TypeId,
@@ -5,7 +6,6 @@ use crate::spec::arena::typ::id::{
 use crate::spec::arena::typ::slot::Slot;
 use crate::spec::arena::typ::{EnumTy, PrimitiveTy};
 use crate::spec::arena::value::ValueId;
-use crate::spec::SymbolTable;
 use crate::text::{NameId, StringId};
 
 /// Reference to a named [`Type`] definition.
@@ -393,10 +393,10 @@ impl TypeArenaBuilder {
     /// Add a primitive type to the arena.
     ///
     /// Returns the [`TypeId`] assigned to the new type.
-    pub(crate) fn add_primitive(&mut self, typ: PrimitiveTy) -> TypeId {
+    pub(crate) fn add_primitive(&mut self, typ: PrimitiveTy) -> InlineTypeId {
         let idx = self.data.len();
         self.data.push(typ.into());
-        TypeId(idx as u32)
+        InlineTypeId(idx as u32)
     }
 
     /// Add a reference to the arena.
