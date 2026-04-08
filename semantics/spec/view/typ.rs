@@ -4,7 +4,9 @@ use crate::spec::arena::typ::arena::{
     EnumData, InlineTypeData, RecordRange, ReferenceData, ResponseData, RootTypeData, TypeData,
     UnionRange,
 };
-use crate::spec::arena::typ::id::{InlineTypeId, ResponseTypeId, RootTypeId, TypeId};
+use crate::spec::arena::typ::id::{
+    InlineTypeId, ResponseReferenceId, ResponseTypeId, RootTypeId, TypeId,
+};
 use crate::spec::arena::typ::{PrimitiveTy, id::TypeFieldId};
 use crate::spec::view::value::ValueView;
 use crate::text::Name;
@@ -74,7 +76,7 @@ impl From<PrimitiveTy> for SimpleTyView<'_> {
 }
 
 impl<'a> FromRootTy<'a> for SimpleTyView<'a> {
-    fn from_root(ty: RootTypeView<'a>) -> Self {
+    fn from_root(_spec: &'a Spec, ty: RootTypeView<'a>) -> Self {
         match ty {
             // We can just "cast" the inner types by reconstructing the marker. If anything is not
             // ok (arena is not constructed correctly), the typ()/resolve() methods will panic.
@@ -92,14 +94,7 @@ impl<'a> FromRootTy<'a> for SimpleTyView<'a> {
                             spec: a.spec,
                             _data: std::marker::PhantomData,
                         }),
-                        InlineTyView::NamedReference(r) => {
-                            InlineTyView::NamedReference(NamedReferenceView {
-                                name: r.name,
-                                id: r.id,
-                                spec: r.spec,
-                                _data: std::marker::PhantomData,
-                            })
-                        }
+                        InlineTyView::NamedReference(r) => InlineTyView::NamedReference(r.cast()),
                     };
                     Self::Inline(inline)
                 }
@@ -110,14 +105,7 @@ impl<'a> FromRootTy<'a> for SimpleTyView<'a> {
                 }
                 TypeView::Union(_) => unreachable!("invalid Union slot for expected SimpleTyView"),
             },
-            RootTypeView::NamedReference(r) => {
-                Self::Inline(InlineTyView::NamedReference(NamedReferenceView {
-                    name: r.name,
-                    id: r.id,
-                    spec: r.spec,
-                    _data: std::marker::PhantomData,
-                }))
-            }
+            RootTypeView::NamedReference(r) => Self::Inline(InlineTyView::NamedReference(r.cast())),
 
             RootTypeView::Response(_) => {
                 unreachable!("invalid Response slot for expected SimpleTyView")
@@ -170,21 +158,14 @@ impl<'a> TypeView<'a> {
 }
 
 impl<'a> FromRootTy<'a> for TypeView<'a> {
-    fn from_root(ty: RootTypeView<'a>) -> Self {
+    fn from_root(_spec: &'a Spec, ty: RootTypeView<'a>) -> Self {
         match ty {
             RootTypeView::Type(ty) => ty,
 
             // We cast reference to any type, into reference to Type. References are all the same,
             // except the _data marker. If the reference doesn't actually point to Type, but
             // instead to ie. Response, the NamedReferenceView::typ() will panic.
-            RootTypeView::NamedReference(r) => {
-                Self::Inline(InlineTyView::NamedReference(NamedReferenceView {
-                    name: r.name,
-                    id: r.id,
-                    spec: r.spec,
-                    _data: std::marker::PhantomData,
-                }))
-            }
+            RootTypeView::NamedReference(r) => Self::Inline(InlineTyView::NamedReference(r.cast())),
 
             RootTypeView::Response(_) => {
                 unreachable!("invalid Response slot for expected TypeView")
@@ -236,11 +217,44 @@ impl<'a, T> NamedReferenceView<'a, T> {
             _data: std::marker::PhantomData,
         }
     }
+
+    /// Casts named reference targeting T, into named reference targeting U.
+    /// If cast is invalid subsequent calls to .typ() will panic!
+    fn cast<U>(self) -> NamedReferenceView<'a, U> {
+        NamedReferenceView {
+            name: self.name,
+            id: self.id,
+            spec: self.spec,
+            _data: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<'a, T> FromRootTy<'a> for NamedReferenceView<'a, T> {
+    fn from_root(_spec: &'a Spec, ty: RootTypeView<'a>) -> Self {
+        match ty {
+            RootTypeView::NamedReference(view) => Self {
+                name: view.name,
+                id: view.id,
+                spec: view.spec,
+                _data: std::marker::PhantomData,
+            },
+
+            RootTypeView::Type(TypeView::Inline(InlineTyView::NamedReference(r))) => r.cast(),
+            RootTypeView::Type(_) => {
+                unreachable!("invalid Type slot for expected NamedReferenceView")
+            }
+
+            RootTypeView::Response(_) => {
+                unreachable!("invalid Response slot for expected NamedReferenceView")
+            }
+        }
+    }
 }
 
 fn resolve_named_reference<'a, T: FromRootTy<'a>>(r: &NamedReferenceView<'a, T>) -> T {
     let ty = RootTypeView::new(r.spec, r.id);
-    T::from_root(ty)
+    T::from_root(r.spec, ty)
 }
 
 fn collapse_named_reference<'a, T: FromRootTy<'a>>(r: &NamedReferenceView<'a, T>) -> T {
@@ -252,7 +266,7 @@ fn collapse_named_reference<'a, T: FromRootTy<'a>>(r: &NamedReferenceView<'a, T>
             RootTypeView::NamedReference(reference) => {
                 id = reference.id;
             }
-            _ => return T::from_root(ty),
+            _ => return T::from_root(r.spec, ty),
         }
     }
 }
@@ -292,19 +306,10 @@ macro_rules! impl_named_reference {
 impl_named_reference!(
     SimpleTyView<'a>,
     TypeView<'a>,
-    // SimpleRecordReference<'a>,
-    // ResponseReference<'a>,
-    // RootType<'a>,
+    SimpleRecordReferenceView<'a>,
+    ResponseReferenceView<'a>,
+    RootTypeView<'a>,
 );
-
-/// Internal representation of record and union field.
-struct TypeFieldInner<'a, T> {
-    id: TypeFieldId,
-    name: &'a Name,
-    default: Option<ValueView<'a>>,
-    docs: Option<&'a str>,
-    typ: InlineTyView<'a, T>,
-}
 
 /// Record field.
 #[derive(Clone)]
@@ -313,17 +318,6 @@ pub struct RecordFieldView<'a> {
     pub default: Option<ValueView<'a>>,
     pub docs: Option<&'a str>,
     pub typ: InlineTyView<'a, TypeView<'a>>,
-}
-
-impl<'a> From<TypeFieldInner<'a, TypeView<'a>>> for RecordFieldView<'a> {
-    fn from(value: TypeFieldInner<'a, TypeView<'a>>) -> Self {
-        Self {
-            name: value.name,
-            default: value.default,
-            docs: value.docs,
-            typ: value.typ,
-        }
-    }
 }
 
 /// Field of a simple record
@@ -337,18 +331,6 @@ pub struct SimpleRecordFieldView<'a> {
     pub typ: InlineTyView<'a, SimpleTyView<'a>>,
 }
 
-impl<'a> From<TypeFieldInner<'a, SimpleTyView<'a>>> for SimpleRecordFieldView<'a> {
-    fn from(value: TypeFieldInner<'a, SimpleTyView<'a>>) -> Self {
-        Self {
-            id: value.id,
-            name: value.name,
-            default: value.default,
-            docs: value.docs,
-            typ: value.typ,
-        }
-    }
-}
-
 /// Union field.
 #[derive(Clone)]
 pub struct UnionFieldView<'a> {
@@ -357,70 +339,17 @@ pub struct UnionFieldView<'a> {
     pub typ: InlineTyView<'a, TypeView<'a>>,
 }
 
-impl<'a> From<TypeFieldInner<'a, TypeView<'a>>> for UnionFieldView<'a> {
-    fn from(value: TypeFieldInner<'a, TypeView<'a>>) -> Self {
-        Self {
-            name: value.name,
-            docs: value.docs,
-            typ: value.typ,
-        }
-    }
-}
-
-/// Iterator returned for composite types.
-///
-/// Each item is a field in the record or union.
-#[derive(derive_more::Debug, Clone)]
-struct TypeFieldIter<'a, T> {
-    #[debug(skip)]
-    spec: &'a Spec,
-    current: u32,
-    end: u32,
-
-    // Id of the record or union
-    id: TypeId,
-
-    _data: std::marker::PhantomData<T>,
-}
-
-// impl<'a, T> Iterator for TypeFieldIter<'a, T> {
-//     type Item = TypeFieldInner<'a, T>;
-//
-//     fn next(&mut self) -> Option<Self::Item> {
-//         if self.current >= self.end {
-//             return None;
-//         }
-//
-//         let field_id = TypeFieldId {
-//             container_id: self.id,
-//             slot_idx: self.current,
-//         };
-//         let field = self.ctx.get_type_field(field_id);
-//
-//         let field_type_slot = &self.ctx.types.data[field_id.slot_idx as usize + 1];
-//
-//         self.current = match &field_type_slot {
-//             Slot::Option { end } => end.0,
-//             Slot::Array { end } => end.0,
-//             Slot::Primitive(_) | Slot::Reference { .. } => self.current + 2,
-//             typ => unreachable!("invalid field type for {field_id:?}: {typ:?}"),
-//         };
-//
-//         Some(field)
-//     }
-// }
-
 /// Semantic representation of a record.
 ///
 /// Fields are exposed through [`Record::fields`].
 #[derive(Debug, Clone)]
 pub struct RecordView<'a> {
-    fields: TypeFieldIter<'a, TypeView<'a>>,
+    spec: &'a Spec,
 }
 
 impl<'a> RecordView<'a> {
     fn from_data(spec: &'a Spec, data: RecordRange) -> Self {
-        Self { fields: todo!() }
+        Self { spec }
     }
     // /// Returns iterator over [record fields](RecordField).
     // pub fn fields(&self) -> impl Iterator<Item = RecordFieldView<'a>> + use<'a> {
@@ -433,7 +362,7 @@ impl<'a> RecordView<'a> {
 /// Fields are exposed through [`SimpleRecord::fields`].
 #[derive(Debug, Clone)]
 pub struct SimpleRecordView<'a> {
-    fields: TypeFieldIter<'a, SimpleTyView<'a>>,
+    spec: &'a Spec,
 }
 
 impl<'a> SimpleRecordView<'a> {
@@ -448,12 +377,12 @@ impl<'a> SimpleRecordView<'a> {
 /// Fields are exposed through [`Union::fields`].
 #[derive(Debug, Clone)]
 pub struct UnionView<'a> {
-    fields: TypeFieldIter<'a, TypeView<'a>>,
+    spec: &'a Spec,
 }
 
 impl<'a> UnionView<'a> {
     fn from_data(spec: &'a Spec, data: UnionRange) -> Self {
-        Self { fields: todo!() }
+        Self { spec }
     }
 
     // /// Returns iterator over [union fields](UnionField).
@@ -503,32 +432,6 @@ pub struct EnumMemberIter<'a> {
     end: TypeId,
 }
 
-// impl<'a> Iterator for EnumMemberIter<'a> {
-//     type Item = EnumMember<'a>;
-//
-//     fn next(&mut self) -> Option<Self::Item> {
-//         if self.current.0 >= self.end.0 {
-//             return None;
-//         }
-//
-//         match &self.ctx.types.data[self.current.0 as usize] {
-//             Slot::EnumMember { value, docs } => {
-//                 let val_ctx: ValueContext = self.ctx.into();
-//                 let value = val_ctx.get_value(*value);
-//                 let docs = docs.map(|id| self.ctx.strings.resolve(id));
-//                 let member = EnumMember { value, docs };
-//                 self.current = TypeId(self.current.0 + 1);
-//                 Some(member)
-//             }
-//
-//             slot => unreachable!(
-//                 "invalid enum member slot at {current:?}: {slot:?}",
-//                 current = self.current
-//             ),
-//         }
-//     }
-// }
-
 /// Semantic information about a response type.
 #[derive(Debug, Clone)]
 pub struct ResponseTyView<'a> {
@@ -571,9 +474,17 @@ impl<'a> RootTypeView<'a> {
     fn new(spec: &'a Spec, id: RootTypeId) -> Self {
         match spec.types.get_root_type(id) {
             RootTypeData::Type(data) => Self::Type(TypeView::from_data(spec, data)),
-            RootTypeData::Response(data) => todo!(),
-            RootTypeData::Reference(reference_data) => todo!(),
+            RootTypeData::Response(data) => Self::Response(ResponseTyView::from_data(spec, data)),
+            RootTypeData::Reference(data) => {
+                Self::NamedReference(NamedReferenceView::new(spec, data))
+            }
         }
+    }
+}
+
+impl<'a> FromRootTy<'a> for RootTypeView<'a> {
+    fn from_root(_spec: &'a Spec, ty: RootTypeView<'a>) -> Self {
+        ty
     }
 }
 
@@ -589,6 +500,29 @@ pub enum ResponseReferenceView<'a> {
     NamedReference(NamedReferenceView<'a, ResponseReferenceView<'a>>),
 }
 
+impl<'a> ResponseReferenceView<'a> {
+    fn new(spec: &'a Spec, id: ResponseReferenceId) -> NamedReferenceView<'a, Self> {
+        let ty = RootTypeView::new(spec, id.into());
+        NamedReferenceView::from_root(spec, ty)
+    }
+}
+
+impl<'a> FromRootTy<'a> for ResponseReferenceView<'a> {
+    fn from_root(_spec: &'a Spec, ty: RootTypeView<'a>) -> Self {
+        match ty {
+            RootTypeView::Response(resp) => Self::Response(resp),
+            RootTypeView::NamedReference(r) => Self::NamedReference(r.cast()),
+
+            RootTypeView::Type(TypeView::Inline(InlineTyView::NamedReference(r))) => {
+                Self::NamedReference(r.cast())
+            }
+            RootTypeView::Type(_) => {
+                unreachable!("invalid Type slot for expected ResponseReferenceView")
+            }
+        }
+    }
+}
+
 /// Reference that terminates with simple record type.
 ///
 /// This type accommodates deep references as well, like Foo -> Bar -> Baz -> simple record
@@ -599,6 +533,27 @@ pub enum SimpleRecordReferenceView<'a> {
     #[display("`record`")]
     SimpleRecord(SimpleRecordView<'a>),
     NamedReference(NamedReferenceView<'a, SimpleRecordReferenceView<'a>>),
+}
+
+impl<'a> FromRootTy<'a> for SimpleRecordReferenceView<'a> {
+    fn from_root(spec: &'a Spec, ty: RootTypeView<'a>) -> Self {
+        match ty {
+            RootTypeView::Type(TypeView::Record(_)) => {
+                Self::SimpleRecord(SimpleRecordView { spec })
+            }
+            RootTypeView::Type(TypeView::Inline(InlineTyView::NamedReference(r))) => {
+                Self::NamedReference(r.cast())
+            }
+            RootTypeView::Type(_) => {
+                unreachable!("invalid Type slot for expected SimpleRecordReferenceView")
+            }
+
+            RootTypeView::NamedReference(r) => Self::NamedReference(r.cast()),
+            RootTypeView::Response(_) => {
+                unreachable!("invalid Response slot for expected SimpleRecordReferenceView")
+            }
+        }
+    }
 }
 
 /// Type definition.
@@ -614,8 +569,6 @@ pub struct TypeDefView<'a> {
 /// in that just because type implements it, it doesn't mean you should call it.
 /// Basically, when calling it, you should expect arena is constructed correctly
 /// and the context you are using it is correct.
-///
-/// TODO: I might want to make this trait unsafe.
 trait FromRootTy<'a> {
-    fn from_root(ty: RootTypeView<'a>) -> Self;
+    fn from_root(spec: &'a Spec, ty: RootTypeView<'a>) -> Self;
 }
