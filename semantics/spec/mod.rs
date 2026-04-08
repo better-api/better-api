@@ -25,7 +25,7 @@ pub struct Spec {
 
     pub(crate) values: arena::value::ValueArena,
     pub(crate) types: arena::typ::TypeArena,
-    pub(crate) endpoints: arena::endpoint::EndpointArena,
+    // pub(crate) endpoints: arena::endpoint::EndpointArena,
 }
 
 /// Metadata of Better API spec
@@ -50,52 +50,23 @@ pub struct Server {
 }
 
 impl Spec {
-    /// Get [view](SpecContext) over a spec.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Used by internal tests and upcoming crate consumers"
-        )
-    )]
-    pub(crate) fn ctx<'a>(&'a self) -> SpecContext<'a> {
-        SpecContext {
-            strings: &self.strings,
-            symbol_table: &self.symbol_table,
-            values: &self.values,
-            types: &self.types,
-            endpoints: &self.endpoints,
-        }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn new_test() -> Self {
-        Self {
-            strings: Default::default(),
-            symbol_table: Default::default(),
-
-            values: Default::default(),
-            types: Default::default(),
-            endpoints: Default::default(),
-
-            metadata: Metadata {
-                better_api_version: "0.1.0".to_string(),
-                version: "1.0".to_string(),
-                name: "test spec".to_string(),
-                description: None,
-                servers: vec![],
-            },
-        }
-    }
-}
-
-/// View over a [`Spec`] used for querying data.
-#[derive(Clone, Copy)]
-pub(crate) struct SpecContext<'a> {
-    pub(crate) strings: &'a StringInterner,
-    pub(crate) symbol_table: &'a SymbolTable,
-
-    pub(crate) values: &'a value::ValueArena,
-    pub(crate) types: &'a typ::TypeArena,
-    pub(crate) endpoints: &'a endpoint::EndpointArena,
+    // #[cfg(test)]
+    // pub(crate) fn new_test() -> Self {
+    //     Self {
+    //         strings: Default::default(),
+    //         symbol_table: Default::default(),
+    //
+    //         values: Default::default(),
+    //         types: Default::default(),
+    //         endpoints: Default::default(),
+    //
+    //         metadata: Metadata {
+    //             better_api_version: "0.1.0".to_string(),
+    //             version: "1.0".to_string(),
+    //             name: "test spec".to_string(),
+    //             description: None,
+    //             servers: vec![],
+    //         },
+    //     }
+    // }
 }
