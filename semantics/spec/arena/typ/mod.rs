@@ -2,18 +2,21 @@
 //!
 //! ## Querying
 //!
-//! Types are queried from [`Spec`](crate::spec::Spec) through the spec query
-//! context. This module exposes [`Type`], [`RootType`], [`ResponseTy`], and
-//! related reference wrappers used during traversal.
+//! Types are stored in [`TypeArena`] and queried through arena ids such as
+//! [`InlineTypeId`](id::InlineTypeId), [`TypeId`](id::TypeId),
+//! [`ResponseTypeId`](id::ResponseTypeId), and [`RootTypeId`](id::RootTypeId).
+//! The higher-level wrappers used during traversal live in
+//! [`crate::spec::view::typ`].
 //!
-//! Within this module, [`Type`] represents the named/composite variants you
-//! typically work with. The full representation, including responses and other
-//! root-only variants, is [`RootType`].
+//! Within this module, inline ids represent primitive, option, array, and
+//! reference nodes. Type and root ids extend that representation with enums,
+//! records, unions, and responses.
 //!
 //! ## Construction
 //!
-//! Construction is handled by [`Oracle`](crate::Oracle). It builds the internal
-//! arenas and performs validation before data is exposed through `SpecContext`.
+//! Construction is handled by [`Analyzer`](crate::analyzer::Analyzer). It builds the internal
+//! arenas and performs validation before data is exposed through
+//! [`Spec`](crate::spec::Spec) views.
 
 use crate::spec::arena::typ::id::RootTypeId;
 use crate::text::StringId;

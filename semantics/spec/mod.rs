@@ -14,7 +14,7 @@ pub(crate) type SymbolTable = HashMap<StringId, typ::TypeDefData>;
 
 /// Valid semantic specification
 ///
-/// Usually constructed by [`Oracle`](crate::Oracle).
+/// Usually constructed by [`Analyzer`](crate::analyzer::Analyzer).
 #[derive(derive_more::Debug, Clone)]
 pub struct Spec {
     #[debug(skip)]

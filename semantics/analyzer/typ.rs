@@ -116,7 +116,7 @@ impl<'a> Analyzer<'a> {
     /// This method mustn't be called on [`ast::TypeResponse`]. If it's called
     /// on `ast::TypeResponse`, it will panic.
     ///
-    /// Use [`Oracle::lower_response`] for lowering response.
+    /// Use [`Analyzer::lower_response`] for lowering response.
     ///
     /// **Note:** You can should use this method to lower a _reference_ to a response.
     #[cfg_attr(
@@ -280,7 +280,7 @@ fn lower_type_def(
     };
 
     // Insert type to symbol table if not already present.
-    // The duplicate type definition error is reported by [`Oracle::validate_symbols`].
+    // The duplicate type definition error is reported by [`Analyzer::validate_symbols`].
     ctx.spec_symbol_table.entry(name_id).or_insert(TypeDefData {
         typ: type_id,
         name: name_id,

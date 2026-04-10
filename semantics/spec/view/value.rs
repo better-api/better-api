@@ -108,7 +108,7 @@ impl<'a> Iterator for ObjectFieldIter<'a> {
     }
 }
 
-/// Item returned by an [`Array`] iterator.
+/// Item returned by [`ArrayView::items`].
 #[derive(Debug)]
 pub struct ArrayItemView<'a> {
     /// Id of the item in the value arena.

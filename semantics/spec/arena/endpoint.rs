@@ -7,8 +7,8 @@
 //!
 //! ## Construction
 //!
-//! Construction is handled by [`Oracle`](crate::Oracle). It builds the internal
-//! arenas and performs validation before data is exposed through `SpecContext`.
+//! Construction is handled by [`Analyzer`](crate::analyzer::Analyzer). It builds the internal
+//! arenas and performs validation before data is exposed through [`Spec`](crate::spec::Spec).
 
 use crate::path::{Path, PathArena, PathId, PathPart};
 use crate::spec::typ::{

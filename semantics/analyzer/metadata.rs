@@ -1,6 +1,6 @@
 use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast::AstNode;
-use better_api_syntax::{TextRange, ast};
+use better_api_syntax::{ast, TextRange};
 
 use crate::analyzer::Analyzer;
 use crate::spec;
@@ -257,11 +257,11 @@ mod test {
         let tokens = tokenize(text, &mut diagnostics);
         let res = parse(tokens);
 
-        let mut oracle = Analyzer::new(&res.root);
-        oracle.analyze();
-        insta::assert_debug_snapshot!(oracle.reports);
+        let mut analyzer = Analyzer::new(&res.root);
+        analyzer.analyze();
+        insta::assert_debug_snapshot!(analyzer.reports);
 
-        let metadata = &oracle.metadata;
+        let metadata = &analyzer.metadata;
         assert_eq!(metadata.version, "1.2");
         assert_eq!(metadata.name, "test");
         assert_eq!(metadata.better_api_version, "0.1");

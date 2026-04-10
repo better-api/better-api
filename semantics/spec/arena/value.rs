@@ -2,14 +2,16 @@
 //!
 //! ## Querying
 //!
-//! Values are queried from [`Spec`](crate::spec::Spec) through the spec query
-//! context. Composite values are represented by [`Array`] and [`Object`],
-//! which expose iterators over items and fields.
+//! Values are stored in [`ValueArena`]. Composite values are exposed through
+//! [`ArrayView`](crate::spec::view::value::ArrayView) and
+//! [`ObjectView`](crate::spec::view::value::ObjectView), which expose
+//! iterators over items and fields.
 //!
 //! ## Construction
 //!
-//! Construction is handled by [`Oracle`](crate::Oracle). It builds the internal
-//! arenas and performs validation before data is exposed through `SpecContext`.
+//! Construction is handled by [`Analyzer`](crate::analyzer::Analyzer). It builds the internal
+//! arenas and performs validation before data is exposed through
+//! [`Spec`](crate::spec::Spec) views.
 
 use crate::text::{NameId, StringId};
 
@@ -34,7 +36,7 @@ pub(crate) enum PrimitiveValue {
 pub(crate) struct ArrayBuilder<'p> {
     data: &'p mut Vec<Slot>,
 
-    /// Optionally clean up the data if array is not finished successfully.
+    /// Optionally clean up the data if object is not finished successfully.
     truncate: Option<u32>,
 
     /// Index in the arena that contains Slot::Array of this array.
@@ -118,7 +120,7 @@ impl<'p> Drop for ArrayBuilder<'p> {
 pub(crate) struct ObjectBuilder<'p> {
     data: &'p mut Vec<Slot>,
 
-    /// Optionally clean up the data if array is not finished successfully.
+    /// Optionally clean up the data if object is not finished successfully.
     truncate: Option<u32>,
 
     /// Index in the arena that contains Slot::Object of this object.
@@ -223,9 +225,9 @@ impl<'p> Drop for ObjectBuilder<'p> {
 #[repr(transparent)]
 pub(crate) struct ValueId(u32);
 
-/// Id of a object field.
+/// Id of an object field.
 ///
-/// Used for getting specific [`ObjectField`] with [`SpecContext::get_object_field`].
+/// Used for identifying a specific field inside an object.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct ObjectFieldId {
     object_id: ValueId,
@@ -263,8 +265,7 @@ enum Slot {
         end: ValueId,
     },
     // Name of the field in the object.
-    // In TrackedSlot syntax pointer points to the whole field
-    // and not just the name.
+    // The following slot stores the field value.
     ObjectField(NameId),
 }
 

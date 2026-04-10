@@ -1,3 +1,6 @@
+use crate::spec::Spec;
+use crate::spec::arena::typ::EnumTy;
+use crate::spec::arena::typ::PrimitiveTy;
 use crate::spec::arena::typ::arena::EnumCursor;
 use crate::spec::arena::typ::arena::RecordCursor;
 use crate::spec::arena::typ::arena::UnionCursor;
@@ -6,15 +9,13 @@ use crate::spec::arena::typ::arena::{
     UnionRange,
 };
 use crate::spec::arena::typ::id::{InlineTypeId, ResponseTypeId, RootTypeId, TypeId};
-use crate::spec::arena::typ::EnumTy;
-use crate::spec::arena::typ::PrimitiveTy;
 use crate::spec::view::value::ValueView;
-use crate::spec::Spec;
 use crate::text::Name;
 
-/// Inline type tree that can reference T.
+/// Inline type tree.
 ///
-/// For simple inline trees, T is [`SimpleTy`]. For normal ones, T is [`Type`].
+/// Primitive values are stored directly. Arrays and options wrap another
+/// inline type, and named references point to non-response types.
 #[derive(Debug, Clone, derive_more::Display)]
 pub enum InlineTyView<'a> {
     Primitive(PrimitiveTy),
@@ -52,8 +53,8 @@ impl<'a> InlineTyView<'a> {
 
 /// Any non-response type.
 ///
-/// `Type` is the named/composite subset used in most contexts.
-/// The full set of possible types (including responses) is [`RootType`].
+/// The full set of possible types, including responses and root references,
+/// is [`RootTypeView`].
 #[derive(Debug, Clone, derive_more::Display)]
 pub enum TypeView<'a> {
     Inline(InlineTyView<'a>),
@@ -186,7 +187,7 @@ pub struct UnionFieldView<'a> {
 
 /// Semantic representation of a record.
 ///
-/// Fields are exposed through [`Record::fields`].
+/// Fields are exposed through [`RecordView::fields`].
 #[derive(derive_more::Debug, Clone)]
 pub struct RecordView<'a> {
     range: RecordRange,
@@ -239,7 +240,7 @@ impl<'a> Iterator for RecordFieldIter<'a> {
 
 /// Semantic representation of a tagged union.
 ///
-/// Fields are exposed through [`Union::fields`].
+/// Fields are exposed through [`UnionView::fields`].
 #[derive(derive_more::Debug, Clone)]
 pub struct UnionView<'a> {
     range: UnionRange,
@@ -405,10 +406,10 @@ pub struct TypeDefView<'a> {
 #[cfg(test)]
 mod test {
     use super::{InlineTyView, RootTypeView, TypeView};
+    use crate::spec::Spec;
     use crate::spec::arena::typ::builder::{RootRef, TypeArenaBuilder, TypeRef};
     use crate::spec::arena::typ::{EnumTy, PrimitiveTy, TypeDefData};
     use crate::spec::arena::value::PrimitiveValue;
-    use crate::spec::Spec;
     use crate::text::NameId;
 
     #[test]

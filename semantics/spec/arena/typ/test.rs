@@ -1,7 +1,7 @@
+use super::PrimitiveTy;
 use super::arena::{InlineTypeData, TypeData};
 use super::builder::TypeArenaBuilder;
 use super::id::{InlineTypeId, TypeFieldId};
-use super::PrimitiveTy;
 use crate::spec::Spec;
 use crate::text::NameId;
 

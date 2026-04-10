@@ -446,7 +446,7 @@ impl TypeArena {
 
     /// Get next field in the union.
     ///
-    /// If cursor is pointing of the end of the record, None is returned
+    /// If cursor is pointing to the end of the union, None is returned.
     pub(crate) fn next_union_field(&self, c: UnionCursor) -> Option<(UnionFieldData, UnionCursor)> {
         let (data, next) = self.next_type_field(c.0)?;
         Some((data.into(), UnionCursor(next)))

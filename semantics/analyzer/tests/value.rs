@@ -1,5 +1,5 @@
 use better_api_diagnostic::{Label, Report, Span};
-use better_api_syntax::{Parse, ast, parse, tokenize};
+use better_api_syntax::{ast, parse, tokenize, Parse};
 use indoc::indoc;
 
 use crate::analyzer::Analyzer;

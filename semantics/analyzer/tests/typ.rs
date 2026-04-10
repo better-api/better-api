@@ -470,17 +470,14 @@ fn lower_invalid_enum() {
 
     assert_eq!(
         analyzer.reports,
-        vec![
-            Report::error("invalid enum type `array`".to_string())
-                .add_label(Label::primary(
-                    "invalid enum type `array`".to_string(),
-                    Span::new(16, 21)
-                ))
-                .with_note(
-                    "help: enum must have a type `i32`, `i64`, `u32`, `u64`, or `string`"
-                        .to_string()
-                )
-        ]
+        vec![Report::error("invalid enum type `array`".to_string())
+            .add_label(Label::primary(
+                "invalid enum type `array`".to_string(),
+                Span::new(16, 21)
+            ))
+            .with_note(
+                "help: enum must have a type `i32`, `i64`, `u32`, `u64`, or `string`".to_string()
+            )]
     );
 }
 
@@ -760,20 +757,18 @@ fn lower_response_invalid_body_file() {
     assert_eq!(analyzer.reports.len(), 1);
     assert_eq!(
         analyzer.reports,
-        vec![
-            Report::error("invalid response body type".to_string())
-                .add_label(Label::primary(
-                    "content type requires that no `file` is present in body".to_string(),
-                    Span::new(61, 64,)
-                ))
-                .add_label(Label::secondary(
-                    "`file` introduced here".to_string(),
-                    Span::new(25, 29)
-                ))
-                .with_note(
-                    "help: `application/json` response must not use `file` in body".to_string()
-                )
-        ]
+        vec![Report::error("invalid response body type".to_string())
+            .add_label(Label::primary(
+                "content type requires that no `file` is present in body".to_string(),
+                Span::new(61, 64,)
+            ))
+            .add_label(Label::secondary(
+                "`file` introduced here".to_string(),
+                Span::new(25, 29)
+            ))
+            .with_note(
+                "help: `application/json` response must not use `file` in body".to_string()
+            )]
     );
 
     let name_id = analyzer.strings.get("Resp").unwrap();
@@ -852,20 +847,18 @@ fn lower_response_with_custom_content_type_invalid_body() {
     assert_eq!(analyzer.reports.len(), 1);
     assert_eq!(
         analyzer.reports,
-        vec![
-            Report::error("invalid response body type".to_string())
-                .add_label(Label::primary(
-                    "content type requires `file` body".to_string(),
-                    Span::new(57, 63)
-                ))
-                .add_label(Label::secondary(
-                    "content type defined here".to_string(),
-                    Span::new(22, 47)
-                ))
-                .with_note(
-                    "help: none `application/json` responses must use `file` as body".to_string()
-                )
-        ]
+        vec![Report::error("invalid response body type".to_string())
+            .add_label(Label::primary(
+                "content type requires `file` body".to_string(),
+                Span::new(57, 63)
+            ))
+            .add_label(Label::secondary(
+                "content type defined here".to_string(),
+                Span::new(22, 47)
+            ))
+            .with_note(
+                "help: none `application/json` responses must use `file` as body".to_string()
+            )]
     );
 
     let name_id = analyzer.strings.get("Resp").unwrap();
@@ -937,14 +930,12 @@ fn lower_response_invalid_header_type() {
     assert_eq!(analyzer.reports.len(), 1);
     assert_eq!(
         analyzer.reports,
-        vec![
-            Report::error("invalid headers type".to_string())
-                .add_label(Label::primary(
-                    "expected record, got string".to_string(),
-                    Span::new(31, 37)
-                ))
-                .with_note("help: headers must be a simple record".to_string())
-        ]
+        vec![Report::error("invalid headers type".to_string())
+            .add_label(Label::primary(
+                "expected record, got string".to_string(),
+                Span::new(31, 37)
+            ))
+            .with_note("help: headers must be a simple record".to_string())]
     );
 
     let name_id = analyzer.strings.get("Resp").unwrap();
@@ -977,17 +968,15 @@ fn lower_response_invalid_header_type_nested_record() {
     assert_eq!(analyzer.reports.len(), 1);
     assert_eq!(
         analyzer.reports,
-        vec![
-            Report::error("invalid headers type".to_string())
-                .add_label(Label::primary(
-                    "headers fields can only be primitive types or option".to_string(),
-                    Span::new(102, 109)
-                ))
-                .add_label(Label::secondary(
-                    "non-simple field type here".to_string(),
-                    Span::new(64, 67)
-                ))
-        ]
+        vec![Report::error("invalid headers type".to_string())
+            .add_label(Label::primary(
+                "headers fields can only be primitive types or option".to_string(),
+                Span::new(102, 109)
+            ))
+            .add_label(Label::secondary(
+                "non-simple field type here".to_string(),
+                Span::new(64, 67)
+            ))]
     );
 
     let name_id = analyzer.strings.get("Resp").unwrap();
@@ -1060,17 +1049,15 @@ fn lower_response_headers_with_file() {
 
     assert_eq!(
         analyzer.reports,
-        vec![
-            Report::error("invalid headers type".to_string())
-                .add_label(Label::primary(
-                    "headers type must not contain `file`".to_string(),
-                    Span::new(31, 60)
-                ))
-                .add_label(Label::secondary(
-                    "`file` introduced here".to_string(),
-                    Span::new(50, 54)
-                ))
-        ]
+        vec![Report::error("invalid headers type".to_string())
+            .add_label(Label::primary(
+                "headers type must not contain `file`".to_string(),
+                Span::new(31, 60)
+            ))
+            .add_label(Label::secondary(
+                "`file` introduced here".to_string(),
+                Span::new(50, 54)
+            ))]
     );
 
     let name_id = analyzer.strings.get("Resp").unwrap();
@@ -1143,17 +1130,15 @@ fn lower_response_headers_with_array_invalid() {
 
     assert_eq!(
         analyzer.reports,
-        vec![
-            Report::error("invalid headers type".to_string())
-                .add_label(Label::primary(
-                    "headers fields can only be primitive types or option".to_string(),
-                    Span::new(31, 64)
-                ))
-                .add_label(Label::secondary(
-                    "non-simple field type here".to_string(),
-                    Span::new(50, 58)
-                ))
-        ]
+        vec![Report::error("invalid headers type".to_string())
+            .add_label(Label::primary(
+                "headers fields can only be primitive types or option".to_string(),
+                Span::new(31, 64)
+            ))
+            .add_label(Label::secondary(
+                "non-simple field type here".to_string(),
+                Span::new(50, 58)
+            ))]
     );
 
     let name_id = analyzer.strings.get("Resp").unwrap();
@@ -1178,14 +1163,12 @@ fn lower_response_missing_body() {
 
     assert_eq!(
         analyzer.reports,
-        vec![
-            Report::error("missing response body".to_string())
-                .add_label(Label::primary(
-                    "missing response body".to_string(),
-                    Span::new(11, 64)
-                ))
-                .with_note("help: `body` is a required response field".to_string())
-        ]
+        vec![Report::error("missing response body".to_string())
+            .add_label(Label::primary(
+                "missing response body".to_string(),
+                Span::new(11, 64)
+            ))
+            .with_note("help: `body` is a required response field".to_string())]
     );
 
     let name_id = analyzer.strings.get("Resp").unwrap();
@@ -1216,20 +1199,18 @@ fn lower_response_body_file_in_nested_reference() {
 
     assert_eq!(
         analyzer.reports,
-        vec![
-            Report::error("invalid response body type".to_string())
-                .add_label(Label::primary(
-                    "content type requires that no `file` is present in body".to_string(),
-                    Span::new(101, 106)
-                ))
-                .add_label(Label::secondary(
-                    "`file` introduced here".to_string(),
-                    Span::new(27, 31)
-                ))
-                .with_note(
-                    "help: `application/json` response must not use `file` in body".to_string()
-                )
-        ]
+        vec![Report::error("invalid response body type".to_string())
+            .add_label(Label::primary(
+                "content type requires that no `file` is present in body".to_string(),
+                Span::new(101, 106)
+            ))
+            .add_label(Label::secondary(
+                "`file` introduced here".to_string(),
+                Span::new(27, 31)
+            ))
+            .with_note(
+                "help: `application/json` response must not use `file` in body".to_string()
+            )]
     );
 
     let name_id = analyzer.strings.get("Resp").unwrap();
@@ -1257,17 +1238,15 @@ fn lower_enum_invalid_member() {
 
     assert_eq!(
         analyzer.reports,
-        vec![
-            Report::error("expected i32, found string".to_string())
-                .add_label(Label::primary(
-                    "expected i32, found string".to_string(),
-                    Span::new(33, 38)
-                ))
-                .add_label(Label::secondary(
-                    "type defined here".to_string(),
-                    Span::new(16, 19)
-                ))
-        ]
+        vec![Report::error("expected i32, found string".to_string())
+            .add_label(Label::primary(
+                "expected i32, found string".to_string(),
+                Span::new(33, 38)
+            ))
+            .add_label(Label::secondary(
+                "type defined here".to_string(),
+                Span::new(16, 19)
+            ))]
     );
 }
 

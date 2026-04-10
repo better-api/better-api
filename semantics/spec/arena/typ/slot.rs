@@ -52,12 +52,11 @@ pub(super) enum Slot<Ref> {
     },
     Union {
         // Index after the last field in the union.
-        // Used for skipping the whole record during iteration.
+        // Used for skipping the whole union during iteration.
         end: u32,
     },
-    // Name of the field in record or union.
-    // In TrackedSlot syntax pointer points to the whole field
-    // and not just the name.
+    // Name and metadata of the field in record or union.
+    // The following slot or nested slots store the field type.
     TypeField {
         name: NameId,
         default: Option<ValueId>,

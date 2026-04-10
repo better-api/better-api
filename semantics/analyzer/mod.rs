@@ -59,7 +59,7 @@ pub(crate) struct Analyzer<'a> {
     types: TypeArena,
     endpoints: EndpointArena,
 
-    // Mappings used by oracle during validation.
+    // Mappings used by analyzer during validation.
     // This allows for partial & invalid spec to be analyzed fully, without
     // being lowered into valid data defined above.
     symbol_map: SymbolMap,
@@ -113,9 +113,9 @@ struct Context<'o, 'a> {
 }
 
 impl<'a> Analyzer<'a> {
-    /// Create a new oracle.
+    /// Create a new analyzer.
     ///
-    /// Runs semantic analysis on the given AST and creates an oracle
+    /// Runs semantic analysis on the given AST and creates an analyzer
     /// that can be queried for semantics info.
     fn new(root: &'a ast::Root) -> Self {
         Self {
@@ -137,7 +137,7 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Get [view](SpecContext) over a spec.
+    /// Get a temporary view over the current analyzer state.
     #[cfg(test)]
     fn spec_ctx<'s>(&'s self) -> SpecContext<'s> {
         SpecContext {

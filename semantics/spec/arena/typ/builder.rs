@@ -8,14 +8,14 @@ use crate::spec::arena::typ::{EnumTy, PrimitiveTy};
 use crate::spec::arena::value::ValueId;
 use crate::text::{NameId, StringId};
 
-/// Reference to a named [`Type`] definition.
+/// Reference to a named non-response type definition.
 ///
 /// Validated by the analyzer before insertion into the arena.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub(crate) struct TypeRef(pub(crate) StringId);
 
-/// Reference to a named [`RootType`] definition.
+/// Reference to a named root type definition.
 ///
 /// Validated by the analyzer before insertion into the arena.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -30,7 +30,8 @@ impl From<TypeRef> for RootRef {
 
 /// Helper type for adding records and unions to arena.
 ///
-/// Constructed via [`TypeArena::start_record`] or [`TypeArena::start_union`].
+/// Constructed via [`TypeArenaBuilder::start_record`] or
+/// [`TypeArenaBuilder::start_union`].
 /// Call [`finish`](FieldBuilder::finish) once all fields are added.
 ///
 /// Dropping the builder without finishing rolls back any changes.
@@ -210,17 +211,18 @@ impl<'a> Drop for FieldBuilder<'a> {
 
 /// Helper type for adding Array and Option type to arena.
 ///
-/// This type is constructed with [`TypeArena::start_array`],
-/// [`TypeArena::start_option`] or [`FieldBuilder`] equivalent.
+/// This type is constructed with [`TypeArenaBuilder::start_array`],
+/// [`TypeArenaBuilder::start_option`], [`FieldBuilder::start_array`], or
+/// [`FieldBuilder::start_option`].
 /// After you are done, call [`OptionArrayBuilder::finish_primitive`] or
-/// [`OptionArrayBuilder::finish_reference`], which returns ids for both
-/// the leaf and the container.
+/// [`OptionArrayBuilder::finish_reference`], which returns the id of the
+/// final array or option in the arena.
 ///
 /// If builder is dropped before calling finish, added types are removed from the arena.
 pub(crate) struct OptionArrayBuilder<'p> {
     data: &'p mut Vec<Slot<StringId>>,
 
-    /// Optionally clean up the data if array is not finished successfully.
+    /// Optionally clean up the data if the type is not finished successfully.
     truncate: Option<u32>,
 
     /// Index in the arena that contains the first Slot::Array or Slot::Option.
@@ -392,7 +394,7 @@ pub(crate) struct TypeArenaBuilder {
 impl TypeArenaBuilder {
     /// Add a primitive type to the arena.
     ///
-    /// Returns the [`TypeId`] assigned to the new type.
+    /// Returns the [`InlineTypeId`] assigned to the new type.
     pub(crate) fn add_primitive(&mut self, typ: PrimitiveTy) -> InlineTypeId {
         let idx = self.data.len();
         self.data.push(typ.into());
@@ -401,7 +403,7 @@ impl TypeArenaBuilder {
 
     /// Add a reference to the arena.
     ///
-    /// Returns the [`TypeId`] assigned to the new type.
+    /// Returns the [`RootTypeId`] assigned to the new type.
     pub(crate) fn add_reference(&mut self, reference: RootRef) -> RootTypeId {
         let idx = self.data.len();
         self.data.push(Slot::Reference(reference.0));
@@ -412,10 +414,9 @@ impl TypeArenaBuilder {
     ///
     /// - `body` is the type of the response body.
     /// - `headers` is the type of the headers.
-    /// - `content_type` should be a [`ValueId`](value::ValueId) pointing to a string defining the
-    ///   content type.
+    /// - `content_type` is reserved for future mime type support.
     ///
-    /// Returns the [`TypeId`] assigned to the response.
+    /// Returns the [`ResponseTypeId`] assigned to the response.
     pub(crate) fn add_response(
         &mut self,
         body: InlineTypeId,

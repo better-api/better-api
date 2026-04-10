@@ -1,4 +1,4 @@
-//! Contains unit tests for the [`Oracle`](super::Oracle).
+//! Contains unit tests for the [`Analyzer`](super::Analyzer).
 
 mod compare;
 mod endpoint;
