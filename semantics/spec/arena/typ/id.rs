@@ -56,32 +56,44 @@ pub(crate) struct TypeFieldId {
     pub(super) slot_idx: u32,
 }
 
-/// Id of a simple type stored in the arena
+/// Proof that the type at this arena position was validated
+/// as a simple record behind a reference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct SimpleTypeId(u32);
+pub(crate) struct SimpleRecordReferenceProof(TypeId);
 
-impl From<SimpleTypeId> for TypeId {
-    fn from(value: SimpleTypeId) -> Self {
-        Self(value.0)
+impl SimpleRecordReferenceProof {
+    /// Creates new proof that the type is actually a reference to
+    /// simple record type.
+    ///
+    /// It's the caller's responsibility to check that this is actually true.
+    /// Constructing a proof with wrong type, and using it, will lead to panics!
+    pub(crate) fn new(id: TypeId) -> Self {
+        Self(id)
+    }
+
+    /// Returns id of the type behind the proof.
+    pub(crate) fn id(&self) -> TypeId {
+        self.0
     }
 }
 
-/// Id of a named reference to stored in the [`TypeArena`].
+/// Proof that the type at this arena position was validated
+/// as a response behind a reference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct SimpleRecordReferenceId(u32);
+pub(crate) struct ResponseReferenceProof(RootTypeId);
 
-impl From<SimpleRecordReferenceId> for TypeId {
-    fn from(value: SimpleRecordReferenceId) -> Self {
-        Self(value.0)
+impl ResponseReferenceProof {
+    /// Creates new proof that the type is actually a reference to
+    /// a response.
+    ///
+    /// It's the caller's responsibility to check that this is actually true.
+    /// Constructing a proof with wrong type, and using it, will lead to panics!
+    pub(crate) fn new(id: RootTypeId) -> Self {
+        Self(id)
     }
-}
 
-/// Id of a named reference to stored in the [`TypeArena`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct ResponseReferenceId(u32);
-
-impl From<ResponseReferenceId> for RootTypeId {
-    fn from(value: ResponseReferenceId) -> Self {
-        Self(value.0)
+    /// Returns id of the type behind the proof.
+    pub(crate) fn id(&self) -> RootTypeId {
+        self.0
     }
 }

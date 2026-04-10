@@ -1,6 +1,6 @@
 use crate::spec::SymbolTable;
 use crate::spec::arena::typ::id::{
-    InlineTypeId, ResponseTypeId, RootTypeId, SimpleRecordReferenceId, TypeFieldId, TypeId,
+    InlineTypeId, ResponseTypeId, RootTypeId, SimpleRecordReferenceProof, TypeFieldId, TypeId,
 };
 use crate::spec::arena::typ::slot::Slot;
 use crate::spec::arena::typ::{EnumTy, PrimitiveTy};
@@ -46,7 +46,7 @@ pub(crate) struct EnumMemberData {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct ResponseData {
     pub body: InlineTypeId,
-    pub headers: Option<SimpleRecordReferenceId>,
+    pub headers: Option<SimpleRecordReferenceProof>,
 
     // TODO: Mime type
     pub content_type: Option<()>,

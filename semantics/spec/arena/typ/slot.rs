@@ -1,4 +1,4 @@
-use crate::spec::arena::typ::id::{InlineTypeId, SimpleRecordReferenceId};
+use crate::spec::arena::typ::id::{InlineTypeId, SimpleRecordReferenceProof};
 use crate::spec::arena::typ::{EnumTy, PrimitiveTy};
 use crate::spec::arena::value::ValueId;
 use crate::text::{NameId, StringId};
@@ -42,7 +42,7 @@ pub(super) enum Slot<Ref> {
     },
     Response {
         body: InlineTypeId,
-        headers: Option<SimpleRecordReferenceId>,
+        headers: Option<SimpleRecordReferenceProof>,
         content_type: Option<()>, // TODO: Mime type
     },
     Record {

@@ -1,7 +1,7 @@
 use crate::spec::SymbolTable;
 use crate::spec::arena::typ::arena::TypeArena;
 use crate::spec::arena::typ::id::{
-    InlineTypeId, ResponseTypeId, RootTypeId, SimpleRecordReferenceId, TypeFieldId, TypeId,
+    InlineTypeId, ResponseTypeId, RootTypeId, SimpleRecordReferenceProof, TypeFieldId, TypeId,
 };
 use crate::spec::arena::typ::slot::Slot;
 use crate::spec::arena::typ::{EnumTy, PrimitiveTy};
@@ -419,7 +419,7 @@ impl TypeArenaBuilder {
     pub(crate) fn add_response(
         &mut self,
         body: InlineTypeId,
-        headers: Option<SimpleRecordReferenceId>,
+        headers: Option<SimpleRecordReferenceProof>,
         // TODO: mime type
         content_type: Option<()>,
     ) -> ResponseTypeId {
