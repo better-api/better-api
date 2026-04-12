@@ -326,23 +326,26 @@ pub(crate) struct ResponseData {
     pub docs: Option<StringId>,
 }
 
-// TODO: Cursors have to be a bit more defined. I need:
-// - route cursor over routes
-// - route cursor over endpoints
-// - route cursor over responses
-// - endpoint cursor over responses
-//
-// #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-// pub struct RouteCursor {
-//     next: u32,
-//     end: u32,
-// }
-//
-// #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-// pub struct EndpointCurosr {
-//     next: u32,
-//     end: u32,
-// }
+/// Cursor for iterating over child routes inside a route.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RouteCursor {
+    next: u32,
+    end: u32,
+}
+
+/// Cursor for iterating over endpoints inside a route.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct EndpointCursor {
+    next: u32,
+    end: u32,
+}
+
+/// Cursor for iterating over responses inside a route or endpoint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ResponseCursor {
+    next: u32,
+    end: u32,
+}
 
 /// Arena that holds semantic endpoints and routes.
 #[derive(Debug, Clone, Default)]
