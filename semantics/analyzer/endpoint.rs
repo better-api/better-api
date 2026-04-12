@@ -748,7 +748,9 @@ fn lower_endpoint_response<P: ResponseParent>(
                         None
                     }
                     TypeClass::Response => {
-                        unreachable!("response is handled separately by the outer match statement")
+                        unreachable!(
+                            "response should be handled separately by the outer match statement"
+                        )
                     }
                 }
             }

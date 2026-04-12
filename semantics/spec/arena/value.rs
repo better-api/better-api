@@ -90,7 +90,7 @@ impl<'p> ArrayBuilder<'p> {
         let head = &mut self.data[start];
         match head {
             Slot::Array { end } => *end = ValueId(idx as u32),
-            _ => unreachable!("invalid ArrayBuilder start"),
+            _ => unreachable!("ArrayBuilder::start must point to Slot::Array"),
         }
 
         self.start
@@ -201,7 +201,7 @@ impl<'p> ObjectBuilder<'p> {
         let head = &mut self.data[start];
         match head {
             Slot::Object { end } => *end = ValueId(idx as u32),
-            _ => unreachable!("invalid ObjectBuilder start"),
+            _ => unreachable!("ObjectBuilder::start must point to Slot::Object"),
         }
 
         self.start
@@ -238,13 +238,13 @@ pub(crate) struct ObjectFieldId {
 
 impl ObjectFieldId {
     /// Get [`ValueId`] of the object that contains this field.
-    #[expect(dead_code, reason = "Should be used later on by semantic query APIs")]
+    #[expect(dead_code, reason = "used by future semantic query APIs")]
     pub(crate) fn object_id(&self) -> ValueId {
         self.object_id
     }
 
     /// Get [`ValueId`] of the field's value.
-    #[expect(dead_code, reason = "Should be used later on by semantic query APIs")]
+    #[expect(dead_code, reason = "used by future semantic query APIs")]
     pub(crate) fn value_id(&self) -> ValueId {
         ValueId(self.slot_idx + 1)
     }
@@ -312,7 +312,7 @@ impl ValueData {
                 end: end.0,
             }),
             Slot::ObjectField(_) => {
-                unreachable!("invalid conversion of Slot::ObjectField to ValueData")
+                unreachable!("ValueData::from_slot should not be called with Slot::ObjectField")
             }
         }
     }
@@ -420,8 +420,8 @@ impl ValueArena {
         let name_id = match name_slot {
             Slot::ObjectField(name) => *name,
             val => unreachable!(
-                "invalid object field in arena for id {:?}: {:?}",
-                c.next, val
+                "object cursor must point to Slot::ObjectField at {:?}, got {val:?}",
+                c.next
             ),
         };
 

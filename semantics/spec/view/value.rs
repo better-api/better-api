@@ -56,7 +56,7 @@ impl<'a> ValueView<'a> {
 /// A field inside of the object.
 #[derive(Debug, Clone)]
 pub struct ObjectFieldView<'a> {
-    #[expect(dead_code, reason = "Should be used later on by semantic query APIs")]
+    #[expect(dead_code, reason = "used by future semantic query APIs")]
     pub(crate) id: ObjectFieldId,
     pub name: &'a Name,
     pub value: ValueView<'a>,
@@ -66,7 +66,7 @@ pub struct ObjectFieldView<'a> {
 #[derive(Debug, Clone)]
 pub struct ObjectView<'a> {
     // Id of the object
-    #[expect(dead_code, reason = "Should be used later on by semantic query APIs")]
+    #[expect(dead_code, reason = "used by future semantic query APIs")]
     pub(crate) id: ValueId,
 
     /// Iterator over fields.
@@ -114,7 +114,7 @@ pub struct ArrayItemView<'a> {
     /// Id of the item in the value arena.
     #[cfg_attr(
         not(test),
-        expect(dead_code, reason = "Should be used later on by semantic query APIs")
+        expect(dead_code, reason = "used by future semantic query APIs")
     )]
     pub(crate) id: ValueId,
 
@@ -126,7 +126,7 @@ pub struct ArrayItemView<'a> {
 #[derive(Debug, Clone)]
 pub struct ArrayView<'a> {
     // Id of the array
-    #[expect(dead_code, reason = "Should be used later on by semantic query APIs")]
+    #[expect(dead_code, reason = "used by future semantic query APIs")]
     pub(crate) id: ValueId,
 
     items: ArrayItemIter<'a>,

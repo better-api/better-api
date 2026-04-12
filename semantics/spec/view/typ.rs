@@ -1,3 +1,4 @@
+use crate::spec::Spec;
 use crate::spec::arena::typ::arena::EnumCursor;
 use crate::spec::arena::typ::arena::RecordCursor;
 use crate::spec::arena::typ::arena::UnionCursor;
@@ -8,7 +9,6 @@ use crate::spec::arena::typ::arena::{
 use crate::spec::arena::typ::id::{InlineTypeId, ResponseTypeId, RootTypeId, TypeId};
 pub use crate::spec::arena::typ::{EnumTy, PrimitiveTy};
 use crate::spec::view::value::ValueView;
-use crate::spec::Spec;
 use crate::text::Name;
 
 /// Inline type tree.
@@ -405,10 +405,10 @@ pub struct TypeDefView<'a> {
 #[cfg(test)]
 mod test {
     use super::{InlineTyView, RootTypeView, TypeView};
+    use crate::spec::Spec;
     use crate::spec::arena::typ::builder::{RootRef, TypeArenaBuilder, TypeRef};
     use crate::spec::arena::typ::{EnumTy, PrimitiveTy, TypeDefData};
     use crate::spec::arena::value::PrimitiveValue;
-    use crate::spec::Spec;
     use crate::text::NameId;
 
     #[test]

@@ -188,10 +188,7 @@ impl<'p> FieldBuilder<'p> {
         match head {
             Slot::Record { end } => *end = idx,
             Slot::Union { end, .. } => *end = idx,
-            _ => unreachable!(
-                "invalid FieldBuilder start at {start:?}",
-                start = self.start
-            ),
+            _ => unreachable!("FieldBuilder::start must point to Slot::Record or Slot::Union"),
         }
 
         self.start
@@ -290,7 +287,9 @@ impl<'p> OptionArrayBuilder<'p> {
             match slot {
                 Slot::Option { end } => *end = end_id,
                 Slot::Array { end } => *end = end_id,
-                _ => unreachable!("invalid slot while finishing OptionArrayBuilder: {slot:?}"),
+                _ => unreachable!(
+                    "OptionArrayBuilder must contain only Slot::Option and Slot::Array before the final slot, got {slot:?}"
+                ),
             }
         }
 
@@ -367,7 +366,7 @@ impl<'p> EnumBuilder<'p> {
         let head = &mut self.data[start];
         match head {
             Slot::Enum { end, .. } => *end = idx,
-            _ => unreachable!("invalid EnumBuilder start at {start:?}", start = self.start),
+            _ => unreachable!("EnumBuilder::start must point to Slot::Enum"),
         }
 
         self.start

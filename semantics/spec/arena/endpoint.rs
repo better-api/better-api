@@ -112,7 +112,7 @@ impl<'p> EndpointBuilder<'p> {
         let head = &mut self.parent.data[start];
         match head {
             Slot::Endpoint { end, .. } => *end = idx as u32,
-            _ => unreachable!("invalid EndpintBuilder start"),
+            _ => unreachable!("EndpointBuilder::start must point to Slot::Endpoint"),
         }
 
         self.start
@@ -219,7 +219,7 @@ impl<'p> RouteBuilder<'p> {
         let head = &mut self.parent.data[start];
         match head {
             Slot::Route { end, .. } => *end = idx as u32,
-            _ => unreachable!("invalid RouteBuilder start"),
+            _ => unreachable!("RouteBuilder::start must point to Slot::Route"),
         }
 
         self.start
@@ -380,7 +380,7 @@ impl EndpointArena {
 
     pub(crate) fn get_endpoint(&self, id: EndpointId) -> EndpointData {
         let Slot::Endpoint { path, fields, end } = &self.data[id.0 as usize] else {
-            unreachable!("invalid slot for EndpointData");
+            unreachable!("EndpointId must point to Slot::Endpoint");
         };
 
         EndpointData {
@@ -393,7 +393,7 @@ impl EndpointArena {
 
     pub(crate) fn get_route(&self, id: RouteId) -> RouteData {
         let Slot::Route { path, docs, end } = &self.data[id.0 as usize] else {
-            unreachable!("invalid slot for RouteData");
+            unreachable!("RouteId must point to Slot::Route");
         };
 
         RouteData {

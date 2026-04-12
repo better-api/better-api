@@ -319,22 +319,23 @@ impl TypeArena {
 
     pub(crate) fn get_inline_type(&self, id: InlineTypeId) -> InlineTypeData {
         let slot = self.data[id.0 as usize];
-        InlineTypeData::from_slot(slot, id.0).expect("invalid slot for InlineTypeId")
+        InlineTypeData::from_slot(slot, id.0)
+            .expect("InlineTypeId must point to an inline type slot")
     }
 
     pub(crate) fn get_type(&self, id: TypeId) -> TypeData {
         let slot = self.data[id.0 as usize];
-        TypeData::from_slot(slot, id.0).expect("invalid slot for TypeId")
+        TypeData::from_slot(slot, id.0).expect("TypeId must point to a type slot")
     }
 
     pub(crate) fn get_response(&self, id: ResponseTypeId) -> ResponseData {
         let slot = self.data[id.0 as usize];
-        ResponseData::from_slot(slot).expect("invalid slot for ResponseTypeId")
+        ResponseData::from_slot(slot).expect("ResponseTypeId must point to Slot::Response")
     }
 
     pub(crate) fn get_root_type(&self, id: RootTypeId) -> RootTypeData {
         let slot = self.data[id.0 as usize];
-        RootTypeData::from_slot(slot, id.0).expect("invalid slot for RootTypeId")
+        RootTypeData::from_slot(slot, id.0).expect("RootTypeId must point to a root type slot")
     }
 
     /// Get cursor pointing to the first member of the enum
@@ -354,7 +355,7 @@ impl TypeArena {
         }
 
         let Slot::EnumMember { value, docs } = self.data[c.next as usize] else {
-            unreachable!("invalid enum member slot at {:?}", c.next)
+            unreachable!("enum cursor must point to Slot::EnumMember at {:?}", c.next)
         };
 
         let next = EnumCursor {
@@ -402,19 +403,25 @@ impl TypeArena {
             docs,
         } = self.data[c.next as usize]
         else {
-            unreachable!("invalid type field slot at {:?}", c.next)
+            unreachable!(
+                "type field cursor must point to Slot::TypeField at {:?}",
+                c.next
+            )
         };
 
         // Get type of the field.
         let typ_slot = self.data[c.next as usize + 1];
         let typ = InlineTypeData::from_slot(typ_slot, c.next + 1)
-            .expect("invalid type field's type slot");
+            .expect("type field type slot must contain an inline type");
 
         // Get next cursor position
         let next_idx = match typ_slot {
             Slot::Primitive(_) | Slot::Reference(_) => c.next + 2,
             Slot::Option { end } | Slot::Array { end } => end,
-            _ => unreachable!("invalid type field's type slot at {:?}", c.next + 1),
+            _ => unreachable!(
+                "type field type slot must contain an inline type at {:?}",
+                c.next + 1
+            ),
         };
 
         // Return the field

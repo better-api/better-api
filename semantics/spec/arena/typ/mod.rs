@@ -81,13 +81,13 @@ pub enum EnumTy {
 pub(crate) struct TypeDefData {
     #[expect(
         dead_code,
-        reason = "Stored for future semantic queries and diagnostics"
+        reason = "stored for future semantic queries and diagnostics"
     )]
     pub docs: Option<StringId>,
     pub typ: RootTypeId,
     #[expect(
         dead_code,
-        reason = "Stored for future semantic queries and diagnostics"
+        reason = "stored for future semantic queries and diagnostics"
     )]
     pub name: StringId,
 }
