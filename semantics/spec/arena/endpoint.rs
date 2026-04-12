@@ -10,199 +10,11 @@
 //! Construction is handled by [`Analyzer`](crate::analyzer::Analyzer). It builds the internal
 //! arenas and performs validation before data is exposed through [`Spec`](crate::spec::Spec).
 
-use crate::path::{Path, PathArena, PathId, PathPart};
-use crate::spec::typ::{
-    InlineTy, InlineTyId, NamedReference, ResponseReference, ResponseReferenceId,
-    SimpleRecordReference, SimpleRecordReferenceId, Type,
+use crate::path::{PathArena, PathId, PathPart};
+use crate::spec::arena::typ::id::{
+    InlineTypeId, ResponseReferenceProof, SimpleRecordReferenceProof,
 };
-use crate::spec::value::{self, MimeTypes, ValueContext};
-use crate::spec::SpecContext;
-use crate::text::{Name, NameId, StringId};
-
-/// Route group representation returned by the [`EndpointArena`].
-#[derive(derive_more::Debug, Clone)]
-pub struct Route<'a> {
-    /// Id of the route
-    pub(crate) id: RouteId,
-
-    /// Route path at this level of the hierarchy.
-    pub path: Path<'a>,
-
-    /// Doc comments
-    pub docs: Option<&'a str>,
-
-    #[debug(skip)]
-    ctx: SpecContext<'a>,
-
-    /// End index of the route in the arena, used to know where to stop
-    /// child iteration.
-    end: u32,
-}
-
-impl<'a> Route<'a> {
-    /// Returns an iterator over endpoints in this route group.
-    pub fn endpoints(&self) -> EndpointIterator<'a> {
-        EndpointIterator {
-            ctx: self.ctx,
-            current: self.id.0 + 1,
-            end: self.end,
-        }
-    }
-
-    /// Returns an iterator over routes in this route group.
-    pub fn routes(&self) -> RouteIterator<'a> {
-        RouteIterator {
-            ctx: self.ctx,
-            current: self.id.0 + 1,
-            end: self.end,
-        }
-    }
-
-    /// Returns an iterator over responses defined for this route group.
-    pub fn responses(&self) -> ResponseIterator<'a> {
-        ResponseIterator {
-            ctx: self.ctx,
-            current: self.id.0 + 1,
-            end: self.end,
-        }
-    }
-}
-
-/// Endpoint representation returned by the [`EndpointArena`].
-#[derive(derive_more::Debug, Clone)]
-pub struct Endpoint<'a> {
-    /// Id of the endpoint
-    pub(crate) id: EndpointId,
-
-    /// Path of the endpoint.
-    pub path: Path<'a>,
-
-    /// Doc comments
-    pub docs: Option<&'a str>,
-
-    /// HTTP method used by the endpoint.
-    pub method: http::Method,
-
-    /// Name assigned to the endpoint.
-    pub name: &'a Name,
-
-    /// Path parameter type.
-    pub path_param: Option<NamedReference<'a, SimpleRecordReference<'a>>>,
-    /// Query parameter type.
-    pub query: Option<NamedReference<'a, SimpleRecordReference<'a>>>,
-    /// Headers type.
-    pub headers: Option<NamedReference<'a, SimpleRecordReference<'a>>>,
-
-    /// MIME types the endpoint accepts for the request body.
-    pub accept: Option<MimeTypes<'a>>,
-
-    /// Request body type.
-    pub request_body: Option<InlineTy<'a, Type<'a>>>,
-    /// Additional documentation for request body.
-    pub request_body_docs: Option<&'a str>,
-
-    #[debug(skip)]
-    ctx: SpecContext<'a>,
-
-    /// End index of the endpoint in the arena, used to know where to stop
-    /// response iteration.
-    end: u32,
-}
-
-impl<'a> Endpoint<'a> {
-    /// Returns an iterator over responses for this endpoint.
-    pub fn responses(&self) -> ResponseIterator<'a> {
-        ResponseIterator {
-            ctx: self.ctx,
-            current: self.id.0 + 1,
-            end: self.end,
-        }
-    }
-}
-
-/// Iterator over endpoints inside a [`Route`].
-pub struct EndpointIterator<'a> {
-    ctx: SpecContext<'a>,
-
-    current: u32,
-    end: u32,
-}
-
-impl<'a> Iterator for EndpointIterator<'a> {
-    type Item = Endpoint<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while self.current < self.end {
-            match &self.ctx.endpoints.data[self.current as usize] {
-                Slot::Route { end, .. } => self.current = *end,
-                Slot::Response { .. } => self.current += 1,
-                Slot::Endpoint { end, .. } => {
-                    let id = EndpointId(self.current);
-                    self.current = *end;
-                    return Some(self.ctx.get_endpoint(id));
-                }
-            }
-        }
-
-        None
-    }
-}
-
-/// Iterator over routes inside a [`Route`]
-pub struct RouteIterator<'a> {
-    ctx: SpecContext<'a>,
-
-    current: u32,
-    end: u32,
-}
-
-impl<'a> Iterator for RouteIterator<'a> {
-    type Item = Route<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while self.current < self.end {
-            match &self.ctx.endpoints.data[self.current as usize] {
-                Slot::Response { .. } => self.current += 1,
-                Slot::Endpoint { end, .. } => self.current = *end,
-                Slot::Route { end, .. } => {
-                    let id = RouteId(self.current);
-                    self.current = *end;
-                    return Some(self.ctx.get_route(id));
-                }
-            }
-        }
-
-        None
-    }
-}
-
-/// Iterator over responses inside a [`Route`] or [`Endpoint`]
-pub struct ResponseIterator<'a> {
-    ctx: SpecContext<'a>,
-
-    current: u32,
-    end: u32,
-}
-
-impl<'a> Iterator for ResponseIterator<'a> {
-    type Item = EndpointResponse<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while self.current < self.end {
-            match &self.ctx.endpoints.data[self.current as usize] {
-                Slot::Endpoint { end, .. } => self.current = *end,
-                Slot::Route { end, .. } => self.current = *end,
-                Slot::Response { .. } => {
-                    let id = EndpointResponseId(self.current);
-                    self.current += 1;
-                    return Some(self.ctx.get_endpoint_response(id));
-                }
-            }
-        }
-
-        None
-    }
-}
+use crate::text::{NameId, StringId};
 
 /// Status definition for a response.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -220,26 +32,6 @@ impl std::fmt::Display for ResponseStatus {
             Self::Code(code) => code.as_u16().fmt(f),
         }
     }
-}
-
-/// Type used in endpoint response  
-#[derive(Debug, Clone)]
-pub enum EndpointResponseType<'a> {
-    Response(NamedReference<'a, ResponseReference<'a>>),
-    InlineType(InlineTy<'a, Type<'a>>),
-}
-
-/// Response definition
-#[derive(Debug, Clone)]
-pub struct EndpointResponse<'a> {
-    /// Status code of the response.
-    pub status: ResponseStatus,
-
-    /// Response body type.
-    pub typ: EndpointResponseType<'a>,
-
-    /// Doc comments
-    pub docs: Option<&'a str>,
 }
 
 /// Id of an endpoint stored in the [`EndpointArena`].
@@ -276,13 +68,13 @@ pub(crate) struct EndpointBuilder<'p> {
 }
 
 impl<'p> EndpointBuilder<'p> {
-    fn new(parent: Parent<'p>, path: PathPart, data: EndpointData) -> (Self, PathId) {
+    fn new(parent: Parent<'p>, path: PathPart, data: EndpointFields) -> (Self, PathId) {
         let path_id = parent.paths.insert(parent.path_id, path);
 
         let idx = parent.data.len();
         parent.data.push(Slot::Endpoint {
             path: path_id,
-            data,
+            fields: data,
             end: 0,
         });
 
@@ -403,7 +195,7 @@ impl<'p> RouteBuilder<'p> {
     pub(crate) fn add_endpoint<'a>(
         &'a mut self,
         path: PathPart,
-        data: EndpointData,
+        data: EndpointFields,
     ) -> (EndpointBuilder<'a>, PathId) {
         EndpointBuilder::new(self.as_parent(), path, data)
     }
@@ -445,8 +237,8 @@ impl<'p> Drop for RouteBuilder<'p> {
 }
 
 /// Core fields used to describe an endpoint.
-#[derive(Clone, Debug)]
-pub(crate) struct EndpointData {
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct EndpointFields {
     /// Documentation
     pub docs: Option<StringId>,
 
@@ -457,19 +249,19 @@ pub(crate) struct EndpointData {
     pub name: NameId,
 
     /// Path parameter type.
-    pub path_param: Option<SimpleRecordReferenceId>,
+    pub path_param: Option<SimpleRecordReferenceProof>,
 
     /// Query parameter type.
-    pub query: Option<SimpleRecordReferenceId>,
+    pub query: Option<SimpleRecordReferenceProof>,
 
     /// Headers type.
-    pub headers: Option<SimpleRecordReferenceId>,
+    pub headers: Option<SimpleRecordReferenceProof>,
 
     /// MIME types the endpoint accepts for the request body.
-    pub accept: Option<value::MimeTypesId>,
+    pub accept: Option<()>, // TODO: Mime types
 
     /// Request body type.
-    pub request_body: Option<InlineTyId>,
+    pub request_body: Option<InlineTypeId>,
     /// Additional documentation for request body.
     pub request_body_docs: Option<StringId>,
 }
@@ -477,8 +269,8 @@ pub(crate) struct EndpointData {
 /// Id of the type used in [`EndpointResponse`]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum EndpointResponseTypeId {
-    Response(ResponseReferenceId),
-    InlineType(InlineTyId),
+    Response(ResponseReferenceProof),
+    InlineType(InlineTypeId),
 }
 
 #[derive(Clone, Debug)]
@@ -495,7 +287,7 @@ enum Slot {
         /// Path of the endpoint
         path: PathId,
 
-        data: EndpointData,
+        fields: EndpointFields,
 
         /// Id after the last response of the endpoint.
         /// Used for knowing when to stop iteration
@@ -508,6 +300,49 @@ enum Slot {
         docs: Option<StringId>,
     },
 }
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct RouteData {
+    pub path: PathId,
+    pub docs: Option<StringId>,
+
+    first: u32,
+    end: u32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct EndpointData {
+    pub path: PathId,
+    pub fields: EndpointFields,
+
+    first: u32,
+    end: u32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ResponseData {
+    pub status: ResponseStatus,
+    pub typ: EndpointResponseTypeId,
+    pub docs: Option<StringId>,
+}
+
+// TODO: Cursors have to be a bit more defined. I need:
+// - route cursor over routes
+// - route cursor over endpoints
+// - route cursor over responses
+// - endpoint cursor over responses
+//
+// #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+// pub struct RouteCursor {
+//     next: u32,
+//     end: u32,
+// }
+//
+// #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+// pub struct EndpointCurosr {
+//     next: u32,
+//     end: u32,
+// }
 
 /// Arena that holds semantic endpoints and routes.
 #[derive(Debug, Clone, Default)]
@@ -529,7 +364,7 @@ impl EndpointArena {
     pub(crate) fn add_endpoint<'a>(
         &'a mut self,
         path: PathPart,
-        fields: EndpointData,
+        fields: EndpointFields,
     ) -> (EndpointBuilder<'a>, PathId) {
         EndpointBuilder::new(self.parent(), path, fields)
     }
@@ -542,121 +377,102 @@ impl EndpointArena {
     ) -> (RouteBuilder<'a>, PathId) {
         RouteBuilder::new(self.parent(), path, docs)
     }
-}
 
-impl<'a> SpecContext<'a> {
-    /// Get [`Endpoint`] by id.
-    pub(crate) fn get_endpoint(&self, id: EndpointId) -> Endpoint<'a> {
-        let Slot::Endpoint { path, data, end } = &self.endpoints.data[id.0 as usize] else {
-            unreachable!("slot at endpoint id should contain an endpoint");
+    pub(crate) fn get_endpoint(&self, id: EndpointId) -> EndpointData {
+        let Slot::Endpoint { path, fields, end } = &self.data[id.0 as usize] else {
+            unreachable!("invalid slot for EndpointData");
         };
 
-        let accept = data.accept.map(|id| {
-            let val_ctx: ValueContext = (*self).into();
-            val_ctx.get_mime_types(id)
-        });
-
-        Endpoint {
-            id,
-            path: self.endpoints.paths.get(*path),
-            docs: data.docs.map(|id| self.strings.resolve(id)),
-            method: data.method.clone(),
-            name: self.strings.resolve_name(data.name),
-            path_param: data
-                .path_param
-                .map(|id| self.get_simple_record_reference(id)),
-            query: data.query.map(|id| self.get_simple_record_reference(id)),
-            headers: data.headers.map(|id| self.get_simple_record_reference(id)),
-            accept,
-            request_body: data.request_body.map(|id| self.get_inline_type(id)),
-            request_body_docs: data.request_body_docs.map(|id| self.strings.resolve(id)),
-            ctx: *self,
+        EndpointData {
+            path: *path,
+            fields: fields.clone(),
+            first: id.0,
             end: *end,
         }
     }
 
-    /// Get [`Route`] by id.
-    pub(crate) fn get_route(&self, id: RouteId) -> Route<'a> {
-        let Slot::Route { path, docs, end } = &self.endpoints.data[id.0 as usize] else {
-            unreachable!("slot at route id should contain a route");
+    pub(crate) fn get_route(&self, id: RouteId) -> RouteData {
+        let Slot::Route { path, docs, end } = &self.data[id.0 as usize] else {
+            unreachable!("invalid slot for RouteData");
         };
 
-        Route {
-            id,
-            path: self.endpoints.paths.get(*path),
-            docs: docs.map(|id| self.strings.resolve(id)),
-            ctx: *self,
+        RouteData {
+            path: *path,
+            docs: *docs,
+            first: id.0,
             end: *end,
         }
     }
-
-    /// Return iterator through root routes.
-    ///
-    /// Root routes are routes without a parent.
-    pub(crate) fn root_routes(&self) -> RouteIterator<'a> {
-        RouteIterator {
-            ctx: *self,
-            current: 0,
-            end: self.endpoints.data.len() as u32,
-        }
-    }
-
-    /// Return iterator through root endpoints.
-    ///
-    /// Root endpoints are endpoints without a parent.
-    pub(crate) fn root_endpoints(&self) -> EndpointIterator<'a> {
-        EndpointIterator {
-            ctx: *self,
-            current: 0,
-            end: self.endpoints.data.len() as u32,
-        }
-    }
-
-    /// Get endpoint or route [`Response`] by id.
-    pub(crate) fn get_endpoint_response(&self, id: EndpointResponseId) -> EndpointResponse<'a> {
-        let Slot::Response {
-            status,
-            type_id,
-            docs,
-        } = &self.endpoints.data[id.0 as usize]
-        else {
-            unreachable!("slot at response id should contain a response");
-        };
-
-        let typ = match type_id {
-            EndpointResponseTypeId::Response(id) => {
-                EndpointResponseType::Response(self.get_response_reference(*id))
-            }
-            EndpointResponseTypeId::InlineType(id) => {
-                EndpointResponseType::InlineType(self.get_inline_type(*id))
-            }
-        };
-
-        EndpointResponse {
-            status: *status,
-            typ,
-            docs: docs.map(|id| self.strings.resolve(id)),
-        }
-    }
 }
 
-#[cfg(test)]
-mod test {
-    use super::ResponseStatus;
+// impl<'a> SpecContext<'a> {
+//     /// Return iterator through root routes.
+//     ///
+//     /// Root routes are routes without a parent.
+//     pub(crate) fn root_routes(&self) -> RouteIterator<'a> {
+//         RouteIterator {
+//             ctx: *self,
+//             current: 0,
+//             end: self.endpoints.data.len() as u32,
+//         }
+//     }
+//
+//     /// Return iterator through root endpoints.
+//     ///
+//     /// Root endpoints are endpoints without a parent.
+//     pub(crate) fn root_endpoints(&self) -> EndpointIterator<'a> {
+//         EndpointIterator {
+//             ctx: *self,
+//             current: 0,
+//             end: self.endpoints.data.len() as u32,
+//         }
+//     }
+//
+//     /// Get endpoint or route [`Response`] by id.
+//     pub(crate) fn get_endpoint_response(&self, id: EndpointResponseId) -> EndpointResponse<'a> {
+//         let Slot::Response {
+//             status,
+//             type_id,
+//             docs,
+//         } = &self.endpoints.data[id.0 as usize]
+//         else {
+//             unreachable!("slot at response id should contain a response");
+//         };
+//
+//         let typ = match type_id {
+//             EndpointResponseTypeId::Response(id) => {
+//                 EndpointResponseType::Response(self.get_response_reference(*id))
+//             }
+//             EndpointResponseTypeId::InlineType(id) => {
+//                 EndpointResponseType::InlineType(self.get_inline_type(*id))
+//             }
+//         };
+//
+//         EndpointResponse {
+//             status: *status,
+//             typ,
+//             docs: docs.map(|id| self.strings.resolve(id)),
+//         }
+//     }
+// }
 
-    use crate::path::PathPart;
-    use crate::spec::endpoint::{EndpointData, EndpointResponseTypeId};
-    use crate::spec::typ::{
-        InlineTy, InlineTyId, PrimitiveTy, RootRef, SimpleRecordReference, SimpleRecordReferenceId,
-        TypeDefData,
-    };
-    use crate::spec::Spec;
-    use crate::text::NameId;
-
-    use http::{Method, StatusCode};
-
-    // #[test]
-    // fn builds_endpoint_arena() {
-    //     Re-enable after the endpoint arena refactor is finished.
-    // }
-}
+// #[cfg(test)]
+// mod test {
+//     use super::ResponseStatus;
+//
+//     use crate::path::PathPart;
+//     use crate::spec::Spec;
+//     use crate::spec::endpoint::{EndpointData, EndpointResponseTypeId};
+//     use crate::spec::typ::{
+//         InlineTy, InlineTyId, PrimitiveTy, RootRef, SimpleRecordReference, SimpleRecordReferenceId,
+//         TypeDefData,
+//     };
+//     use crate::text::NameId;
+//
+//     use http::{Method, StatusCode};
+//
+//     // #[test]
+//     // fn builds_endpoint_arena() {
+//     //     Re-enable after the endpoint arena refactor is finished.
+//     // }
+// }
