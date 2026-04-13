@@ -301,11 +301,12 @@ enum Slot {
     },
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct RouteData {
     pub path: PathId,
     pub docs: Option<StringId>,
 
+    /// Index of the first child slot after the route slot itself.
     first: u32,
     end: u32,
 }
@@ -315,6 +316,7 @@ pub(crate) struct EndpointData {
     pub path: PathId,
     pub fields: EndpointFields,
 
+    /// Index of the first response slot after the endpoint slot itself.
     first: u32,
     end: u32,
 }
@@ -389,22 +391,151 @@ impl EndpointArena {
         EndpointData {
             path: *path,
             fields: fields.clone(),
-            first: id.0,
+            first: id.0 + 1,
             end: *end,
         }
     }
 
     pub(crate) fn get_route(&self, id: RouteId) -> RouteData {
-        let Slot::Route { path, docs, end } = &self.data[id.0 as usize] else {
+        let slot = &self.data[id.0 as usize];
+        let Slot::Route { path, docs, end } = slot else {
             unreachable!("RouteId must point to Slot::Route");
         };
 
         RouteData {
             path: *path,
             docs: *docs,
-            first: id.0,
+            first: id.0 + 1,
             end: *end,
         }
+    }
+
+    pub(crate) fn route_cursor(&self, route: RouteData) -> RouteCursor {
+        RouteCursor {
+            next: route.first,
+            end: route.end,
+        }
+    }
+
+    pub(crate) fn endpoint_cursor(&self, route: RouteData) -> EndpointCursor {
+        EndpointCursor {
+            next: route.first,
+            end: route.end,
+        }
+    }
+
+    pub(crate) fn route_response_cursor(&self, route: RouteData) -> ResponseCursor {
+        ResponseCursor {
+            next: route.first,
+            end: route.end,
+        }
+    }
+
+    pub(crate) fn endpoint_response_cursor(&self, endpoint: &EndpointData) -> ResponseCursor {
+        ResponseCursor {
+            next: endpoint.first,
+            end: endpoint.end,
+        }
+    }
+
+    pub(crate) fn next_route(&self, c: RouteCursor) -> Option<(RouteData, RouteCursor)> {
+        let mut current = c.next;
+        while current < c.end {
+            let slot = &self.data[current as usize];
+            match slot {
+                Slot::Endpoint { end, .. } => {
+                    debug_assert!(*end > current && *end <= c.end);
+                    current = *end;
+                }
+                Slot::Response { .. } => current += 1,
+                Slot::Route { path, docs, end } => {
+                    debug_assert!(*end > current && *end <= c.end);
+                    let next = RouteCursor {
+                        next: *end,
+                        end: c.end,
+                    };
+                    let data = RouteData {
+                        path: *path,
+                        docs: *docs,
+                        first: current + 1,
+                        end: *end,
+                    };
+
+                    return Some((data, next));
+                }
+            }
+        }
+
+        None
+    }
+
+    pub(crate) fn next_endpoint(
+        &self,
+        c: EndpointCursor,
+    ) -> Option<(EndpointData, EndpointCursor)> {
+        let mut current = c.next;
+        while current < c.end {
+            let slot = &self.data[current as usize];
+            match slot {
+                Slot::Route { end, .. } => {
+                    debug_assert!(*end > current && *end <= c.end);
+                    current = *end;
+                }
+                Slot::Response { .. } => current += 1,
+                Slot::Endpoint { path, fields, end } => {
+                    debug_assert!(*end > current && *end <= c.end);
+                    let next = EndpointCursor {
+                        next: *end,
+                        end: c.end,
+                    };
+                    let data = EndpointData {
+                        path: *path,
+                        fields: fields.clone(),
+                        first: current + 1,
+                        end: *end,
+                    };
+
+                    return Some((data, next));
+                }
+            }
+        }
+
+        None
+    }
+
+    pub(crate) fn next_response(
+        &self,
+        c: ResponseCursor,
+    ) -> Option<(ResponseData, ResponseCursor)> {
+        let mut current = c.next;
+        while current < c.end {
+            let slot = &self.data[current as usize];
+            match slot {
+                Slot::Route { end, .. } | Slot::Endpoint { end, .. } => {
+                    debug_assert!(*end > current && *end <= c.end);
+                    current = *end;
+                }
+                Slot::Response {
+                    status,
+                    type_id,
+                    docs,
+                } => {
+                    let next = ResponseCursor {
+                        next: current + 1,
+                        end: c.end,
+                    };
+                    let data = ResponseData {
+                        status: *status,
+                        typ: *type_id,
+                        docs: *docs,
+                    };
+
+                    return Some((data, next));
+                }
+            }
+        }
+
+        None
     }
 }
 
