@@ -6,6 +6,7 @@ use crate::spec::arena::typ::arena::{
     EnumData, InlineTypeData, RecordRange, ReferenceData, ResponseData, RootTypeData, TypeData,
     UnionRange,
 };
+use crate::spec::arena::typ::id::SimpleRecordReferenceProof;
 use crate::spec::arena::typ::id::{InlineTypeId, ResponseTypeId, RootTypeId, TypeId};
 pub use crate::spec::arena::typ::{EnumTy, PrimitiveTy};
 use crate::spec::view::value::ValueView;
@@ -400,6 +401,22 @@ pub struct TypeDefView<'a> {
     pub docs: Option<&'a str>,
     pub typ: RootTypeView<'a>,
     pub name: &'a str,
+}
+
+impl Spec {
+    pub(crate) fn get_simple_record_type<'a>(
+        &'a self,
+        id: SimpleRecordReferenceProof,
+    ) -> NamedTypeRefView<'a> {
+        let TypeData::Inline(InlineTypeData::Reference(data)) = self.types.get_type(id.id()) else {
+            unreachable!("SimpleRecordReferenceProof must point to a ReferenceData type slot");
+        };
+        NamedTypeRefView::from_data(self, data)
+    }
+
+    pub(crate) fn get_inline_type<'a>(&'a self, id: InlineTypeId) -> InlineTyView<'a> {
+        InlineTyView::new(self, id)
+    }
 }
 
 #[cfg(test)]

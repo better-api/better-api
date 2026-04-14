@@ -25,7 +25,7 @@ pub struct Spec {
 
     pub(crate) values: arena::value::ValueArena,
     pub(crate) types: arena::typ::TypeArena,
-    // pub(crate) endpoints: arena::endpoint::EndpointArena,
+    pub(crate) endpoints: arena::endpoint::EndpointArena,
 }
 
 /// Metadata of Better API spec

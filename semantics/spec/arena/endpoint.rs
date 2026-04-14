@@ -10,7 +10,7 @@
 //! Construction is handled by [`Analyzer`](crate::analyzer::Analyzer). It builds the internal
 //! arenas and performs validation before data is exposed through [`Spec`](crate::spec::Spec).
 
-use crate::path::{PathArena, PathId, PathPart};
+use crate::path::{Path, PathArena, PathId, PathPart};
 use crate::spec::arena::typ::id::{
     InlineTypeId, ResponseReferenceProof, SimpleRecordReferenceProof,
 };
@@ -381,6 +381,10 @@ impl EndpointArena {
         docs: Option<StringId>,
     ) -> (RouteBuilder<'a>, PathId) {
         RouteBuilder::new(self.parent(), path, docs)
+    }
+
+    pub(crate) fn get_path<'a>(&'a self, id: PathId) -> Path<'a> {
+        self.paths.get(id)
     }
 
     pub(crate) fn get_endpoint(&self, id: EndpointId) -> EndpointData {

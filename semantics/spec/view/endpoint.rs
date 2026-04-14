@@ -1,9 +1,15 @@
+use crate::path::Path;
+use crate::spec::Spec;
+use crate::spec::arena::endpoint::{
+    EndpointCursor, EndpointData, ResponseCursor, ResponseData, ResponseStatus, RouteCursor,
+    RouteData,
+};
+use crate::spec::view::typ::{InlineTyView, NamedTypeRefView};
+use crate::text::Name;
+
 /// Route group representation returned by the [`EndpointArena`].
 #[derive(derive_more::Debug, Clone)]
-pub struct Route<'a> {
-    /// Id of the route
-    pub(crate) id: RouteId,
-
+pub struct RouteView<'a> {
     /// Route path at this level of the hierarchy.
     pub path: Path<'a>,
 
@@ -11,48 +17,53 @@ pub struct Route<'a> {
     pub docs: Option<&'a str>,
 
     #[debug(skip)]
-    ctx: SpecContext<'a>,
+    spec: &'a Spec,
 
-    /// End index of the route in the arena, used to know where to stop
-    /// child iteration.
-    end: u32,
+    route_cursor: RouteCursor,
+    endpoint_cursor: EndpointCursor,
+    response_cursor: ResponseCursor,
 }
 
-impl<'a> Route<'a> {
+impl<'a> RouteView<'a> {
     /// Returns an iterator over endpoints in this route group.
-    pub fn endpoints(&self) -> EndpointIterator<'a> {
-        EndpointIterator {
-            ctx: self.ctx,
-            current: self.id.0 + 1,
-            end: self.end,
+    pub fn endpoints(&self) -> EndpointIter<'a> {
+        EndpointIter {
+            spec: self.spec,
+            cursor: self.endpoint_cursor,
         }
     }
 
     /// Returns an iterator over routes in this route group.
-    pub fn routes(&self) -> RouteIterator<'a> {
-        RouteIterator {
-            ctx: self.ctx,
-            current: self.id.0 + 1,
-            end: self.end,
+    pub fn routes(&self) -> RouteIter<'a> {
+        RouteIter {
+            spec: self.spec,
+            cursor: self.route_cursor,
         }
     }
 
     /// Returns an iterator over responses defined for this route group.
-    pub fn responses(&self) -> ResponseIterator<'a> {
-        ResponseIterator {
-            ctx: self.ctx,
-            current: self.id.0 + 1,
-            end: self.end,
+    pub fn responses(&self) -> ResponseIter<'a> {
+        ResponseIter {
+            spec: self.spec,
+            cursor: self.response_cursor,
+        }
+    }
+
+    fn from_data(spec: &'a Spec, data: RouteData) -> Self {
+        Self {
+            path: spec.endpoints.get_path(data.path),
+            docs: data.docs.map(|id| spec.strings.resolve(id)),
+            spec,
+            route_cursor: spec.endpoints.route_cursor(data),
+            endpoint_cursor: spec.endpoints.endpoint_cursor(data),
+            response_cursor: spec.endpoints.route_response_cursor(data),
         }
     }
 }
 
 /// Endpoint representation returned by the [`EndpointArena`].
 #[derive(derive_more::Debug, Clone)]
-pub struct Endpoint<'a> {
-    /// Id of the endpoint
-    pub(crate) id: EndpointId,
-
+pub struct EndpointView<'a> {
     /// Path of the endpoint.
     pub path: Path<'a>,
 
@@ -66,133 +77,125 @@ pub struct Endpoint<'a> {
     pub name: &'a Name,
 
     /// Path parameter type.
-    pub path_param: Option<NamedReference<'a, SimpleRecordReference<'a>>>,
+    pub path_param: Option<NamedTypeRefView<'a>>,
     /// Query parameter type.
-    pub query: Option<NamedReference<'a, SimpleRecordReference<'a>>>,
+    pub query: Option<NamedTypeRefView<'a>>,
     /// Headers type.
-    pub headers: Option<NamedReference<'a, SimpleRecordReference<'a>>>,
+    pub headers: Option<NamedTypeRefView<'a>>,
 
     /// MIME types the endpoint accepts for the request body.
-    pub accept: Option<MimeTypes<'a>>,
+    pub accept: Option<()>, // TODO: Mime types
 
     /// Request body type.
-    pub request_body: Option<InlineTy<'a, Type<'a>>>,
+    pub request_body: Option<InlineTyView<'a>>,
     /// Additional documentation for request body.
     pub request_body_docs: Option<&'a str>,
 
     #[debug(skip)]
-    ctx: SpecContext<'a>,
+    spec: &'a Spec,
 
-    /// End index of the endpoint in the arena, used to know where to stop
-    /// response iteration.
-    end: u32,
+    response_cursor: ResponseCursor,
 }
 
-impl<'a> Endpoint<'a> {
+impl<'a> EndpointView<'a> {
     /// Returns an iterator over responses for this endpoint.
-    pub fn responses(&self) -> ResponseIterator<'a> {
-        ResponseIterator {
-            ctx: self.ctx,
-            current: self.id.0 + 1,
-            end: self.end,
+    pub fn responses(&self) -> ResponseIter<'a> {
+        ResponseIter {
+            spec: self.spec,
+            cursor: self.response_cursor,
+        }
+    }
+
+    fn from_data(spec: &'a Spec, data: EndpointData) -> Self {
+        let response_cursor = spec.endpoints.endpoint_response_cursor(&data);
+
+        Self {
+            path: spec.endpoints.get_path(data.path),
+            docs: data.fields.docs.map(|id| spec.strings.resolve(id)),
+            method: data.fields.method,
+            name: spec.strings.resolve_name(data.fields.name),
+            path_param: data
+                .fields
+                .path_param
+                .map(|id| spec.get_simple_record_type(id)),
+            query: data.fields.query.map(|id| spec.get_simple_record_type(id)),
+            headers: data
+                .fields
+                .headers
+                .map(|id| spec.get_simple_record_type(id)),
+            accept: data.fields.accept, // TODO: Mime types
+            request_body: data.fields.request_body.map(|id| spec.get_inline_type(id)),
+            request_body_docs: data
+                .fields
+                .request_body_docs
+                .map(|id| spec.strings.resolve(id)),
+            spec,
+            response_cursor,
         }
     }
 }
 
 /// Iterator over endpoints inside a [`Route`].
-pub struct EndpointIterator<'a> {
-    ctx: SpecContext<'a>,
-
-    current: u32,
-    end: u32,
+pub struct EndpointIter<'a> {
+    spec: &'a Spec,
+    cursor: EndpointCursor,
 }
 
-impl<'a> Iterator for EndpointIterator<'a> {
-    type Item = Endpoint<'a>;
+impl<'a> Iterator for EndpointIter<'a> {
+    type Item = EndpointView<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.current < self.end {
-            match &self.ctx.endpoints.data[self.current as usize] {
-                Slot::Route { end, .. } => self.current = *end,
-                Slot::Response { .. } => self.current += 1,
-                Slot::Endpoint { end, .. } => {
-                    let id = EndpointId(self.current);
-                    self.current = *end;
-                    return Some(self.ctx.get_endpoint(id));
-                }
-            }
-        }
+        let (data, next) = self.spec.endpoints.next_endpoint(self.cursor)?;
 
-        None
+        self.cursor = next;
+        Some(EndpointView::from_data(self.spec, data))
     }
 }
 
 /// Iterator over routes inside a [`Route`]
-pub struct RouteIterator<'a> {
-    ctx: SpecContext<'a>,
-
-    current: u32,
-    end: u32,
+pub struct RouteIter<'a> {
+    spec: &'a Spec,
+    cursor: RouteCursor,
 }
 
-impl<'a> Iterator for RouteIterator<'a> {
-    type Item = Route<'a>;
+impl<'a> Iterator for RouteIter<'a> {
+    type Item = RouteView<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.current < self.end {
-            match &self.ctx.endpoints.data[self.current as usize] {
-                Slot::Response { .. } => self.current += 1,
-                Slot::Endpoint { end, .. } => self.current = *end,
-                Slot::Route { end, .. } => {
-                    let id = RouteId(self.current);
-                    self.current = *end;
-                    return Some(self.ctx.get_route(id));
-                }
-            }
-        }
+        let (data, next) = self.spec.endpoints.next_route(self.cursor)?;
 
-        None
+        self.cursor = next;
+        Some(RouteView::from_data(self.spec, data))
     }
 }
 
 /// Iterator over responses inside a [`Route`] or [`Endpoint`]
-pub struct ResponseIterator<'a> {
-    ctx: SpecContext<'a>,
-
-    current: u32,
-    end: u32,
+pub struct ResponseIter<'a> {
+    spec: &'a Spec,
+    cursor: ResponseCursor,
 }
 
-impl<'a> Iterator for ResponseIterator<'a> {
-    type Item = EndpointResponse<'a>;
+impl<'a> Iterator for ResponseIter<'a> {
+    type Item = EndpointResponseView<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.current < self.end {
-            match &self.ctx.endpoints.data[self.current as usize] {
-                Slot::Endpoint { end, .. } => self.current = *end,
-                Slot::Route { end, .. } => self.current = *end,
-                Slot::Response { .. } => {
-                    let id = EndpointResponseId(self.current);
-                    self.current += 1;
-                    return Some(self.ctx.get_endpoint_response(id));
-                }
-            }
-        }
+        let (data, next) = self.spec.endpoints.next_response(self.cursor)?;
 
-        None
+        self.cursor = next;
+        Some(EndpointResponseView::from_data(self.spec, data))
     }
 }
 
 /// Type used in endpoint response  
 #[derive(Debug, Clone)]
 pub enum EndpointResponseType<'a> {
-    Response(NamedReference<'a, ResponseReference<'a>>),
-    InlineType(InlineTy<'a, Type<'a>>),
+    Response(NamedTypeRefView<'a>),
+    InlineType(InlineTyView<'a>),
 }
 
 /// Response definition
 #[derive(Debug, Clone)]
-pub struct EndpointResponse<'a> {
+pub struct EndpointResponseView<'a> {
     /// Status code of the response.
     pub status: ResponseStatus,
 
@@ -201,4 +204,10 @@ pub struct EndpointResponse<'a> {
 
     /// Doc comments
     pub docs: Option<&'a str>,
+}
+
+impl<'a> EndpointResponseView<'a> {
+    fn from_data(spec: &'a Spec, data: ResponseData) -> Self {
+        todo!("Implement me")
+    }
 }
