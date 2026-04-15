@@ -1,10 +1,10 @@
 use crate::path::Path;
 use crate::spec::Spec;
 use crate::spec::arena::endpoint::{
-    EndpointCursor, EndpointData, ResponseCursor, ResponseData, ResponseStatus, RouteCursor,
-    RouteData,
+    EndpointCursor, EndpointData, EndpointResponseTypeId, ResponseCursor, ResponseData,
+    ResponseStatus, RouteCursor, RouteData,
 };
-use crate::spec::view::typ::{InlineTyView, NamedTypeRefView};
+use crate::spec::view::typ::{InlineTyView, NamedRootTypeRefView, NamedTypeRefView};
 use crate::text::Name;
 
 /// Route group representation returned by the [`EndpointArena`].
@@ -189,7 +189,7 @@ impl<'a> Iterator for ResponseIter<'a> {
 /// Type used in endpoint response  
 #[derive(Debug, Clone)]
 pub enum EndpointResponseType<'a> {
-    Response(NamedTypeRefView<'a>),
+    Response(NamedRootTypeRefView<'a>),
     InlineType(InlineTyView<'a>),
 }
 
@@ -208,6 +208,19 @@ pub struct EndpointResponseView<'a> {
 
 impl<'a> EndpointResponseView<'a> {
     fn from_data(spec: &'a Spec, data: ResponseData) -> Self {
-        todo!("Implement me")
+        let typ = match data.typ {
+            EndpointResponseTypeId::Response(id) => {
+                EndpointResponseType::Response(spec.get_response_reference_type(id))
+            }
+            EndpointResponseTypeId::InlineType(id) => {
+                EndpointResponseType::InlineType(spec.get_inline_type(id))
+            }
+        };
+
+        Self {
+            status: data.status,
+            typ,
+            docs: data.docs.map(|id| spec.strings.resolve(id)),
+        }
     }
 }
