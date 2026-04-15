@@ -119,6 +119,7 @@ impl<'a> ReferenceView<'a> {
 #[derive(Clone, derive_more::Debug, derive_more::Display)]
 #[display("reference `{name}`")]
 pub struct NamedTypeRefView<'a> {
+    /// Name of the referenced type definition.
     pub name: &'a str,
     id: TypeId,
 
@@ -137,6 +138,7 @@ impl<'a> NamedTypeRefView<'a> {
         }
     }
 
+    /// Resolve the referenced type.
     pub fn typ(&self) -> TypeView<'a> {
         TypeView::new(self.spec, self.id)
     }
@@ -146,6 +148,7 @@ impl<'a> NamedTypeRefView<'a> {
 #[derive(Clone, derive_more::Debug, derive_more::Display)]
 #[display("reference `{name}`")]
 pub struct NamedRootTypeRefView<'a> {
+    /// Name of the referenced root type definition.
     pub name: &'a str,
     id: RootTypeId,
 
@@ -164,6 +167,7 @@ impl<'a> NamedRootTypeRefView<'a> {
         }
     }
 
+    /// Resolve the referenced root type.
     pub fn typ(&self) -> RootTypeView<'a> {
         RootTypeView::new(self.spec, self.id)
     }
@@ -172,17 +176,24 @@ impl<'a> NamedRootTypeRefView<'a> {
 /// Record field.
 #[derive(Clone)]
 pub struct RecordFieldView<'a> {
+    /// Name of the field.
     pub name: &'a Name,
+    /// Default value of the field.
     pub default: Option<ValueView<'a>>,
+    /// Documentation for the field.
     pub docs: Option<&'a str>,
+    /// Type of the field.
     pub typ: InlineTyView<'a>,
 }
 
 /// Union field.
 #[derive(Clone)]
 pub struct UnionFieldView<'a> {
+    /// Name of the field.
     pub name: &'a Name,
+    /// Documentation for the field.
     pub docs: Option<&'a str>,
+    /// Type of the field.
     pub typ: InlineTyView<'a>,
 }
 
@@ -197,6 +208,7 @@ pub struct RecordView<'a> {
     spec: &'a Spec,
 }
 
+/// Iterator over record fields.
 #[derive(derive_more::Debug, Clone)]
 pub struct RecordFieldIter<'a> {
     #[debug(skip)]
@@ -209,6 +221,7 @@ impl<'a> RecordView<'a> {
         Self { spec, range: data }
     }
 
+    /// Returns an iterator over record fields.
     pub fn fields(&self) -> RecordFieldIter<'a> {
         let cursor = self.spec.types.record_cursor(self.range);
         RecordFieldIter {
@@ -250,6 +263,7 @@ pub struct UnionView<'a> {
     spec: &'a Spec,
 }
 
+/// Iterator over union fields.
 #[derive(derive_more::Debug, Clone)]
 pub struct UnionFieldIter<'a> {
     #[debug(skip)]
@@ -262,6 +276,7 @@ impl<'a> UnionView<'a> {
         Self { spec, range: data }
     }
 
+    /// Returns an iterator over union fields.
     pub fn fields(&self) -> UnionFieldIter<'a> {
         let cursor = self.spec.types.union_cursor(self.range);
         UnionFieldIter {
@@ -308,6 +323,7 @@ impl<'a> EnumView<'a> {
         }
     }
 
+    /// Returns an iterator over enum members.
     pub fn members(&self) -> EnumMemberIter<'a> {
         let cursor = self.spec.types.enum_cursor(self.data);
         EnumMemberIter {
@@ -320,7 +336,9 @@ impl<'a> EnumView<'a> {
 /// A single valid value of an enum.
 #[derive(Debug, Clone)]
 pub struct EnumMemberView<'a> {
+    /// Value of the enum member.
     pub value: ValueView<'a>,
+    /// Documentation for the enum member.
     pub docs: Option<&'a str>,
 }
 
@@ -399,12 +417,16 @@ impl<'a> RootTypeView<'a> {
 
 /// Type definition.
 pub struct TypeDefView<'a> {
+    /// Documentation for the type definition.
     pub docs: Option<&'a str>,
+    /// Declared type.
     pub typ: RootTypeView<'a>,
+    /// Name of the type definition.
     pub name: &'a str,
 }
 
 impl Spec {
+    /// Resolve a validated simple record reference.
     pub(crate) fn get_simple_record_type<'a>(
         &'a self,
         id: SimpleRecordReferenceProof,
@@ -415,6 +437,7 @@ impl Spec {
         NamedTypeRefView::from_data(self, data)
     }
 
+    /// Resolve a validated response reference.
     pub(crate) fn get_response_reference_type<'a>(
         &'a self,
         id: ResponseReferenceProof,
@@ -425,6 +448,7 @@ impl Spec {
         NamedRootTypeRefView::from_data(self, data)
     }
 
+    /// Resolve an inline type by arena id.
     pub(crate) fn get_inline_type<'a>(&'a self, id: InlineTypeId) -> InlineTyView<'a> {
         InlineTyView::new(self, id)
     }

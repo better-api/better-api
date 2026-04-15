@@ -317,22 +317,26 @@ impl TypeArena {
         Ok(Self { data: final_data? })
     }
 
+    /// Returns inline type data for `id`.
     pub(crate) fn get_inline_type(&self, id: InlineTypeId) -> InlineTypeData {
         let slot = self.data[id.0 as usize];
         InlineTypeData::from_slot(slot, id.0)
             .expect("InlineTypeId must point to an inline type slot")
     }
 
+    /// Returns type data for `id`.
     pub(crate) fn get_type(&self, id: TypeId) -> TypeData {
         let slot = self.data[id.0 as usize];
         TypeData::from_slot(slot, id.0).expect("TypeId must point to a type slot")
     }
 
+    /// Returns response data for `id`.
     pub(crate) fn get_response(&self, id: ResponseTypeId) -> ResponseData {
         let slot = self.data[id.0 as usize];
         ResponseData::from_slot(slot).expect("ResponseTypeId must point to Slot::Response")
     }
 
+    /// Returns root type data for `id`.
     pub(crate) fn get_root_type(&self, id: RootTypeId) -> RootTypeData {
         let slot = self.data[id.0 as usize];
         RootTypeData::from_slot(slot, id.0).expect("RootTypeId must point to a root type slot")

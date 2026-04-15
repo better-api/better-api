@@ -7,7 +7,7 @@ use crate::spec::arena::endpoint::{
 use crate::spec::view::typ::{InlineTyView, NamedRootTypeRefView, NamedTypeRefView};
 use crate::text::Name;
 
-/// Route group representation returned by the [`EndpointArena`].
+/// Semantic view of a route.
 #[derive(derive_more::Debug, Clone)]
 pub struct RouteView<'a> {
     /// Route path at this level of the hierarchy.
@@ -25,7 +25,7 @@ pub struct RouteView<'a> {
 }
 
 impl<'a> RouteView<'a> {
-    /// Returns an iterator over endpoints in this route group.
+    /// Returns an iterator over endpoints in this route.
     pub fn endpoints(&self) -> EndpointIter<'a> {
         EndpointIter {
             spec: self.spec,
@@ -33,7 +33,7 @@ impl<'a> RouteView<'a> {
         }
     }
 
-    /// Returns an iterator over routes in this route group.
+    /// Returns an iterator over nested routes in this route.
     pub fn routes(&self) -> RouteIter<'a> {
         RouteIter {
             spec: self.spec,
@@ -41,7 +41,7 @@ impl<'a> RouteView<'a> {
         }
     }
 
-    /// Returns an iterator over responses defined for this route group.
+    /// Returns an iterator over responses defined for this route.
     pub fn responses(&self) -> ResponseIter<'a> {
         ResponseIter {
             spec: self.spec,
@@ -61,7 +61,7 @@ impl<'a> RouteView<'a> {
     }
 }
 
-/// Endpoint representation returned by the [`EndpointArena`].
+/// Semantic view of an endpoint.
 #[derive(derive_more::Debug, Clone)]
 pub struct EndpointView<'a> {
     /// Path of the endpoint.
@@ -135,7 +135,7 @@ impl<'a> EndpointView<'a> {
     }
 }
 
-/// Iterator over endpoints inside a [`Route`].
+/// Iterator over endpoints inside a [`RouteView`].
 pub struct EndpointIter<'a> {
     spec: &'a Spec,
     cursor: EndpointCursor,
@@ -152,7 +152,7 @@ impl<'a> Iterator for EndpointIter<'a> {
     }
 }
 
-/// Iterator over routes inside a [`Route`]
+/// Iterator over routes inside a [`RouteView`].
 pub struct RouteIter<'a> {
     spec: &'a Spec,
     cursor: RouteCursor,
@@ -169,7 +169,7 @@ impl<'a> Iterator for RouteIter<'a> {
     }
 }
 
-/// Iterator over responses inside a [`Route`] or [`Endpoint`]
+/// Iterator over responses inside a [`RouteView`] or [`EndpointView`].
 pub struct ResponseIter<'a> {
     spec: &'a Spec,
     cursor: ResponseCursor,
@@ -189,7 +189,9 @@ impl<'a> Iterator for ResponseIter<'a> {
 /// Type used in endpoint response  
 #[derive(Debug, Clone)]
 pub enum EndpointResponseType<'a> {
+    /// Reference to a named response type.
     Response(NamedRootTypeRefView<'a>),
+    /// Inline response body type.
     InlineType(InlineTyView<'a>),
 }
 

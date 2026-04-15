@@ -76,7 +76,7 @@ pub enum EnumTy {
 
 /// Type definition.
 ///
-/// Stores the doc comment for a named type definition.
+/// Stores the metadata for a named type definition.
 #[derive(Debug, Clone)]
 pub(crate) struct TypeDefData {
     #[expect(

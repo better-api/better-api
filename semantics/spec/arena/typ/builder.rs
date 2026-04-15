@@ -325,7 +325,7 @@ impl<'p> Drop for OptionArrayBuilder<'p> {
 
 /// Helper type for adding enums to arena.
 ///
-/// Constructed via [`TypeArena::start_enum`].
+/// Constructed via [`TypeArenaBuilder::start_enum`].
 /// Call [`finish`](EnumBuilder::finish) once all members are added.
 ///
 /// Dropping the builder without finishing rolls back any changes.
@@ -384,7 +384,7 @@ impl<'p> Drop for EnumBuilder<'p> {
     }
 }
 
-/// Builder of the arena that holds semantic types.
+/// Builder for the arena that holds semantic types.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct TypeArenaBuilder {
     data: Vec<Slot<StringId>>,

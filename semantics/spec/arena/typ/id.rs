@@ -47,7 +47,7 @@ impl From<ResponseTypeId> for RootTypeId {
 
 /// Id of a field in a record or union.
 ///
-/// Used for getting a specific field through the context.
+/// Used for identifying a specific field inside a record or union.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct TypeFieldId {
     pub(super) container_id: TypeId,

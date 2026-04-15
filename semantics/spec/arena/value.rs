@@ -408,6 +408,9 @@ impl ValueArena {
         Some((c.next, next_cursor))
     }
 
+    /// Get next field in the object.
+    ///
+    /// If cursor is pointing to the end of the object, None is returned.
     pub(crate) fn next_object_field(
         &self,
         c: ObjectCursor,

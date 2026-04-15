@@ -58,7 +58,9 @@ impl<'a> ValueView<'a> {
 pub struct ObjectFieldView<'a> {
     #[expect(dead_code, reason = "used by future semantic query APIs")]
     pub(crate) id: ObjectFieldId,
+    /// Name of the field.
     pub name: &'a Name,
+    /// Value of the field.
     pub value: ValueView<'a>,
 }
 
@@ -162,6 +164,7 @@ impl<'a> Iterator for ArrayItemIter<'a> {
 }
 
 impl Spec {
+    /// Resolve a value by arena id.
     pub(crate) fn get_value<'a>(&'a self, id: ValueId) -> ValueView<'a> {
         ValueView::new(self, id)
     }

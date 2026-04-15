@@ -21,6 +21,7 @@ pub struct Spec {
     pub(crate) strings: StringInterner,
     pub(crate) symbol_table: SymbolTable,
 
+    /// Metadata declared by the spec.
     pub metadata: Metadata,
 
     pub(crate) values: arena::value::ValueArena,
@@ -31,21 +32,29 @@ pub struct Spec {
 /// Metadata of Better API spec
 #[derive(Debug, Clone, Default)]
 pub struct Metadata {
+    /// Better API version used by the spec.
     pub better_api_version: String,
 
+    /// Version of the described API.
     pub version: String,
+    /// Name of the described API.
     pub name: String,
+    /// Description of the described API.
     pub description: Option<String>,
 
+    /// Servers declared by the spec.
     pub servers: Vec<Server>,
 }
 
 /// Server that is part of spec metadata
 #[derive(Debug, Clone)]
 pub struct Server {
+    /// Name of the server.
     pub name: String,
+    /// URL of the server.
     pub url: String,
 
+    /// Documentation for the server.
     pub docs: Option<String>,
 }
 

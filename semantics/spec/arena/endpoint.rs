@@ -1,9 +1,12 @@
-//! Defines semantic representation of endpoints and route groups.
+//! Defines semantic representation of endpoints and routes.
 //!
 //! ## Querying
 //!
-//! Querying starts from [`Spec`](crate::spec::Spec). [`Route`] and [`Endpoint`]
-//! provide iterators over nested routes, endpoints, and responses.
+//! Querying starts from [`Spec`](crate::spec::Spec) via
+//! [`Spec::root_routes`](crate::spec::Spec::root_routes) and
+//! [`Spec::root_endpoints`](crate::spec::Spec::root_endpoints). The higher-level
+//! wrappers used during traversal are [`RouteView`](crate::spec::view::endpoint::RouteView)
+//! and [`EndpointView`](crate::spec::view::endpoint::EndpointView).
 //!
 //! ## Construction
 //!
@@ -129,7 +132,7 @@ impl<'p> Drop for EndpointBuilder<'p> {
     }
 }
 
-/// Helper type for adding endpoints and responses to a route.
+/// Helper type for adding nested routes, endpoints, and responses to a route.
 ///
 /// Constructed via [`EndpointArena::add_route`] or [`RouteBuilder::add_route`]. Call
 /// [`finish`](RouteBuilder::finish) once all nested entries are added.
@@ -200,7 +203,7 @@ impl<'p> RouteBuilder<'p> {
         EndpointBuilder::new(self.as_parent(), path, data)
     }
 
-    /// Starts building a nested route group under this route.
+    /// Starts building a nested route under this route.
     pub(crate) fn add_route<'a>(
         &'a mut self,
         path: PathPart,
@@ -383,10 +386,12 @@ impl EndpointArena {
         RouteBuilder::new(self.parent(), path, docs)
     }
 
+    /// Returns the path stored for `id`.
     pub(crate) fn get_path<'a>(&'a self, id: PathId) -> Path<'a> {
         self.paths.get(id)
     }
 
+    /// Returns endpoint data for `id`.
     pub(crate) fn get_endpoint(&self, id: EndpointId) -> EndpointData {
         let Slot::Endpoint { path, fields, end } = &self.data[id.0 as usize] else {
             unreachable!("EndpointId must point to Slot::Endpoint");
@@ -400,6 +405,7 @@ impl EndpointArena {
         }
     }
 
+    /// Returns route data for `id`.
     pub(crate) fn get_route(&self, id: RouteId) -> RouteData {
         let slot = &self.data[id.0 as usize];
         let Slot::Route { path, docs, end } = slot else {
@@ -414,6 +420,7 @@ impl EndpointArena {
         }
     }
 
+    /// Returns response data for `id`.
     pub(crate) fn get_response(&self, id: EndpointResponseId) -> ResponseData {
         let Slot::Response {
             status,
@@ -431,6 +438,7 @@ impl EndpointArena {
         }
     }
 
+    /// Returns a cursor over child routes of `route`.
     pub(crate) fn route_cursor(&self, route: RouteData) -> RouteCursor {
         RouteCursor {
             next: route.first,
@@ -438,6 +446,7 @@ impl EndpointArena {
         }
     }
 
+    /// Returns a cursor over root-level routes.
     pub(crate) fn root_route_cursor(&self) -> RouteCursor {
         RouteCursor {
             next: 0,
@@ -445,6 +454,7 @@ impl EndpointArena {
         }
     }
 
+    /// Returns a cursor over root-level endpoints.
     pub(crate) fn root_endpoint_cursor(&self) -> EndpointCursor {
         EndpointCursor {
             next: 0,
@@ -452,6 +462,7 @@ impl EndpointArena {
         }
     }
 
+    /// Returns a cursor over endpoints inside `route`.
     pub(crate) fn endpoint_cursor(&self, route: RouteData) -> EndpointCursor {
         EndpointCursor {
             next: route.first,
@@ -459,6 +470,7 @@ impl EndpointArena {
         }
     }
 
+    /// Returns a cursor over responses defined on `route`.
     pub(crate) fn route_response_cursor(&self, route: RouteData) -> ResponseCursor {
         ResponseCursor {
             next: route.first,
@@ -466,6 +478,7 @@ impl EndpointArena {
         }
     }
 
+    /// Returns a cursor over responses defined on `endpoint`.
     pub(crate) fn endpoint_response_cursor(&self, endpoint: &EndpointData) -> ResponseCursor {
         ResponseCursor {
             next: endpoint.first,
@@ -473,6 +486,9 @@ impl EndpointArena {
         }
     }
 
+    /// Get next route.
+    ///
+    /// If cursor is pointing to the end of the route, None is returned.
     pub(crate) fn next_route(&self, c: RouteCursor) -> Option<(RouteData, RouteCursor)> {
         let mut current = c.next;
         while current < c.end {
@@ -504,6 +520,9 @@ impl EndpointArena {
         None
     }
 
+    /// Get next endpoint.
+    ///
+    /// If cursor is pointing to the end, None is returned.
     pub(crate) fn next_endpoint(
         &self,
         c: EndpointCursor,
@@ -538,6 +557,9 @@ impl EndpointArena {
         None
     }
 
+    /// Get next response.
+    ///
+    /// If cursor is pointing to the end, None is returned.
     pub(crate) fn next_response(
         &self,
         c: ResponseCursor,
