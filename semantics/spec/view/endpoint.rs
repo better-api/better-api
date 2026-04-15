@@ -224,3 +224,169 @@ impl<'a> EndpointResponseView<'a> {
         }
     }
 }
+
+impl Spec {
+    /// Returns an iterator over root-level endpoints.
+    pub fn root_endpoints(&self) -> EndpointIter<'_> {
+        EndpointIter {
+            spec: self,
+            cursor: self.endpoints.root_endpoint_cursor(),
+        }
+    }
+
+    /// Returns an iterator over root-level routes.
+    pub fn root_routes(&self) -> RouteIter<'_> {
+        RouteIter {
+            spec: self,
+            cursor: self.endpoints.root_route_cursor(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::EndpointResponseType;
+    use crate::path::PathPart;
+    use crate::spec::Spec;
+    use crate::spec::arena::endpoint::{EndpointFields, EndpointResponseTypeId, ResponseStatus};
+    use crate::spec::arena::typ::builder::TypeArenaBuilder;
+    use crate::spec::arena::typ::{PrimitiveTy, PrimitiveTy::String};
+    use crate::spec::view::typ::InlineTyView;
+    use crate::text::{NameId, StringId};
+    use http::{Method, StatusCode};
+
+    fn endpoint_fields(name: NameId, method: Method, docs: Option<StringId>) -> EndpointFields {
+        EndpointFields {
+            docs,
+            method,
+            name,
+            path_param: None,
+            query: None,
+            headers: None,
+            accept: None,
+            request_body: None,
+            request_body_docs: None,
+        }
+    }
+
+    fn string_type(spec: &mut Spec) -> crate::spec::arena::typ::id::InlineTypeId {
+        let mut builder = TypeArenaBuilder::default();
+        let string_id = builder.add_primitive(PrimitiveTy::String);
+        spec.types = builder
+            .finish(&spec.symbol_table)
+            .expect("test type arena should build");
+        string_id
+    }
+
+    #[test]
+    fn iterates_root_and_nested_endpoint_views() {
+        let mut spec = Spec::new_test();
+        let string_id = string_type(&mut spec);
+
+        let api_docs = spec.strings.get_or_intern("api docs");
+        let users_docs = spec.strings.get_or_intern("users docs");
+
+        let health_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("health")) };
+        let users_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("users")) };
+        let stats_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("stats")) };
+
+        let (mut health, _) = spec.endpoints.add_endpoint(
+            PathPart::Segment("/health"),
+            endpoint_fields(health_name, Method::GET, None),
+        );
+        health.add_response(
+            ResponseStatus::Code(StatusCode::OK),
+            EndpointResponseTypeId::InlineType(string_id),
+            None,
+        );
+        health.finish();
+
+        let (mut api, _) = spec
+            .endpoints
+            .add_route(PathPart::Segment("/api"), Some(api_docs));
+        api.add_response(
+            ResponseStatus::Default,
+            EndpointResponseTypeId::InlineType(string_id),
+            None,
+        );
+
+        let (mut users, _) = api.add_endpoint(
+            PathPart::Segment("/users"),
+            endpoint_fields(users_name, Method::POST, Some(users_docs)),
+        );
+        users.add_response(
+            ResponseStatus::Code(StatusCode::CREATED),
+            EndpointResponseTypeId::InlineType(string_id),
+            None,
+        );
+        users.finish();
+
+        let (mut admin, _) = api.add_route(PathPart::Segment("/admin"), None);
+        let (mut stats, _) = admin.add_endpoint(
+            PathPart::Segment("/stats"),
+            endpoint_fields(stats_name, Method::GET, None),
+        );
+        stats.add_response(
+            ResponseStatus::Code(StatusCode::OK),
+            EndpointResponseTypeId::InlineType(string_id),
+            None,
+        );
+        stats.finish();
+        admin.finish();
+        api.finish();
+
+        let mut root_endpoints = spec.root_endpoints();
+        let health = root_endpoints.next().expect("root health endpoint");
+        assert!(root_endpoints.next().is_none());
+        assert_eq!(health.path.segments().as_slice(), &["/health"]);
+        assert_eq!(health.method, Method::GET);
+        assert_eq!(health.name.as_str(), "health");
+        assert!(health.docs.is_none());
+        assert!(health.request_body.is_none());
+
+        let health_responses: Vec<_> = health.responses().collect();
+        assert_eq!(health_responses.len(), 1);
+        assert_eq!(
+            health_responses[0].status,
+            ResponseStatus::Code(StatusCode::OK)
+        );
+        assert!(matches!(
+            health_responses[0].typ,
+            EndpointResponseType::InlineType(InlineTyView::Primitive(String))
+        ));
+
+        let mut root_routes = spec.root_routes();
+        let api = root_routes.next().expect("root api route");
+        assert!(root_routes.next().is_none());
+        assert_eq!(api.path.segments().as_slice(), &["/api"]);
+        assert_eq!(api.docs, Some("api docs"));
+
+        let api_responses: Vec<_> = api.responses().collect();
+        assert_eq!(api_responses.len(), 1);
+        assert_eq!(api_responses[0].status, ResponseStatus::Default);
+
+        let api_endpoints: Vec<_> = api.endpoints().collect();
+        assert_eq!(api_endpoints.len(), 1);
+        assert_eq!(
+            api_endpoints[0].path.segments().as_slice(),
+            &["/api", "/users"]
+        );
+        assert_eq!(api_endpoints[0].name.as_str(), "users");
+        assert_eq!(api_endpoints[0].docs, Some("users docs"));
+
+        let admin_routes: Vec<_> = api.routes().collect();
+        assert_eq!(admin_routes.len(), 1);
+        assert_eq!(
+            admin_routes[0].path.segments().as_slice(),
+            &["/api", "/admin"]
+        );
+
+        let stats_endpoints: Vec<_> = admin_routes[0].endpoints().collect();
+        assert_eq!(stats_endpoints.len(), 1);
+        assert_eq!(
+            stats_endpoints[0].path.segments().as_slice(),
+            &["/api", "/admin", "/stats"]
+        );
+        assert_eq!(stats_endpoints[0].name.as_str(), "stats");
+    }
+}

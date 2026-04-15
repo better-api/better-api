@@ -414,10 +414,41 @@ impl EndpointArena {
         }
     }
 
+    pub(crate) fn get_response(&self, id: EndpointResponseId) -> ResponseData {
+        let Slot::Response {
+            status,
+            type_id,
+            docs,
+        } = &self.data[id.0 as usize]
+        else {
+            unreachable!("EndpointResponseId must point to Slot::Response");
+        };
+
+        ResponseData {
+            status: *status,
+            typ: *type_id,
+            docs: *docs,
+        }
+    }
+
     pub(crate) fn route_cursor(&self, route: RouteData) -> RouteCursor {
         RouteCursor {
             next: route.first,
             end: route.end,
+        }
+    }
+
+    pub(crate) fn root_route_cursor(&self) -> RouteCursor {
+        RouteCursor {
+            next: 0,
+            end: self.data.len() as u32,
+        }
+    }
+
+    pub(crate) fn root_endpoint_cursor(&self) -> EndpointCursor {
+        EndpointCursor {
+            next: 0,
+            end: self.data.len() as u32,
         }
     }
 
@@ -543,74 +574,222 @@ impl EndpointArena {
     }
 }
 
-// impl<'a> SpecContext<'a> {
-//     /// Return iterator through root routes.
-//     ///
-//     /// Root routes are routes without a parent.
-//     pub(crate) fn root_routes(&self) -> RouteIterator<'a> {
-//         RouteIterator {
-//             ctx: *self,
-//             current: 0,
-//             end: self.endpoints.data.len() as u32,
-//         }
-//     }
-//
-//     /// Return iterator through root endpoints.
-//     ///
-//     /// Root endpoints are endpoints without a parent.
-//     pub(crate) fn root_endpoints(&self) -> EndpointIterator<'a> {
-//         EndpointIterator {
-//             ctx: *self,
-//             current: 0,
-//             end: self.endpoints.data.len() as u32,
-//         }
-//     }
-//
-//     /// Get endpoint or route [`Response`] by id.
-//     pub(crate) fn get_endpoint_response(&self, id: EndpointResponseId) -> EndpointResponse<'a> {
-//         let Slot::Response {
-//             status,
-//             type_id,
-//             docs,
-//         } = &self.endpoints.data[id.0 as usize]
-//         else {
-//             unreachable!("slot at response id should contain a response");
-//         };
-//
-//         let typ = match type_id {
-//             EndpointResponseTypeId::Response(id) => {
-//                 EndpointResponseType::Response(self.get_response_reference(*id))
-//             }
-//             EndpointResponseTypeId::InlineType(id) => {
-//                 EndpointResponseType::InlineType(self.get_inline_type(*id))
-//             }
-//         };
-//
-//         EndpointResponse {
-//             status: *status,
-//             typ,
-//             docs: docs.map(|id| self.strings.resolve(id)),
-//         }
-//     }
-// }
+#[cfg(test)]
+mod test {
+    use super::{EndpointArena, EndpointFields, EndpointResponseTypeId, ResponseStatus};
+    use crate::path::PathPart;
+    use crate::spec::Spec;
+    use crate::spec::arena::typ::PrimitiveTy;
+    use crate::spec::arena::typ::builder::TypeArenaBuilder;
+    use crate::spec::arena::typ::id::InlineTypeId;
+    use crate::text::{NameId, StringId};
+    use http::{Method, StatusCode};
 
-// #[cfg(test)]
-// mod test {
-//     use super::ResponseStatus;
-//
-//     use crate::path::PathPart;
-//     use crate::spec::Spec;
-//     use crate::spec::endpoint::{EndpointData, EndpointResponseTypeId};
-//     use crate::spec::typ::{
-//         InlineTy, InlineTyId, PrimitiveTy, RootRef, SimpleRecordReference, SimpleRecordReferenceId,
-//         TypeDefData,
-//     };
-//     use crate::text::NameId;
-//
-//     use http::{Method, StatusCode};
-//
-//     // #[test]
-//     // fn builds_endpoint_arena() {
-//     //     Re-enable after the endpoint arena refactor is finished.
-//     // }
-// }
+    fn endpoint_fields(name: NameId, method: Method, docs: Option<StringId>) -> EndpointFields {
+        EndpointFields {
+            docs,
+            method,
+            name,
+            path_param: None,
+            query: None,
+            headers: None,
+            accept: None,
+            request_body: None,
+            request_body_docs: None,
+        }
+    }
+
+    fn primitive_types(spec: &mut Spec) -> (InlineTypeId, InlineTypeId) {
+        let mut builder = TypeArenaBuilder::default();
+        let string_id = builder.add_primitive(PrimitiveTy::String);
+        let bool_id = builder.add_primitive(PrimitiveTy::Bool);
+        spec.types = builder
+            .finish(&spec.symbol_table)
+            .expect("test type arena should build");
+        (string_id, bool_id)
+    }
+
+    #[test]
+    fn builds_endpoints_and_walks_root_and_nested_cursors() {
+        let mut spec = Spec::new_test();
+        let (string_id, bool_id) = primitive_types(&mut spec);
+
+        let route_docs = spec.strings.get_or_intern("api docs");
+        let users_docs = spec.strings.get_or_intern("users docs");
+
+        let health_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("health")) };
+        let users_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("users")) };
+        let stats_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("stats")) };
+        let dropped_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("dropped")) };
+
+        let mut arena = EndpointArena::default();
+
+        let (mut health, health_path) = arena.add_endpoint(
+            PathPart::Segment("/health"),
+            endpoint_fields(health_name, Method::GET, None),
+        );
+        let health_response_id = health.add_response(
+            ResponseStatus::Code(StatusCode::OK),
+            EndpointResponseTypeId::InlineType(string_id),
+            None,
+        );
+        let health_id = health.finish();
+
+        let (mut api, api_path) = arena.add_route(PathPart::Segment("/api"), Some(route_docs));
+        let api_response_id = api.add_response(
+            ResponseStatus::Default,
+            EndpointResponseTypeId::InlineType(bool_id),
+            None,
+        );
+
+        {
+            let (mut dropped, _) = api.add_endpoint(
+                PathPart::Segment("/dropped"),
+                endpoint_fields(dropped_name, Method::DELETE, None),
+            );
+            dropped.add_response(
+                ResponseStatus::Code(StatusCode::NO_CONTENT),
+                EndpointResponseTypeId::InlineType(string_id),
+                None,
+            );
+        }
+
+        let (mut users, users_path) = api.add_endpoint(
+            PathPart::Segment("/users"),
+            endpoint_fields(users_name, Method::POST, Some(users_docs)),
+        );
+        let users_response_id = users.add_response(
+            ResponseStatus::Code(StatusCode::CREATED),
+            EndpointResponseTypeId::InlineType(bool_id),
+            None,
+        );
+        let users_id = users.finish();
+
+        let (mut admin, admin_path) = api.add_route(PathPart::Segment("/admin"), None);
+        let (mut stats, stats_path) = admin.add_endpoint(
+            PathPart::Segment("/stats"),
+            endpoint_fields(stats_name, Method::GET, None),
+        );
+        let stats_response_id = stats.add_response(
+            ResponseStatus::Code(StatusCode::OK),
+            EndpointResponseTypeId::InlineType(string_id),
+            None,
+        );
+        let stats_id = stats.finish();
+        let admin_id = admin.finish();
+        let api_id = api.finish();
+
+        assert_eq!(
+            arena.get_path(health_path).segments().as_slice(),
+            &["/health"]
+        );
+        assert_eq!(arena.get_path(api_path).segments().as_slice(), &["/api"]);
+        assert_eq!(
+            arena.get_path(users_path).segments().as_slice(),
+            &["/api", "/users"]
+        );
+        assert_eq!(
+            arena.get_path(admin_path).segments().as_slice(),
+            &["/api", "/admin"]
+        );
+        assert_eq!(
+            arena.get_path(stats_path).segments().as_slice(),
+            &["/api", "/admin", "/stats"]
+        );
+
+        let (root_route, next_root_route) = arena
+            .next_route(arena.root_route_cursor())
+            .expect("root route");
+        assert_eq!(root_route, arena.get_route(api_id));
+        assert_eq!(
+            arena.get_path(root_route.path).segments().as_slice(),
+            &["/api"]
+        );
+        assert_eq!(root_route.docs, Some(route_docs));
+        assert!(arena.next_route(next_root_route).is_none());
+
+        let (root_endpoint, next_root_endpoint) = arena
+            .next_endpoint(arena.root_endpoint_cursor())
+            .expect("root endpoint");
+        assert_eq!(root_endpoint, arena.get_endpoint(health_id));
+        assert_eq!(
+            arena.get_path(root_endpoint.path).segments().as_slice(),
+            &["/health"]
+        );
+        assert_eq!(root_endpoint.fields.method, Method::GET);
+        assert!(arena.next_endpoint(next_root_endpoint).is_none());
+
+        let (route_response, route_response_cursor) = arena
+            .next_response(arena.route_response_cursor(root_route))
+            .expect("route response");
+        assert_eq!(route_response.status, ResponseStatus::Default);
+        assert_eq!(
+            route_response.typ,
+            EndpointResponseTypeId::InlineType(bool_id)
+        );
+        assert_eq!(route_response, arena.get_response(api_response_id));
+        assert!(arena.next_response(route_response_cursor).is_none());
+
+        let (users, next_users) = arena
+            .next_endpoint(arena.endpoint_cursor(root_route))
+            .expect("users endpoint");
+        assert_eq!(users, arena.get_endpoint(users_id));
+        assert_eq!(
+            arena.get_path(users.path).segments().as_slice(),
+            &["/api", "/users"]
+        );
+        assert_eq!(users.fields.docs, Some(users_docs));
+        assert_eq!(users.fields.method, Method::POST);
+        assert!(arena.next_endpoint(next_users).is_none());
+
+        let (users_response, users_response_cursor) = arena
+            .next_response(arena.endpoint_response_cursor(&users))
+            .expect("users response");
+        assert_eq!(users_response, arena.get_response(users_response_id));
+        assert_eq!(
+            users_response.typ,
+            EndpointResponseTypeId::InlineType(bool_id)
+        );
+        assert!(arena.next_response(users_response_cursor).is_none());
+
+        let (admin, next_admin) = arena
+            .next_route(arena.route_cursor(root_route))
+            .expect("admin route");
+        assert_eq!(admin, arena.get_route(admin_id));
+        assert_eq!(
+            arena.get_path(admin.path).segments().as_slice(),
+            &["/api", "/admin"]
+        );
+        assert!(arena.next_route(next_admin).is_none());
+
+        let (stats, next_stats) = arena
+            .next_endpoint(arena.endpoint_cursor(admin))
+            .expect("stats endpoint");
+        assert_eq!(stats, arena.get_endpoint(stats_id));
+        assert_eq!(
+            arena.get_path(stats.path).segments().as_slice(),
+            &["/api", "/admin", "/stats"]
+        );
+        assert!(arena.next_endpoint(next_stats).is_none());
+
+        let (health_response, health_response_cursor) = arena
+            .next_response(arena.endpoint_response_cursor(&root_endpoint))
+            .expect("health response");
+        assert_eq!(health_response, arena.get_response(health_response_id));
+        assert_eq!(
+            health_response.typ,
+            EndpointResponseTypeId::InlineType(string_id)
+        );
+        assert!(arena.next_response(health_response_cursor).is_none());
+
+        let (stats_response, stats_response_cursor) = arena
+            .next_response(arena.endpoint_response_cursor(&stats))
+            .expect("stats response");
+        assert_eq!(stats_response, arena.get_response(stats_response_id));
+        assert_eq!(
+            stats_response.typ,
+            EndpointResponseTypeId::InlineType(string_id)
+        );
+        assert!(arena.next_response(stats_response_cursor).is_none());
+    }
+}

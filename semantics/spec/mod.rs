@@ -63,7 +63,7 @@ impl Spec {
 
             values: Default::default(),
             types,
-            // endpoints: Default::default(),
+            endpoints: Default::default(),
             metadata: Metadata {
                 better_api_version: "0.1.0".to_string(),
                 version: "1.0".to_string(),
