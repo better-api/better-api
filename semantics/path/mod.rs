@@ -1,11 +1,8 @@
 //! Module for working with route and endpoint paths.
 //!
 //!
-//! The core types in this module are [`PathPart`], [`Path`] and [`PathArena`].
-//! [`Path`] is made of multiple [`PathPart`s](PathPart). The only way to construct a path
-//! is through [`PathArena`]. After inserting one or more [`PathPart`s](PathPart) into
-//! the [`PathArena`] you can get the final [`Path`] from it.
-//!
+//! The core types in this module are [`PathPart`] and [`Path`].
+//! [`Path`] is made of multiple [`PathPart`s](PathPart).
 //!
 //! Path is made from current part and optional prefix. What exactly it represents is best
 //! shown on an example. Let's say we have a nested endpoint:
@@ -28,15 +25,6 @@
 //! }
 //! ```
 //!
-//! ## Usage
-//!
-//! The general usage is as follows:
-//! 1. Construct a [`&PathPart`][PathPart] from `&str` using [`PathPart::new`]. This checks that
-//!    the given string is a valid path part and reports possible errors.
-//! 2. Store the part into [`PathArena`] with [`PathArena::insert`]. When storing a part you specify an optional prefix, which
-//!    is a [`PathId`] of a previously stored path.
-//! 3. Get the [`Path`] with [`PathArena::get`].
-//!
 //! ## Equality
 //!
 //! Paths can contain path parameters, which need to be taken into account when dealing with
@@ -45,6 +33,15 @@
 //! doesn't matter, which is why these two paths are equal.
 //!
 //! The implementation of [`PartialEq`] and [`Hash`] takes this fact into account.
+//
+// ## Internal Usage
+//
+// The general usage is as follows:
+// 1. Construct a `&PathPart`from `&str` using `PathPart::new`. This checks that
+//    the given string is a valid path part and reports possible errors.
+// 2. Store the part into `PathArena` with `PathArena::insert`. When storing a part you specify an optional prefix, which
+//    is a `PathId` of a previously stored path.
+// 3. Get the `Path` with `PathArena::get`.
 
 use std::hash::{Hash, Hasher};
 use std::iter::Peekable;
@@ -64,7 +61,10 @@ mod test;
 /// See [module documentation](self) for more details.
 #[derive(Debug, Clone, Copy)]
 pub enum PathPart<'a> {
+    /// Empty path part.
     Empty,
+
+    /// Non empty path part.
     Segment(&'a str),
 }
 
@@ -92,7 +92,7 @@ impl<'a> Path<'a> {
     }
 
     /// Get id of the path prefix
-    pub fn prefix_id(&self) -> Option<PathId> {
+    pub(crate) fn prefix_id(&self) -> Option<PathId> {
         self.prefix_id
     }
 
@@ -102,7 +102,7 @@ impl<'a> Path<'a> {
     }
 
     /// Get id of the path
-    pub fn id(&self) -> PathId {
+    pub(crate) fn id(&self) -> PathId {
         self.id
     }
 
@@ -405,7 +405,7 @@ impl<'a> Iterator for PathParamIterator<'a> {
 
 /// Id of a path stored in the [`PathArena`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct PathId(u32);
+pub(crate) struct PathId(u32);
 
 /// Slot in the path arena.
 #[derive(Debug, Clone, PartialEq)]
@@ -418,15 +418,16 @@ struct Slot {
     prefix_id: Option<PathId>,
 }
 
+/// Arena for storing paths.
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct PathArena {
+pub(crate) struct PathArena {
     strings: string_interner::DefaultStringInterner,
     data: Vec<Slot>,
 }
 
 impl PathArena {
     /// Create a new path arena
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
@@ -434,7 +435,7 @@ impl PathArena {
     ///
     /// Returns the id of the path with inserted part as it's tail.
     /// This id can be used as a `prefix_id` in further insertions.
-    pub fn insert(&mut self, prefix_id: Option<PathId>, part: PathPart) -> PathId {
+    pub(crate) fn insert(&mut self, prefix_id: Option<PathId>, part: PathPart) -> PathId {
         let part_id = match part {
             PathPart::Empty => None,
             PathPart::Segment(s) => Some(self.strings.get_or_intern(s)),
@@ -446,7 +447,7 @@ impl PathArena {
     }
 
     /// Get path with specified id.
-    pub fn get<'a>(&'a self, id: PathId) -> Path<'a> {
+    pub(crate) fn get<'a>(&'a self, id: PathId) -> Path<'a> {
         let slot = &self.data[id.0 as usize];
 
         let part = match slot.part_id {

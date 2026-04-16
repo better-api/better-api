@@ -1,3 +1,8 @@
+//! Views over endpoint and route definitions in the [`Spec`].
+//!
+//! Endpoints and routes reference types defined in the spec. See [`typ`](crate::spec::view::typ)
+//! documentation for more details on how types are structured and represented.
+
 use crate::path::Path;
 use crate::spec::Spec;
 use crate::spec::arena::endpoint::{
@@ -186,7 +191,9 @@ impl<'a> Iterator for ResponseIter<'a> {
     }
 }
 
-/// Type used in endpoint response  
+/// Type used in endpoint response.
+///
+/// It can be either a named reference to a response type, or an inline type.
 #[derive(Debug, Clone)]
 pub enum EndpointResponseType<'a> {
     /// Reference to a named response type.

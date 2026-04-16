@@ -1,7 +1,9 @@
 //! Module for working with strings.
 //!
-//! It include string interning, parsing string tokens,
-//! validating names, converting them to indents, ...
+//! Most of the code in this module is crate private, since downstream users have a nicer API
+//! exposed via [`spec::view`](crate::spec::view) module. However, some of the types in this module
+//! are used in public API.
+
 use std::borrow::Cow;
 
 use better_api_diagnostic::{Label, Report, Span};

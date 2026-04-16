@@ -35,26 +35,47 @@ pub(crate) use arena::TypeArena;
 /// Primitive types.
 #[derive(Debug, Clone, Copy, PartialEq, derive_more::Display)]
 pub enum PrimitiveTy {
+    /// 32-bit signed integer.
     #[display("`i32`")]
     I32,
+
+    /// 64-bit signed integer.
     #[display("`i64`")]
     I64,
+
+    /// 32-bit unsigned integer.
     #[display("`u32`")]
     U32,
+
+    /// 64-bit unsigned integer.
     #[display("`u64`")]
     U64,
+
+    /// 32-bit floating point number.
     #[display("`f32`")]
     F32,
+
+    /// 64-bit floating point number.
     #[display("`f64`")]
     F64,
+
+    /// String representation of an ISO date `YYYY-MM-DD`.
     #[display("`date`")]
     Date,
+
+    /// String representation of a RFC 3339 timestamp.
     #[display("`timestamp`")]
     Timestamp,
+
+    /// Boolean value.
     #[display("`bool`")]
     Bool,
+
+    /// String value.
     #[display("`string`")]
     String,
+
+    /// Binary data.
     #[display("`file`")]
     File,
 }
@@ -62,14 +83,23 @@ pub enum PrimitiveTy {
 /// Valid enum types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, derive_more::Display)]
 pub enum EnumTy {
+    /// 32-bit signed integer.
     #[display("`i32`")]
     I32,
+
+    /// 64-bit signed integer.
     #[display("`i64`")]
     I64,
+
+    /// 32-bit unsigned integer.
     #[display("`u32`")]
     U32,
+
+    /// 64-bit unsigned integer.
     #[display("`u64`")]
     U64,
+
+    /// String value.
     #[display("`string`")]
     String,
 }

@@ -1,3 +1,36 @@
+//! Views over type definitions in the [`Spec`].
+//!
+//! ## Overview
+//!
+//! There are different types that are used in different contexts. The main relation between them
+//! is as follows.
+//!
+//! - [`PrimitiveTy`] represents a primitive type, that is a type that doesn't reference or contain
+//!   any other types. Example of such types are `u32`, `f64`, `string`, ...
+//! - [`InlineTyView`] represents any type that can be used inline. This includes primitive types,
+//!   options, arrays and named references.
+//! - [`TypeView`] represents any type, except a response. This includes inline types, records, unions and enums.
+//!   We make a distinction between types and responses, because in most contexts responses are not
+//!   allowed. This makes API more convenient to use.
+//! - [`RootTypeView`] represents any type that can be used as a root type, that is any type
+//!   including responses. This is the most general type view, but is rarely used.
+//!
+//! ## Named References
+//!
+//! Named references are references to type definitions. For instance
+//!
+//! ```text
+//! type Foo: string
+//!
+//! type Bar: Foo
+//!           ^^^ This is a named reference to `Foo`
+//! ```
+//!
+//! We represent named reference with two different views - [`NamedTypeRefView`] and [`NamedRootTypeRefView`].
+//! This is again, because in most contexts response types are not allowed. To make [`TypeView`]
+//! only contain non response types, we need to separate references to non-response types from
+//! references to any type.
+
 use crate::spec::Spec;
 use crate::spec::arena::typ::arena::EnumCursor;
 use crate::spec::arena::typ::arena::RecordCursor;
@@ -19,13 +52,18 @@ use crate::text::Name;
 /// inline type, and named references point to non-response types.
 #[derive(Debug, Clone, derive_more::Display)]
 pub enum InlineTyView<'a> {
+    /// A primitive type that doesn't reference or contain any other types.
     Primitive(PrimitiveTy),
 
+    /// Type of the form `T?`, where `T` is another inline type.
     #[display("`option`")]
     Option(ReferenceView<'a>),
+
+    /// Type of the form `[T]`, where `T` is another inline type.
     #[display("`array`")]
     Array(ReferenceView<'a>),
 
+    /// A reference to a type definition, where the referenced type is not a response.
     NamedReference(NamedTypeRefView<'a>),
 }
 
@@ -58,12 +96,18 @@ impl<'a> InlineTyView<'a> {
 /// is [`RootTypeView`].
 #[derive(Debug, Clone, derive_more::Display)]
 pub enum TypeView<'a> {
+    /// Inline types
     Inline(InlineTyView<'a>),
 
+    /// A record
     #[display("`record`")]
     Record(RecordView<'a>),
+
+    /// A tagged union
     #[display("`union`")]
     Union(UnionView<'a>),
+
+    /// An enum
     #[display("`enum`")]
     Enum(EnumView<'a>),
 }
@@ -396,10 +440,14 @@ impl<'a> ResponseTyView<'a> {
 /// Any type including response.
 #[derive(Debug, Clone, derive_more::Display)]
 pub enum RootTypeView<'a> {
+    /// A response type.
     #[display("`response`")]
     Response(ResponseTyView<'a>),
+
+    /// Any non-response type.
     Type(TypeView<'a>),
 
+    /// A named reference to any root type.
     NamedReference(NamedRootTypeRefView<'a>),
 }
 

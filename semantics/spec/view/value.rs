@@ -1,3 +1,5 @@
+//!  Views over values in the [`Spec`].
+
 use crate::spec::Spec;
 use crate::spec::arena::value::{
     ArrayCursor, ObjectCursor, ObjectFieldId, PrimitiveValue, ValueData, ValueId,
@@ -7,18 +9,33 @@ use crate::text::Name;
 /// Representation of a value.
 #[derive(Debug, derive_more::Display, Clone)]
 pub enum ValueView<'a> {
+    /// Null value.
     #[display("`null`")]
     Null,
+
+    /// String value.
     #[display("string")]
     String(&'a str),
+
+    /// Boolean value.
     #[display("bool")]
     Bool(bool),
+
+    /// Integer value.
+    ///
+    /// i128 is used to represent both signed and unsigned integers, since it can represent the full range of i64 and u64.
     #[display("integer")]
     Integer(i128), // i128 is large enough for i64 and u64
+
+    /// Floating point value.
     #[display("float")]
     Float(f64),
+
+    /// Object value.
     #[display("object")]
     Object(ObjectView<'a>),
+
+    /// Array of values.
     #[display("array")]
     Array(ArrayView<'a>),
 }
