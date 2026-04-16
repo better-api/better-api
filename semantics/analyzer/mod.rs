@@ -21,8 +21,8 @@ mod symbols;
 mod typ;
 mod value;
 
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 /// Result returned by the analyzer.
 ///
@@ -176,8 +176,7 @@ impl<'a> SpecLowerer<'a> {
 
 impl LoweredSpec {
     fn validate_spec(mut self) -> AnalyzeResult {
-        // TODO: Validate paths
-        // self.validate_paths();
+        self.validate_paths();
 
         if self.reports.iter().any(|r| r.severity == Severity::Error) {
             AnalyzeResult {

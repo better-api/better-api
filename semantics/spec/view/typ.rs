@@ -41,6 +41,7 @@ use crate::spec::arena::typ::arena::{
 };
 use crate::spec::arena::typ::id::ResponseReferenceProof;
 use crate::spec::arena::typ::id::SimpleRecordReferenceProof;
+use crate::spec::arena::typ::id::TypeFieldId;
 use crate::spec::arena::typ::id::{InlineTypeId, ResponseTypeId, RootTypeId, TypeId};
 pub use crate::spec::arena::typ::{EnumTy, PrimitiveTy};
 use crate::spec::view::value::ValueView;
@@ -220,6 +221,8 @@ impl<'a> NamedRootTypeRefView<'a> {
 /// Record field.
 #[derive(Clone)]
 pub struct RecordFieldView<'a> {
+    pub(crate) id: TypeFieldId,
+
     /// Name of the field.
     pub name: &'a Name,
     /// Default value of the field.
@@ -288,6 +291,7 @@ impl<'a> Iterator for RecordFieldIter<'a> {
 
         self.cursor = next;
         Some(RecordFieldView {
+            id: field.id,
             name,
             default,
             docs,

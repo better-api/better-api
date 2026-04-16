@@ -1,4 +1,4 @@
-use better_api_syntax::{ast, parse, tokenize, Parse};
+use better_api_syntax::{Parse, ast, parse, tokenize};
 use indoc::indoc;
 
 use crate::analyzer::Analyzer;
