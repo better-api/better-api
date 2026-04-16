@@ -6,7 +6,7 @@
 use crate::path::Path;
 use crate::spec::Spec;
 use crate::spec::arena::endpoint::{
-    EndpointCursor, EndpointData, EndpointResponseTypeId, ResponseCursor, ResponseData,
+    EndpointCursor, EndpointData, EndpointId, EndpointResponseTypeId, ResponseCursor, ResponseData,
     ResponseStatus, RouteCursor, RouteData,
 };
 use crate::spec::view::typ::{InlineTyView, NamedRootTypeRefView, NamedTypeRefView};
@@ -69,6 +69,8 @@ impl<'a> RouteView<'a> {
 /// Semantic view of an endpoint.
 #[derive(derive_more::Debug, Clone)]
 pub struct EndpointView<'a> {
+    pub(crate) id: EndpointId,
+
     /// Path of the endpoint.
     pub path: Path<'a>,
 
@@ -115,6 +117,7 @@ impl<'a> EndpointView<'a> {
         let response_cursor = spec.endpoints.endpoint_response_cursor(&data);
 
         Self {
+            id: data.id,
             path: spec.endpoints.get_path(data.path),
             docs: data.fields.docs.map(|id| spec.strings.resolve(id)),
             method: data.fields.method,

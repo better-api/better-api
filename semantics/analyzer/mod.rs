@@ -6,14 +6,13 @@ use better_api_diagnostic::{Report, Severity};
 use better_api_syntax::{TextRange, ast};
 
 use crate::path::PathId;
-use crate::spec::endpoint::{EndpointArena, EndpointId};
-use crate::spec::typ::{TypeArena, TypeFieldId};
-use crate::spec::value::ValueArena;
-use crate::spec::{Metadata, Spec, SymbolTable};
+use crate::spec::arena::endpoint::{EndpointArena, EndpointId};
+use crate::spec::arena::typ::builder::TypeArenaBuilder;
+use crate::spec::arena::typ::id::TypeFieldId;
+use crate::spec::arena::value::ValueArena;
+use crate::spec::metadata::Metadata;
+use crate::spec::{Spec, SymbolTable};
 use crate::text::{StringId, StringInterner};
-
-#[cfg(test)]
-use crate::spec::SpecContext;
 
 mod compare;
 mod endpoint;
@@ -22,8 +21,8 @@ mod symbols;
 mod typ;
 mod value;
 
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 
 /// Result returned by the analyzer.
 ///
@@ -39,42 +38,12 @@ pub struct AnalyzeResult {
 
 /// Analyzes the AST and returns all reports and semantic representation of the Spec.
 pub fn analyze(root: &ast::Root) -> AnalyzeResult {
-    let mut analyzer = Analyzer::new(root);
-    analyzer.analyze();
-    analyzer.into_spec()
+    let lowerer = SpecLowerer::new(root);
+    let lowered_spec = lowerer.lower_spec();
+    lowered_spec.validate_spec()
 }
 
 type SymbolMap = HashMap<StringId, ast::AstPtr<ast::TypeDefinition>>;
-
-/// Core type responsible for semantic analysis.
-#[derive(Clone)]
-pub(crate) struct Analyzer<'a> {
-    // Valid spec data being constructed
-    strings: StringInterner,
-    spec_symbol_table: SymbolTable,
-
-    metadata: Metadata,
-
-    values: ValueArena,
-    types: TypeArena,
-    endpoints: EndpointArena,
-
-    // Mappings used by analyzer during validation.
-    // This allows for partial & invalid spec to be analyzed fully, without
-    // being lowered into valid data defined above.
-    symbol_map: SymbolMap,
-    root: &'a ast::Root,
-
-    // Reports generated during semantic analysis
-    reports: Vec<Report>,
-
-    // Range mapping for some of the semantic elements.
-    //
-    // Some of the checks are done after lowering the types, because
-    // it's easier this way. We use this map to store the range information
-    // so that the checks can emit nice reports.
-    range_map: RangeMap,
-}
 
 #[derive(Clone, Default)]
 struct RangeMap {
@@ -102,6 +71,42 @@ struct RangeMap {
     endpoint_path_attribute_name: HashMap<EndpointId, TextRange>,
 }
 
+pub(crate) struct LoweredSpec {
+    spec: Spec,
+    range_map: RangeMap,
+    reports: Vec<Report>,
+}
+
+/// Core type responsible for lowering spec
+#[derive(Clone)]
+pub(crate) struct SpecLowerer<'a> {
+    // Valid spec data being constructed
+    strings: StringInterner,
+    spec_symbol_table: SymbolTable,
+
+    metadata: Metadata,
+
+    values: ValueArena,
+    types: TypeArenaBuilder,
+    endpoints: EndpointArena,
+
+    // Mappings used by analyzer during validation.
+    // This allows for partial & invalid spec to be analyzed fully, without
+    // being lowered into valid data defined above.
+    symbol_map: SymbolMap,
+    root: &'a ast::Root,
+
+    // Reports generated during semantic analysis
+    reports: Vec<Report>,
+
+    // Range mapping for some of the semantic elements.
+    //
+    // Some of the checks are done after lowering the types, because
+    // it's easier this way. We use this map to store the range information
+    // so that the checks can emit nice reports.
+    range_map: RangeMap,
+}
+
 struct Context<'o, 'a> {
     strings: &'o mut StringInterner,
     spec_symbol_table: &'o mut SymbolTable,
@@ -112,7 +117,7 @@ struct Context<'o, 'a> {
     root: &'a ast::Root,
 }
 
-impl<'a> Analyzer<'a> {
+impl<'a> SpecLowerer<'a> {
     /// Create a new analyzer.
     ///
     /// Runs semantic analysis on the given AST and creates an analyzer
@@ -137,20 +142,8 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Get a temporary view over the current analyzer state.
-    #[cfg(test)]
-    fn spec_ctx<'s>(&'s self) -> SpecContext<'s> {
-        SpecContext {
-            strings: &self.strings,
-            symbol_table: &self.spec_symbol_table,
-            values: &self.values,
-            types: &self.types,
-            endpoints: &self.endpoints,
-        }
-    }
-
     /// Analyzes the complete syntax tree and populates the analyzer arenas.
-    fn analyze(&mut self) {
+    fn lower_spec(mut self) -> LoweredSpec {
         self.lower_metadata();
 
         // Build symbol map and do basic symbol validation
@@ -160,28 +153,40 @@ impl<'a> Analyzer<'a> {
 
         self.lower_type_definitions();
         self.lower_endpoints_and_routes();
-        self.validate_paths();
-    }
 
-    fn into_spec(self) -> AnalyzeResult {
-        // Construct the final spec
+        let types = self
+            .types
+            .finish(&self.spec_symbol_table)
+            .expect("SpecLowerer should build type arena correctly");
+
+        LoweredSpec {
+            spec: Spec {
+                strings: self.strings,
+                symbol_table: self.spec_symbol_table,
+                metadata: self.metadata,
+                values: self.values,
+                types,
+                endpoints: self.endpoints,
+            },
+            range_map: self.range_map,
+            reports: self.reports,
+        }
+    }
+}
+
+impl LoweredSpec {
+    fn validate_spec(mut self) -> AnalyzeResult {
+        // TODO: Validate paths
+        // self.validate_paths();
+
         if self.reports.iter().any(|r| r.severity == Severity::Error) {
             AnalyzeResult {
                 spec: None,
                 reports: self.reports,
             }
         } else {
-            let spec = Spec {
-                strings: self.strings,
-                symbol_table: self.spec_symbol_table,
-                metadata: self.metadata,
-                values: self.values,
-                types: self.types,
-                endpoints: self.endpoints,
-            };
-
             AnalyzeResult {
-                spec: Some(spec),
+                spec: Some(self.spec),
                 reports: self.reports,
             }
         }

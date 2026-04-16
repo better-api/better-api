@@ -2,9 +2,13 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct InlineTypeId(pub(super) u32);
 
-#[cfg(test)]
 impl InlineTypeId {
-    pub(crate) fn from_root_type_id(id: RootTypeId) -> Self {
+    /// Creates inline type id from a root type id.
+    ///
+    /// ## Safety
+    /// It's the caller's responsibility to check that this is actually true.
+    /// Constructing a proof with wrong type, and using it, will lead to panics!
+    pub(crate) unsafe fn from_root_type_id(id: RootTypeId) -> Self {
         Self(id.0)
     }
 }
@@ -59,7 +63,7 @@ pub(crate) struct TypeFieldId {
 /// Proof that the type at this arena position was validated
 /// as a simple record behind a reference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct SimpleRecordReferenceProof(TypeId);
+pub(crate) struct SimpleRecordReferenceProof(InlineTypeId);
 
 impl SimpleRecordReferenceProof {
     /// Creates new proof that the type is actually a reference to
@@ -67,12 +71,12 @@ impl SimpleRecordReferenceProof {
     ///
     /// It's the caller's responsibility to check that this is actually true.
     /// Constructing a proof with wrong type, and using it, will lead to panics!
-    pub(crate) fn new(id: TypeId) -> Self {
+    pub(crate) unsafe fn new(id: InlineTypeId) -> Self {
         Self(id)
     }
 
     /// Returns id of the type behind the proof.
-    pub(crate) fn id(&self) -> TypeId {
+    pub(crate) fn id(&self) -> InlineTypeId {
         self.0
     }
 }
@@ -88,7 +92,7 @@ impl ResponseReferenceProof {
     ///
     /// It's the caller's responsibility to check that this is actually true.
     /// Constructing a proof with wrong type, and using it, will lead to panics!
-    pub(crate) fn new(id: RootTypeId) -> Self {
+    pub(crate) unsafe fn new(id: RootTypeId) -> Self {
         Self(id)
     }
 

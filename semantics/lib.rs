@@ -9,6 +9,6 @@ pub mod path;
 pub mod spec;
 pub mod text;
 
-// mod analyzer;
+mod analyzer;
 
-// pub use analyzer::{AnalyzeResult, analyze};
+pub use analyzer::{AnalyzeResult, analyze};

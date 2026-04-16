@@ -3,7 +3,7 @@ use better_api_syntax::TextRange;
 use better_api_syntax::ast::{self, AstNode, AstPtr};
 use smallvec::SmallVec;
 
-use crate::analyzer::{Analyzer, SymbolMap};
+use crate::analyzer::{SpecLowerer, SymbolMap};
 use crate::text::{StringId, StringInterner};
 
 type ResolvePath = SmallVec<[StringId; 10]>;
@@ -31,7 +31,7 @@ pub(crate) enum ResolvedSymbol {
     Type(ast::Type),
 }
 
-impl<'a> Analyzer<'a> {
+impl<'a> SpecLowerer<'a> {
     /// Dereferences a type reference node. Sugar for [`deref`].
     ///
     /// Errors are not reported. For detecting missing symbols, use [`Self::resolve`] which reports

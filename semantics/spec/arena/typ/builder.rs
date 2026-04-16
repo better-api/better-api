@@ -403,10 +403,19 @@ impl TypeArenaBuilder {
     /// Add a reference to the arena.
     ///
     /// Returns the [`RootTypeId`] assigned to the new type.
-    pub(crate) fn add_reference(&mut self, reference: RootRef) -> RootTypeId {
+    pub(crate) fn add_root_reference(&mut self, reference: RootRef) -> RootTypeId {
         let idx = self.data.len();
         self.data.push(Slot::Reference(reference.0));
         RootTypeId(idx as u32)
+    }
+
+    /// Add a reference to the arena.
+    ///
+    /// Returns the [`InlineTypeId`] assigned to the new type.
+    pub(crate) fn add_reference(&mut self, reference: TypeRef) -> InlineTypeId {
+        let idx = self.data.len();
+        self.data.push(Slot::Reference(reference.0));
+        InlineTypeId(idx as u32)
     }
 
     /// Add a response to the arena.

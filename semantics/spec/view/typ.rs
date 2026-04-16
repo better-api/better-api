@@ -479,7 +479,7 @@ impl Spec {
         &'a self,
         id: SimpleRecordReferenceProof,
     ) -> NamedTypeRefView<'a> {
-        let TypeData::Inline(InlineTypeData::Reference(data)) = self.types.get_type(id.id()) else {
+        let InlineTypeData::Reference(data) = self.types.get_inline_type(id.id()) else {
             unreachable!("SimpleRecordReferenceProof must point to a ReferenceData type slot");
         };
         NamedTypeRefView::from_data(self, data)
@@ -507,6 +507,7 @@ mod test {
     use super::{InlineTyView, RootTypeView, TypeView};
     use crate::spec::Spec;
     use crate::spec::arena::typ::builder::{RootRef, TypeArenaBuilder, TypeRef};
+    use crate::spec::arena::typ::id::InlineTypeId;
     use crate::spec::arena::typ::{EnumTy, PrimitiveTy, TypeDefData};
     use crate::spec::arena::value::PrimitiveValue;
     use crate::text::NameId;
@@ -833,9 +834,9 @@ mod test {
             },
         );
 
-        let enum_ref_id = builder.add_reference(RootRef(enum_name));
+        let enum_ref_id = builder.add_root_reference(RootRef(enum_name));
         let response_id = builder.add_response(
-            crate::spec::arena::typ::id::InlineTypeId::from_root_type_id(enum_ref_id),
+            unsafe { InlineTypeId::from_root_type_id(enum_ref_id) },
             None,
             None,
         );
@@ -848,7 +849,7 @@ mod test {
             },
         );
 
-        let response_ref_id = builder.add_reference(RootRef(response_name));
+        let response_ref_id = builder.add_root_reference(RootRef(response_name));
         spec.types = builder
             .finish(&spec.symbol_table)
             .expect("type arena should resolve references");

@@ -316,6 +316,8 @@ pub(crate) struct RouteData {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct EndpointData {
+    pub(crate) id: EndpointId,
+
     pub path: PathId,
     pub fields: EndpointFields,
 
@@ -398,6 +400,7 @@ impl EndpointArena {
         };
 
         EndpointData {
+            id,
             path: *path,
             fields: fields.clone(),
             first: id.0 + 1,
@@ -543,6 +546,7 @@ impl EndpointArena {
                         end: c.end,
                     };
                     let data = EndpointData {
+                        id: EndpointId(current),
                         path: *path,
                         fields: fields.clone(),
                         first: current + 1,
