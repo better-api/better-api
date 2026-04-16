@@ -154,6 +154,10 @@ impl<'a> SpecLowerer<'a> {
         self.lower_type_definitions();
         self.lower_endpoints_and_routes();
 
+        self.into_lowered_spec()
+    }
+
+    fn into_lowered_spec(self) -> LoweredSpec {
         let types = self
             .types
             .finish(&self.spec_symbol_table)
