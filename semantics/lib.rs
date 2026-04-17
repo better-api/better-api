@@ -5,6 +5,7 @@
 #![warn(missing_docs)]
 #![warn(rustdoc::missing_crate_level_docs)]
 
+pub mod mime;
 pub mod path;
 pub mod spec;
 pub mod text;
