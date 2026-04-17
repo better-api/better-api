@@ -29,11 +29,11 @@ fn lower_primitives() {
         let tokens = tokenize(&text, &mut diagnostics);
         let res = parse(tokens);
 
-        let mut analyzer = SpecLowerer::new(&res.root);
+        let mut lowerer = SpecLowerer::new(&res.root);
 
         let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-        let id = analyzer.lower_type(&typ).unwrap();
-        let lowered = analyzer.into_lowered_spec();
+        let id = lowerer.lower_type(&typ).unwrap();
+        let lowered = lowerer.into_lowered_spec();
 
         assert_eq!(lowered.reports, vec![]);
 
@@ -60,14 +60,14 @@ fn lower_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
-    analyzer.validate_symbols();
-    assert!(analyzer.reports.is_empty());
+    let mut lowerer = SpecLowerer::new(&res.root);
+    lowerer.validate_symbols();
+    assert!(lowerer.reports.is_empty());
 
-    analyzer.lower_type_definitions();
-    assert!(analyzer.reports.is_empty());
+    lowerer.lower_type_definitions();
+    assert!(lowerer.reports.is_empty());
 
-    let lowered = analyzer.into_lowered_spec();
+    let lowered = lowerer.into_lowered_spec();
 
     let name_id = lowered.spec.strings.get("Foo").unwrap();
     let type_def = lowered.spec.symbol_table.get(&name_id).unwrap();
@@ -97,14 +97,14 @@ fn lower_simple_array() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = analyzer.lower_type(&typ).unwrap();
+    let id = lowerer.lower_type(&typ).unwrap();
 
-    assert_eq!(analyzer.reports, vec![]);
+    assert_eq!(lowerer.reports, vec![]);
 
-    let lowered = analyzer.into_lowered_spec();
+    let lowered = lowerer.into_lowered_spec();
 
     let arr = match lowered.spec.get_root_type(id) {
         RootTypeView::Type(TypeView::Inline(InlineTypeView::Array(arr))) => arr,
@@ -126,12 +126,12 @@ fn lower_nested_array() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = analyzer.lower_type(&typ).unwrap();
+    let id = lowerer.lower_type(&typ).unwrap();
 
-    let lowered = analyzer.into_lowered_spec();
+    let lowered = lowerer.into_lowered_spec();
     assert_eq!(lowered.reports, vec![]);
 
     let arr = match lowered.spec.get_root_type(id) {
@@ -159,13 +159,13 @@ fn lower_empty_array() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = analyzer.lower_type(&typ);
+    let id = lowerer.lower_type(&typ);
     assert_eq!(id, None);
 
-    assert_eq!(analyzer.reports, vec![]);
+    assert_eq!(lowerer.reports, vec![]);
 }
 
 #[test]
@@ -178,14 +178,14 @@ fn lower_invalid_array() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = analyzer.lower_type(&typ);
+    let id = lowerer.lower_type(&typ);
     assert_eq!(id, None);
 
     assert_eq!(
-            analyzer.reports,
+            lowerer.reports,
             vec![
                 Report::error("inline union not allowed in array".to_string()).add_label(
                     Label::primary("inline union type not allowed".to_string(), Span::new(11, 19))
@@ -204,13 +204,13 @@ fn lower_simple_option() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = analyzer.lower_type(&typ).unwrap();
+    let id = lowerer.lower_type(&typ).unwrap();
 
-    assert_eq!(analyzer.reports, vec![]);
-    let lowered = analyzer.into_lowered_spec();
+    assert_eq!(lowerer.reports, vec![]);
+    let lowered = lowerer.into_lowered_spec();
 
     let opt = match lowered.spec.get_root_type(id) {
         RootTypeView::Type(TypeView::Inline(InlineTypeView::Option(opt))) => opt,
@@ -234,14 +234,14 @@ fn lower_nested_option() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = analyzer.lower_type(&typ).unwrap();
+    let id = lowerer.lower_type(&typ).unwrap();
 
-    assert_eq!(analyzer.reports, vec![]);
+    assert_eq!(lowerer.reports, vec![]);
 
-    let lowered = analyzer.into_lowered_spec();
+    let lowered = lowerer.into_lowered_spec();
     let opt = match lowered.spec.get_root_type(id) {
         RootTypeView::Type(TypeView::Inline(InlineTypeView::Option(opt))) => opt,
         _ => panic!(),
@@ -265,14 +265,14 @@ fn lower_invalid_option() {
     assert!(diagnostics.is_empty());
     assert!(res.reports.is_empty());
 
-    let mut analyzer = SpecLowerer::new(&res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = analyzer.lower_type(&typ);
+    let id = lowerer.lower_type(&typ);
     assert_eq!(id, None);
 
     assert_eq!(
-            analyzer.reports,
+            lowerer.reports,
             vec![
                 Report::error("inline record not allowed in option".to_string())
                     .add_label(Label::primary(
@@ -316,18 +316,18 @@ fn lower_basic_record() {
 
     assert_eq!(res.root.type_definitions().count(), 2);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
 
     let ids: Vec<_> = res
         .root
         .type_definitions()
         .map(|typ| {
             let typ = typ.typ().unwrap();
-            analyzer.lower_type(&typ).unwrap()
+            lowerer.lower_type(&typ).unwrap()
         })
         .collect();
 
-    let lowered = analyzer.into_lowered_spec();
+    let lowered = lowerer.into_lowered_spec();
     for id in ids {
         assert_eq!(lowered.reports, vec![]);
 
@@ -362,14 +362,14 @@ fn lower_empty_record() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = analyzer.lower_type(&typ).unwrap();
+    let id = lowerer.lower_type(&typ).unwrap();
 
-    assert_eq!(analyzer.reports, vec![]);
+    assert_eq!(lowerer.reports, vec![]);
 
-    let lowered = analyzer.into_lowered_spec();
+    let lowered = lowerer.into_lowered_spec();
     let rec = match lowered.spec.get_root_type(id) {
         RootTypeView::Type(TypeView::Record(rec)) => rec,
         _ => panic!(),
@@ -390,12 +390,12 @@ fn lower_invalid_record() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = analyzer.lower_type(&typ).unwrap();
+    let id = lowerer.lower_type(&typ).unwrap();
 
-    let lowered = analyzer.into_lowered_spec();
+    let lowered = lowerer.into_lowered_spec();
     assert_eq!(
         lowered.reports,
         vec![
@@ -427,14 +427,14 @@ fn lower_simple_enum() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = analyzer.lower_type(&typ).unwrap();
+    let id = lowerer.lower_type(&typ).unwrap();
 
-    assert_eq!(analyzer.reports, vec![]);
+    assert_eq!(lowerer.reports, vec![]);
 
-    let lowered = analyzer.into_lowered_spec();
+    let lowered = lowerer.into_lowered_spec();
 
     // Check enum was inserted and is in source map
     let enum_type = match lowered.spec.get_root_type(id) {
@@ -464,14 +464,14 @@ fn lower_empty_enum() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = analyzer.lower_type(&typ).unwrap();
+    let id = lowerer.lower_type(&typ).unwrap();
 
-    assert_eq!(analyzer.reports, vec![]);
+    assert_eq!(lowerer.reports, vec![]);
 
-    let lowered = analyzer.into_lowered_spec();
+    let lowered = lowerer.into_lowered_spec();
     let enum_type = match lowered.spec.get_root_type(id) {
         RootTypeView::Type(TypeView::Enum(e)) => e,
         _ => panic!(),
@@ -493,14 +493,14 @@ fn lower_invalid_enum() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = analyzer.lower_type(&typ);
+    let id = lowerer.lower_type(&typ);
     assert!(id.is_none());
 
     assert_eq!(
-        analyzer.reports,
+        lowerer.reports,
         vec![
             Report::error("invalid enum type `array`".to_string())
                 .add_label(Label::primary(
@@ -531,14 +531,14 @@ fn lower_simple_union() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = analyzer.lower_type(&typ).unwrap();
+    let id = lowerer.lower_type(&typ).unwrap();
 
-    assert!(analyzer.reports.is_empty());
+    assert!(lowerer.reports.is_empty());
 
-    let lowered = analyzer.into_lowered_spec();
+    let lowered = lowerer.into_lowered_spec();
 
     // Check union was inserted
     let union = match lowered.spec.get_root_type(id) {
@@ -573,12 +573,12 @@ fn lower_empty_union() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = analyzer.lower_type(&typ).unwrap();
+    let id = lowerer.lower_type(&typ).unwrap();
 
-    let lowered = analyzer.into_lowered_spec();
+    let lowered = lowerer.into_lowered_spec();
     assert_eq!(lowered.reports, vec![]);
 
     let union = match lowered.spec.get_root_type(id) {
@@ -602,13 +602,13 @@ fn lower_invalid_union() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = analyzer.lower_type(&typ);
+    let id = lowerer.lower_type(&typ);
     assert!(id.is_none());
 
-    insta::assert_debug_snapshot!(analyzer.reports);
+    insta::assert_debug_snapshot!(lowerer.reports);
 }
 
 #[test]
@@ -623,10 +623,10 @@ fn lower_simple_response() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
-    assert!(analyzer.reports.is_empty());
+    let lowerer = setup_lowerer(&res.root);
+    assert!(lowerer.reports.is_empty());
 
-    let lowered = analyzer.into_lowered_spec();
+    let lowered = lowerer.into_lowered_spec();
     let resp = match get_root_type(&lowered, "Resp") {
         RootTypeView::Response(resp) => resp,
         typ => panic!("expected response, got {typ:?}"),
@@ -658,8 +658,8 @@ fn lower_response_with_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
-    let lowered = analyzer.into_lowered_spec();
+    let lowerer = setup_lowerer(&res.root);
+    let lowered = lowerer.into_lowered_spec();
     assert!(lowered.reports.is_empty());
 
     let resp = match get_root_type(&lowered, "Resp") {
@@ -709,8 +709,8 @@ fn lower_response_with_inline_body() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
-    let lowered = analyzer.into_lowered_spec();
+    let lowerer = setup_lowerer(&res.root);
+    let lowered = lowerer.into_lowered_spec();
     assert!(lowered.reports.is_empty());
 
     let resp = match get_root_type(&lowered, "Resp") {
@@ -755,10 +755,10 @@ fn lower_response_invalid_body_response() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
+    let lowerer = setup_lowerer(&res.root);
 
     assert_eq!(
-        analyzer.reports,
+        lowerer.reports,
         vec![
             Report::error("invalid usage of `response` type".to_string())
                 .add_label(Label::primary(
@@ -772,8 +772,8 @@ fn lower_response_invalid_body_response() {
         ]
     );
 
-    let name_id = analyzer.strings.get("Resp").unwrap();
-    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
+    let name_id = lowerer.strings.get("Resp").unwrap();
+    assert!(!lowerer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -792,11 +792,11 @@ fn lower_response_invalid_body_file() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
+    let lowerer = setup_lowerer(&res.root);
 
-    assert_eq!(analyzer.reports.len(), 1);
+    assert_eq!(lowerer.reports.len(), 1);
     assert_eq!(
-        analyzer.reports,
+        lowerer.reports,
         vec![
             Report::error("invalid response body type".to_string())
                 .add_label(Label::primary(
@@ -813,8 +813,8 @@ fn lower_response_invalid_body_file() {
         ]
     );
 
-    let name_id = analyzer.strings.get("Resp").unwrap();
-    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
+    let name_id = lowerer.strings.get("Resp").unwrap();
+    assert!(!lowerer.spec_symbol_table.contains_key(&name_id));
 }
 
 // TODO: Mime types
@@ -831,8 +831,8 @@ fn lower_response_invalid_body_file() {
 //     let tokens = tokenize(text, &mut diagnostics);
 //     let res = parse(tokens);
 //
-//     let analyzer = setup_lowerer(&res.root);
-//     let lowered = analyzer.into_lowered_spec();
+//     let lowerer = setup_lowerer(&res.root);
+//     let lowered = lowerer.into_lowered_spec();
 //     assert!(lowered.reports.is_empty());
 //
 //     let resp = match get_root_type(&lowered, "Resp") {
@@ -863,8 +863,8 @@ fn lower_response_invalid_body_file() {
 //     let tokens = tokenize(text, &mut diagnostics);
 //     let res = parse(tokens);
 //
-//     let analyzer = setup_lowerer(&res.root);
-//     let lowered = analyzer.into_lowered_spec();
+//     let lowerer = setup_lowerer(&res.root);
+//     let lowered = lowerer.into_lowered_spec();
 //     insta::assert_debug_snapshot!(lowered.reports);
 //
 //     let resp = match get_root_type(&lowered, "Resp") {
@@ -895,11 +895,11 @@ fn lower_response_invalid_body_file() {
 //     let tokens = tokenize(text, &mut diagnostics);
 //     let res = parse(tokens);
 //
-//     let analyzer = setup_lowerer(&res.root);
+//     let lowerer = setup_lowerer(&res.root);
 //
-//     assert_eq!(analyzer.reports.len(), 1);
+//     assert_eq!(lowerer.reports.len(), 1);
 //     assert_eq!(
-//         analyzer.reports,
+//         lowerer.reports,
 //         vec![
 //             Report::error("invalid response body type".to_string())
 //                 .add_label(Label::primary(
@@ -916,8 +916,8 @@ fn lower_response_invalid_body_file() {
 //         ]
 //     );
 //
-//     let name_id = analyzer.strings.get("Resp").unwrap();
-//     assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
+//     let name_id = lowerer.strings.get("Resp").unwrap();
+//     assert!(!lowerer.spec_symbol_table.contains_key(&name_id));
 // }
 
 #[test]
@@ -937,8 +937,8 @@ fn lower_response_with_headers() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
-    let lowered = analyzer.into_lowered_spec();
+    let lowerer = setup_lowerer(&res.root);
+    let lowered = lowerer.into_lowered_spec();
     assert!(lowered.reports.is_empty());
 
     let resp = match get_root_type(&lowered, "Resp") {
@@ -981,11 +981,11 @@ fn lower_response_invalid_header_type() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
+    let lowerer = setup_lowerer(&res.root);
 
-    assert_eq!(analyzer.reports.len(), 1);
+    assert_eq!(lowerer.reports.len(), 1);
     assert_eq!(
-        analyzer.reports,
+        lowerer.reports,
         vec![
             Report::error("invalid headers type".to_string())
                 .add_label(Label::primary(
@@ -996,8 +996,8 @@ fn lower_response_invalid_header_type() {
         ]
     );
 
-    let name_id = analyzer.strings.get("Resp").unwrap();
-    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
+    let name_id = lowerer.strings.get("Resp").unwrap();
+    assert!(!lowerer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1021,11 +1021,11 @@ fn lower_response_invalid_header_type_nested_record() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
+    let lowerer = setup_lowerer(&res.root);
 
-    assert_eq!(analyzer.reports.len(), 1);
+    assert_eq!(lowerer.reports.len(), 1);
     assert_eq!(
-        analyzer.reports,
+        lowerer.reports,
         vec![
             Report::error("invalid headers type".to_string())
                 .add_label(Label::primary(
@@ -1039,8 +1039,8 @@ fn lower_response_invalid_header_type_nested_record() {
         ]
     );
 
-    let name_id = analyzer.strings.get("Resp").unwrap();
-    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
+    let name_id = lowerer.strings.get("Resp").unwrap();
+    assert!(!lowerer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1059,8 +1059,8 @@ fn lower_response_with_inline_headers() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
-    let lowered = analyzer.into_lowered_spec();
+    let lowerer = setup_lowerer(&res.root);
+    let lowered = lowerer.into_lowered_spec();
     assert!(lowered.reports.is_empty());
 
     let resp = match get_root_type(&lowered, "Resp") {
@@ -1106,10 +1106,10 @@ fn lower_response_headers_with_file() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
+    let lowerer = setup_lowerer(&res.root);
 
     assert_eq!(
-        analyzer.reports,
+        lowerer.reports,
         vec![
             Report::error("invalid headers type".to_string())
                 .add_label(Label::primary(
@@ -1123,8 +1123,8 @@ fn lower_response_headers_with_file() {
         ]
     );
 
-    let name_id = analyzer.strings.get("Resp").unwrap();
-    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
+    let name_id = lowerer.strings.get("Resp").unwrap();
+    assert!(!lowerer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1143,8 +1143,8 @@ fn lower_response_headers_with_option() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
-    let lowered = analyzer.into_lowered_spec();
+    let lowerer = setup_lowerer(&res.root);
+    let lowered = lowerer.into_lowered_spec();
     assert!(lowered.reports.is_empty());
 
     let resp = match get_root_type(&lowered, "Resp") {
@@ -1190,10 +1190,10 @@ fn lower_response_headers_with_array_invalid() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
+    let lowerer = setup_lowerer(&res.root);
 
     assert_eq!(
-        analyzer.reports,
+        lowerer.reports,
         vec![
             Report::error("invalid headers type".to_string())
                 .add_label(Label::primary(
@@ -1207,8 +1207,8 @@ fn lower_response_headers_with_array_invalid() {
         ]
     );
 
-    let name_id = analyzer.strings.get("Resp").unwrap();
-    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
+    let name_id = lowerer.strings.get("Resp").unwrap();
+    assert!(!lowerer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1225,10 +1225,10 @@ fn lower_response_missing_body() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
+    let lowerer = setup_lowerer(&res.root);
 
     assert_eq!(
-        analyzer.reports,
+        lowerer.reports,
         vec![
             Report::error("missing response body".to_string())
                 .add_label(Label::primary(
@@ -1239,8 +1239,8 @@ fn lower_response_missing_body() {
         ]
     );
 
-    let name_id = analyzer.strings.get("Resp").unwrap();
-    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
+    let name_id = lowerer.strings.get("Resp").unwrap();
+    assert!(!lowerer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1263,10 +1263,10 @@ fn lower_response_body_file_in_nested_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
+    let lowerer = setup_lowerer(&res.root);
 
     assert_eq!(
-        analyzer.reports,
+        lowerer.reports,
         vec![
             Report::error("invalid response body type".to_string())
                 .add_label(Label::primary(
@@ -1283,8 +1283,8 @@ fn lower_response_body_file_in_nested_reference() {
         ]
     );
 
-    let name_id = analyzer.strings.get("Resp").unwrap();
-    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
+    let name_id = lowerer.strings.get("Resp").unwrap();
+    assert!(!lowerer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1300,14 +1300,14 @@ fn lower_enum_invalid_member() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let id = analyzer.lower_type(&typ);
+    let id = lowerer.lower_type(&typ);
     assert!(id.is_none());
 
     assert_eq!(
-        analyzer.reports,
+        lowerer.reports,
         vec![
             Report::error("expected i32, found string".to_string())
                 .add_label(Label::primary(
@@ -1338,10 +1338,10 @@ fn lower_response_inline_body_name_collision() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
+    let lowerer = setup_lowerer(&res.root);
 
     assert_eq!(
-        analyzer.reports,
+        lowerer.reports,
         vec![
             Report::error("name `RespBody` collides with auto generated name".to_string())
                 .add_label(Label::primary(
@@ -1355,8 +1355,8 @@ fn lower_response_inline_body_name_collision() {
         ]
     );
 
-    let name_id = analyzer.strings.get("Resp").unwrap();
-    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
+    let name_id = lowerer.strings.get("Resp").unwrap();
+    assert!(!lowerer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1369,10 +1369,10 @@ fn lower_missing_symbol() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
+    let lowerer = setup_lowerer(&res.root);
 
     assert_eq!(
-        analyzer.reports,
+        lowerer.reports,
         vec![
             Report::error("undefined symbol `Bar`".to_string()).add_label(Label::primary(
                 "symbol `Bar` is not defined".to_string(),
@@ -1381,8 +1381,8 @@ fn lower_missing_symbol() {
         ]
     );
 
-    let name_id = analyzer.strings.get("Foo").unwrap();
-    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
+    let name_id = lowerer.strings.get("Foo").unwrap();
+    assert!(!lowerer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1399,10 +1399,10 @@ fn lower_array_option_response_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
+    let lowerer = setup_lowerer(&res.root);
 
     assert_eq!(
-        analyzer.reports,
+        lowerer.reports,
         vec![
             Report::error("invalid usage of `response` type".to_string())
                 .add_label(Label::primary(
@@ -1416,8 +1416,8 @@ fn lower_array_option_response_reference() {
         ]
     );
 
-    let name_id = analyzer.strings.get("Bar").unwrap();
-    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
+    let name_id = lowerer.strings.get("Bar").unwrap();
+    assert!(!lowerer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1441,8 +1441,8 @@ fn lower_response_headers_with_enum_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
-    let lowered = analyzer.into_lowered_spec();
+    let lowerer = setup_lowerer(&res.root);
+    let lowered = lowerer.into_lowered_spec();
     assert!(lowered.reports.is_empty());
 
     let resp = match get_root_type(&lowered, "Resp") {
@@ -1491,10 +1491,10 @@ fn lower_enum_type_variants() {
     let res = parse(tokens);
 
     for def in res.root.type_definitions() {
-        let mut analyzer = SpecLowerer::new(&res.root);
+        let mut lowerer = SpecLowerer::new(&res.root);
         let typ = def.typ().unwrap();
-        let id = analyzer.lower_type(&typ).unwrap();
-        let lowered = analyzer.into_lowered_spec();
+        let id = lowerer.lower_type(&typ).unwrap();
+        let lowered = lowerer.into_lowered_spec();
 
         let enum_type = match lowered.spec.get_root_type(id) {
             RootTypeView::Type(TypeView::Enum(enm)) => enm,
@@ -1535,8 +1535,8 @@ fn lower_response_content_type_label_and_union_body() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
-    let lowered = analyzer.into_lowered_spec();
+    let lowerer = setup_lowerer(&res.root);
+    let lowered = lowerer.into_lowered_spec();
 
     insta::assert_debug_snapshot!(lowered.reports);
 
@@ -1583,12 +1583,12 @@ fn lower_union_nested_file_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
+    let lowerer = setup_lowerer(&res.root);
 
-    insta::assert_debug_snapshot!(analyzer.reports);
+    insta::assert_debug_snapshot!(lowerer.reports);
 
-    let name_id = analyzer.strings.get("Foo").unwrap();
-    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
+    let name_id = lowerer.strings.get("Foo").unwrap();
+    assert!(!lowerer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1606,8 +1606,8 @@ fn lower_record_default_value_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
-    let lowered = analyzer.into_lowered_spec();
+    let lowerer = setup_lowerer(&res.root);
+    let lowered = lowerer.into_lowered_spec();
     assert!(lowered.reports.is_empty());
 
     let record = match get_root_type(&lowered, "Rec") {
@@ -1635,8 +1635,8 @@ fn lower_array_reference_and_invalid_inners() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
-    let lowered = analyzer.into_lowered_spec();
+    let lowerer = setup_lowerer(&res.root);
+    let lowered = lowerer.into_lowered_spec();
 
     insta::assert_debug_snapshot!(lowered.reports);
 
@@ -1679,10 +1679,10 @@ fn lower_cycle_reference_handling() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = setup_lowerer(&res.root);
+    let mut lowerer = setup_lowerer(&res.root);
 
-    analyzer.reports.sort_by_key(|rep| rep.labels[0].span.start);
-    insta::assert_debug_snapshot!(analyzer.reports);
+    lowerer.reports.sort_by_key(|rep| rep.labels[0].span.start);
+    insta::assert_debug_snapshot!(lowerer.reports);
 }
 
 #[test]
@@ -1704,12 +1704,12 @@ fn lower_headers_reference_response() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
+    let lowerer = setup_lowerer(&res.root);
 
-    insta::assert_debug_snapshot!(analyzer.reports);
+    insta::assert_debug_snapshot!(lowerer.reports);
 
-    let name_id = analyzer.strings.get("Out").unwrap();
-    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
+    let name_id = lowerer.strings.get("Out").unwrap();
+    assert!(!lowerer.spec_symbol_table.contains_key(&name_id));
 }
 
 #[test]
@@ -1741,9 +1741,9 @@ fn lower_record_invalid_inline_types_and_response_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
+    let lowerer = setup_lowerer(&res.root);
 
-    insta::assert_debug_snapshot!(analyzer.reports);
+    insta::assert_debug_snapshot!(lowerer.reports);
 }
 
 #[test]
@@ -1760,8 +1760,8 @@ fn lower_reference_to_response() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_lowerer(&res.root);
-    let lowered = analyzer.into_lowered_spec();
+    let lowerer = setup_lowerer(&res.root);
+    let lowered = lowerer.into_lowered_spec();
     assert!(lowered.reports.is_empty());
 
     let alias = match get_root_type(&lowered, "Alias") {
@@ -1788,12 +1788,12 @@ fn lower_repeated_field_names() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
-    let _ = analyzer.lower_type(&typ).unwrap();
+    let _ = lowerer.lower_type(&typ).unwrap();
 
-    insta::assert_debug_snapshot!(analyzer.reports);
+    insta::assert_debug_snapshot!(lowerer.reports);
 }
 
 #[test]
@@ -1809,8 +1809,8 @@ fn is_simple_type_edges() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
-    analyzer.validate_symbols();
+    let mut lowerer = SpecLowerer::new(&res.root);
+    lowerer.validate_symbols();
 
     let opt = res
         .root
@@ -1844,21 +1844,21 @@ fn is_simple_type_edges() {
         .typ()
         .unwrap();
 
-    assert!(!analyzer.is_simple_type(&opt, false, false).unwrap());
-    assert!(analyzer.is_simple_type(&arr, true, true).unwrap());
-    assert!(analyzer.is_simple_type(&empty_arr, true, true).unwrap());
-    assert!(analyzer.is_simple_type(&missing, true, true).unwrap());
+    assert!(!lowerer.is_simple_type(&opt, false, false).unwrap());
+    assert!(lowerer.is_simple_type(&arr, true, true).unwrap());
+    assert!(lowerer.is_simple_type(&empty_arr, true, true).unwrap());
+    assert!(lowerer.is_simple_type(&missing, true, true).unwrap());
 }
 
 fn setup_lowerer<'a>(root: &'a ast::Root) -> SpecLowerer<'a> {
-    let mut analyzer = SpecLowerer::new(root);
-    analyzer.validate_symbols();
-    analyzer.lower_type_definitions();
-    analyzer
+    let mut lowerer = SpecLowerer::new(root);
+    lowerer.validate_symbols();
+    lowerer.lower_type_definitions();
+    lowerer
 }
 
-fn get_root_type<'a>(analyzer: &'a LoweredSpec, name: &str) -> RootTypeView<'a> {
-    let name_id = analyzer.spec.strings.get(name).unwrap();
-    let type_def = analyzer.spec.symbol_table.get(&name_id).unwrap();
-    analyzer.spec.get_root_type(type_def.typ)
+fn get_root_type<'a>(lowerer: &'a LoweredSpec, name: &str) -> RootTypeView<'a> {
+    let name_id = lowerer.spec.strings.get(name).unwrap();
+    let type_def = lowerer.spec.symbol_table.get(&name_id).unwrap();
+    lowerer.spec.get_root_type(type_def.typ)
 }
