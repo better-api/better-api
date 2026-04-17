@@ -214,12 +214,12 @@ fn check_object_fields_unique(
 
 /// Validates value is a valid collection of mime types and lowers it.
 pub(crate) fn lower_mime_types(
-    values: &mut ValueArena,
-    strings: &mut StringInterner,
-    reports: &mut Vec<Report>,
-    value: &ast::Value,
+    _values: &mut ValueArena,
+    _strings: &mut StringInterner,
+    _reports: &mut Vec<Report>,
+    _value: &ast::Value,
 ) -> Option<()> {
-    return Some(());
+    Some(())
     // TODO: Mime type
     // match value {
     //     ast::Value::String(_) => {

@@ -516,7 +516,7 @@ pub(crate) fn lower_response(
     }
 
     // Does content type require the response body to be `file`
-    let requires_file = content_type_id.is_some_and(|id| {
+    let requires_file = content_type_id.is_some_and(|_id| {
         // let val_ctx = ValueContext {
         //     strings: ctx.strings,
         //     values,

@@ -114,7 +114,7 @@ impl InlineTypeData {
             Slot::Option { .. } => InlineTypeData::Option(OptionData {
                 inner_id: InlineTypeId(idx + 1),
             }),
-            Slot::Array { end } => InlineTypeData::Array(ArrayData {
+            Slot::Array { .. } => InlineTypeData::Array(ArrayData {
                 inner_id: InlineTypeId(idx + 1),
             }),
             _ => return None,
@@ -186,11 +186,7 @@ impl RootTypeData {
             | Slot::Record { .. }
             | Slot::Union { .. } => RootTypeData::Type(TypeData::from_slot(slot, idx)?),
 
-            Slot::Response {
-                body,
-                headers,
-                content_type,
-            } => RootTypeData::Response(ResponseData::from_slot(slot)?),
+            Slot::Response { .. } => RootTypeData::Response(ResponseData::from_slot(slot)?),
 
             _ => return None,
         };

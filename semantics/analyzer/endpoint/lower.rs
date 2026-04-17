@@ -336,7 +336,7 @@ fn lower_endpoint<P: EndpointParent>(
         .and_then(|v| lower_mime_types(values, ctx.ctx.strings, ctx.ctx.reports, &v));
 
     // Does accept parameter requires the request body to be `file`
-    let requires_file = accept_id.is_some_and(|id| {
+    let requires_file = accept_id.is_some_and(|_id| {
         // let val_ctx = ValueContext {
         //     strings: ctx.ctx.strings,
         //     values,
