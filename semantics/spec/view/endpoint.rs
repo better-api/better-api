@@ -9,7 +9,7 @@ use crate::spec::arena::endpoint::{
     EndpointCursor, EndpointData, EndpointId, EndpointResponseTypeId, ResponseCursor, ResponseData,
     ResponseStatus, RouteCursor, RouteData,
 };
-use crate::spec::view::typ::{InlineTyView, NamedRootTypeRefView, NamedTypeRefView};
+use crate::spec::view::typ::{InlineTypeView, NamedRootTypeRefView, NamedTypeRefView};
 use crate::text::Name;
 
 /// Semantic view of a route.
@@ -94,7 +94,7 @@ pub struct EndpointView<'a> {
     pub accept: Option<()>, // TODO: Mime types
 
     /// Request body type.
-    pub request_body: Option<InlineTyView<'a>>,
+    pub request_body: Option<InlineTypeView<'a>>,
     /// Additional documentation for request body.
     pub request_body_docs: Option<&'a str>,
 
@@ -202,7 +202,7 @@ pub enum EndpointResponseType<'a> {
     /// Reference to a named response type.
     Response(NamedRootTypeRefView<'a>),
     /// Inline response body type.
-    InlineType(InlineTyView<'a>),
+    InlineType(InlineTypeView<'a>),
 }
 
 /// Response definition
@@ -263,7 +263,7 @@ mod test {
     use crate::spec::arena::endpoint::{EndpointFields, EndpointResponseTypeId, ResponseStatus};
     use crate::spec::arena::typ::builder::TypeArenaBuilder;
     use crate::spec::arena::typ::{PrimitiveTy, PrimitiveTy::String};
-    use crate::spec::view::typ::InlineTyView;
+    use crate::spec::view::typ::InlineTypeView;
     use crate::text::{NameId, StringId};
     use http::{Method, StatusCode};
 
@@ -364,7 +364,7 @@ mod test {
         );
         assert!(matches!(
             health_responses[0].typ,
-            EndpointResponseType::InlineType(InlineTyView::Primitive(String))
+            EndpointResponseType::InlineType(InlineTypeView::Primitive(String))
         ));
 
         let mut root_routes = spec.root_routes();

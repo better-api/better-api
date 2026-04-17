@@ -3,10 +3,8 @@ use better_api_syntax::{Parse, ast, parse, tokenize};
 
 use indoc::indoc;
 
-use crate::{
-    analyzer::SpecLowerer,
-    spec::{arena::value::ValueId, view::value::ValueView},
-};
+use crate::analyzer::SpecLowerer;
+use crate::spec::{arena::value::ValueId, view::value::ValueView};
 
 #[test]
 fn lower_primitive_values() {
@@ -20,9 +18,9 @@ fn lower_primitive_values() {
 
     let res = parse_text(text);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
-    let ids = lower_values(&mut analyzer, &res.root);
-    let spec = analyzer.into_lowered_spec();
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let ids = lower_values(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
 
     let values: Vec<_> = ids.into_iter().map(|id| spec.spec.get_value(id)).collect();
 
@@ -43,9 +41,9 @@ fn lower_string_values() {
 
     let res = parse_text(text);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
-    let ids = lower_values(&mut analyzer, &res.root);
-    let spec = analyzer.into_lowered_spec();
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let ids = lower_values(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
     let values: Vec<_> = ids.into_iter().map(|id| spec.spec.get_value(id)).collect();
 
     assert!(spec.reports.is_empty());
@@ -63,9 +61,9 @@ fn lower_array_values() {
 
     let res = parse_text(text);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
-    let ids = lower_values(&mut analyzer, &res.root);
-    let spec = analyzer.into_lowered_spec();
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let ids = lower_values(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
 
     assert!(spec.reports.is_empty());
 
@@ -108,9 +106,9 @@ fn lower_array_values() {
 fn lower_empty_object() {
     let res = parse_text("name: {}");
 
-    let mut analyzer = SpecLowerer::new(&res.root);
-    let id = lower_first_value(&mut analyzer, &res.root);
-    let spec = analyzer.into_lowered_spec();
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let id = lower_first_value(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
 
     assert!(spec.reports.is_empty());
 
@@ -137,9 +135,9 @@ fn lower_object_fields_are_stable() {
 
     let res = parse_text(text);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
-    let ids = lower_values(&mut analyzer, &res.root);
-    let spec = analyzer.into_lowered_spec();
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let ids = lower_values(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
 
     for id in ids {
         let object = match spec.spec.get_value(id) {
@@ -169,9 +167,9 @@ fn lower_object_with_string_keys() {
 
     let res = parse_text(text);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
-    let id = lower_first_value(&mut analyzer, &res.root);
-    let spec = analyzer.into_lowered_spec();
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let id = lower_first_value(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
 
     assert!(spec.reports.is_empty());
 
@@ -199,9 +197,9 @@ fn lower_object_skips_missing_value() {
 
     let res = parse_text(text);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
-    let id = lower_first_value(&mut analyzer, &res.root);
-    let spec = analyzer.into_lowered_spec();
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let id = lower_first_value(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
 
     assert!(spec.reports.is_empty());
 
@@ -227,9 +225,9 @@ fn lower_object_reports_invalid_field_name() {
 
     let res = parse_text(text);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
-    let id = lower_first_value(&mut analyzer, &res.root);
-    let spec = analyzer.into_lowered_spec();
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let id = lower_first_value(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
 
     assert_eq!(
         spec.reports,
@@ -265,9 +263,9 @@ fn lower_object_reports_duplicate_keys() {
 
     let res = parse_text(text);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
-    let id = lower_first_value(&mut analyzer, &res.root);
-    let spec = analyzer.into_lowered_spec();
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let id = lower_first_value(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
 
     assert_eq!(
         spec.reports,
@@ -306,9 +304,9 @@ fn lower_nested_object() {
 
     let res = parse_text(text);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
-    let id = lower_first_value(&mut analyzer, &res.root);
-    let spec = analyzer.into_lowered_spec();
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let id = lower_first_value(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
 
     assert!(spec.reports.is_empty());
 
@@ -355,9 +353,9 @@ fn lower_complex_nested_structure() {
 
     let res = parse_text(text);
 
-    let mut analyzer = SpecLowerer::new(&res.root);
-    let id = lower_first_value(&mut analyzer, &res.root);
-    let spec = analyzer.into_lowered_spec();
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let id = lower_first_value(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
 
     assert!(spec.reports.is_empty());
 
@@ -422,17 +420,17 @@ fn parse_text(text: &str) -> Parse {
     parse(tokens.into_iter())
 }
 
-fn lower_first_value<'a>(analyzer: &mut SpecLowerer<'a>, root: &'a ast::Root) -> ValueId {
+fn lower_first_value<'a>(lowerer: &mut SpecLowerer<'a>, root: &'a ast::Root) -> ValueId {
     root.api_names()
         .next()
         .unwrap()
         .value()
-        .map(|value| analyzer.lower_value(&value))
+        .map(|value| lowerer.lower_value(&value))
         .unwrap()
 }
 
-fn lower_values<'a>(analyzer: &mut SpecLowerer<'a>, root: &'a ast::Root) -> Vec<ValueId> {
+fn lower_values<'a>(lowerer: &mut SpecLowerer<'a>, root: &'a ast::Root) -> Vec<ValueId> {
     root.api_names()
-        .map(|name| analyzer.lower_value(&name.value().unwrap()))
+        .map(|name| lowerer.lower_value(&name.value().unwrap()))
         .collect()
 }

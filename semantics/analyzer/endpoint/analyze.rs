@@ -7,7 +7,7 @@ use crate::analyzer::{LoweredSpec, RangeMap};
 use crate::path::{Path, PathParamIterator, PathPart};
 use crate::spec::Spec;
 use crate::spec::view::endpoint::{EndpointView, RouteView};
-use crate::spec::view::typ::{InlineTyView, TypeView};
+use crate::spec::view::typ::{InlineTypeView, TypeView};
 
 impl LoweredSpec {
     pub(crate) fn validate_paths(&mut self) {
@@ -194,7 +194,9 @@ impl<'a, 'b> PathParamTypeFields<'a, 'b> {
 
         let record = loop {
             match path_param.typ() {
-                TypeView::Inline(InlineTyView::NamedReference(reference)) => path_param = reference,
+                TypeView::Inline(InlineTypeView::NamedReference(reference)) => {
+                    path_param = reference
+                }
                 TypeView::Record(record) => break record,
 
                 _ => unreachable!("endpoint path parameter must be a reference to a simple record"),

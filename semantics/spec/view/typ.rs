@@ -52,7 +52,7 @@ use crate::text::Name;
 /// Primitive values are stored directly. Arrays and options wrap another
 /// inline type, and named references point to non-response types.
 #[derive(Debug, Clone, derive_more::Display)]
-pub enum InlineTyView<'a> {
+pub enum InlineTypeView<'a> {
     /// A primitive type that doesn't reference or contain any other types.
     Primitive(PrimitiveTy),
 
@@ -68,13 +68,13 @@ pub enum InlineTyView<'a> {
     NamedReference(NamedTypeRefView<'a>),
 }
 
-impl From<PrimitiveTy> for InlineTyView<'_> {
+impl From<PrimitiveTy> for InlineTypeView<'_> {
     fn from(value: PrimitiveTy) -> Self {
         Self::Primitive(value)
     }
 }
 
-impl<'a> InlineTyView<'a> {
+impl<'a> InlineTypeView<'a> {
     fn new(spec: &'a Spec, id: InlineTypeId) -> Self {
         Self::from_data(spec, spec.types.get_inline_type(id))
     }
@@ -98,7 +98,7 @@ impl<'a> InlineTyView<'a> {
 #[derive(Debug, Clone, derive_more::Display)]
 pub enum TypeView<'a> {
     /// Inline types
-    Inline(InlineTyView<'a>),
+    Inline(InlineTypeView<'a>),
 
     /// A record
     #[display("`record`")]
@@ -113,8 +113,8 @@ pub enum TypeView<'a> {
     Enum(EnumView<'a>),
 }
 
-impl<'a> From<InlineTyView<'a>> for TypeView<'a> {
-    fn from(value: InlineTyView<'a>) -> Self {
+impl<'a> From<InlineTypeView<'a>> for TypeView<'a> {
+    fn from(value: InlineTypeView<'a>) -> Self {
         Self::Inline(value)
     }
 }
@@ -132,7 +132,7 @@ impl<'a> TypeView<'a> {
 
     fn from_data(spec: &'a Spec, data: TypeData) -> Self {
         match data {
-            TypeData::Inline(inline) => InlineTyView::from_data(spec, inline).into(),
+            TypeData::Inline(inline) => InlineTypeView::from_data(spec, inline).into(),
             TypeData::Enum(data) => Self::Enum(EnumView::from_data(spec, data)),
             TypeData::Record(data) => Self::Record(RecordView::from_data(spec, data)),
             TypeData::Union(data) => Self::Union(UnionView::from_data(spec, data)),
@@ -155,8 +155,8 @@ impl<'a> ReferenceView<'a> {
     }
 
     /// Resolve the referenced type.
-    pub fn typ(&self) -> InlineTyView<'a> {
-        InlineTyView::new(self.spec, self.id)
+    pub fn typ(&self) -> InlineTypeView<'a> {
+        InlineTypeView::new(self.spec, self.id)
     }
 }
 
@@ -230,7 +230,7 @@ pub struct RecordFieldView<'a> {
     /// Documentation for the field.
     pub docs: Option<&'a str>,
     /// Type of the field.
-    pub typ: InlineTyView<'a>,
+    pub typ: InlineTypeView<'a>,
 }
 
 /// Union field.
@@ -241,7 +241,7 @@ pub struct UnionFieldView<'a> {
     /// Documentation for the field.
     pub docs: Option<&'a str>,
     /// Type of the field.
-    pub typ: InlineTyView<'a>,
+    pub typ: InlineTypeView<'a>,
 }
 
 /// Semantic representation of a record.
@@ -286,7 +286,7 @@ impl<'a> Iterator for RecordFieldIter<'a> {
 
         let name = self.spec.strings.resolve_name(field.name);
         let default = field.default.map(|id| self.spec.get_value(id));
-        let typ = InlineTyView::from_data(self.spec, field.typ);
+        let typ = InlineTypeView::from_data(self.spec, field.typ);
         let docs = field.docs.map(|id| self.spec.strings.resolve(id));
 
         self.cursor = next;
@@ -341,7 +341,7 @@ impl<'a> Iterator for UnionFieldIter<'a> {
         let (field, next) = self.spec.types.next_union_field(self.cursor)?;
 
         let name = self.spec.strings.resolve_name(field.name);
-        let typ = InlineTyView::from_data(self.spec, field.typ);
+        let typ = InlineTypeView::from_data(self.spec, field.typ);
         let docs = field.docs.map(|id| self.spec.strings.resolve(id));
 
         self.cursor = next;
@@ -415,9 +415,9 @@ impl<'a> Iterator for EnumMemberIter<'a> {
 
 /// Semantic information about a response type.
 #[derive(Debug, Clone)]
-pub struct ResponseTyView<'a> {
+pub struct ResponseTypeView<'a> {
     /// Type of response body
-    pub body: InlineTyView<'a>,
+    pub body: InlineTypeView<'a>,
 
     /// Optional headers
     pub headers: Option<NamedTypeRefView<'a>>,
@@ -427,15 +427,15 @@ pub struct ResponseTyView<'a> {
     pub content_type: Option<()>,
 }
 
-impl<'a> ResponseTyView<'a> {
+impl<'a> ResponseTypeView<'a> {
     fn new(spec: &'a Spec, id: ResponseTypeId) -> Self {
         Self::from_data(spec, spec.types.get_response(id))
     }
 
     fn from_data(spec: &'a Spec, data: ResponseData) -> Self {
         Self {
-            body: InlineTyView::new(spec, data.body),
-            headers: None,
+            body: InlineTypeView::new(spec, data.body),
+            headers: data.headers.map(|id| spec.get_simple_record_type(id)),
             content_type: None, // TODO: mime types
         }
     }
@@ -446,7 +446,7 @@ impl<'a> ResponseTyView<'a> {
 pub enum RootTypeView<'a> {
     /// A response type.
     #[display("`response`")]
-    Response(ResponseTyView<'a>),
+    Response(ResponseTypeView<'a>),
 
     /// Any non-response type.
     Type(TypeView<'a>),
@@ -459,7 +459,7 @@ impl<'a> RootTypeView<'a> {
     fn new(spec: &'a Spec, id: RootTypeId) -> Self {
         match spec.types.get_root_type(id) {
             RootTypeData::Type(data) => Self::Type(TypeView::from_data(spec, data)),
-            RootTypeData::Response(data) => Self::Response(ResponseTyView::from_data(spec, data)),
+            RootTypeData::Response(data) => Self::Response(ResponseTypeView::from_data(spec, data)),
             RootTypeData::Reference(data) => {
                 Self::NamedReference(NamedRootTypeRefView::from_data(spec, data))
             }
@@ -478,6 +478,10 @@ pub struct TypeDefView<'a> {
 }
 
 impl Spec {
+    pub(crate) fn get_root_type<'a>(&'a self, id: RootTypeId) -> RootTypeView<'a> {
+        RootTypeView::new(self, id)
+    }
+
     /// Resolve a validated simple record reference.
     pub(crate) fn get_simple_record_type<'a>(
         &'a self,
@@ -501,14 +505,14 @@ impl Spec {
     }
 
     /// Resolve an inline type by arena id.
-    pub(crate) fn get_inline_type<'a>(&'a self, id: InlineTypeId) -> InlineTyView<'a> {
-        InlineTyView::new(self, id)
+    pub(crate) fn get_inline_type<'a>(&'a self, id: InlineTypeId) -> InlineTypeView<'a> {
+        InlineTypeView::new(self, id)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{InlineTyView, RootTypeView, TypeView};
+    use super::{InlineTypeView, RootTypeView, TypeView};
     use crate::spec::Spec;
     use crate::spec::arena::typ::builder::{RootRef, TypeArenaBuilder, TypeRef};
     use crate::spec::arena::typ::id::InlineTypeId;
@@ -578,17 +582,17 @@ mod test {
         assert_eq!(id_field.name.as_str(), "id");
         assert!(matches!(
             id_field.typ,
-            InlineTyView::Primitive(PrimitiveTy::I64)
+            InlineTypeView::Primitive(PrimitiveTy::I64)
         ));
         assert!(id_field.default.is_none());
 
         let simple_array = fields.next().expect("simple_array field");
         assert_eq!(simple_array.name.as_str(), "simple_array");
         match simple_array.typ {
-            InlineTyView::Array(inner) => {
+            InlineTypeView::Array(inner) => {
                 assert!(matches!(
                     inner.typ(),
-                    InlineTyView::Primitive(PrimitiveTy::F32)
+                    InlineTypeView::Primitive(PrimitiveTy::F32)
                 ));
             }
             other => panic!("expected array type, got {other:?}"),
@@ -597,43 +601,43 @@ mod test {
         let values = fields.next().expect("values field");
         assert_eq!(values.name.as_str(), "values");
         let level_1 = match values.typ {
-            InlineTyView::Array(inner) => inner.typ(),
+            InlineTypeView::Array(inner) => inner.typ(),
             other => panic!("expected array at level 1, got {other:?}"),
         };
         let level_2 = match level_1 {
-            InlineTyView::Array(inner) => inner.typ(),
+            InlineTypeView::Array(inner) => inner.typ(),
             other => panic!("expected array at level 2, got {other:?}"),
         };
         let level_3 = match level_2 {
-            InlineTyView::Array(inner) => inner.typ(),
+            InlineTypeView::Array(inner) => inner.typ(),
             other => panic!("expected array at level 3, got {other:?}"),
         };
         let option_inner = match level_3 {
-            InlineTyView::Option(inner) => inner.typ(),
+            InlineTypeView::Option(inner) => inner.typ(),
             other => panic!("expected option, got {other:?}"),
         };
         assert!(matches!(
             option_inner,
-            InlineTyView::Primitive(PrimitiveTy::String)
+            InlineTypeView::Primitive(PrimitiveTy::String)
         ));
 
         let metadata = fields.next().expect("metadata field");
         assert_eq!(metadata.name.as_str(), "metadata");
         let metadata_level_1 = match metadata.typ {
-            InlineTyView::Array(inner) => inner.typ(),
+            InlineTypeView::Array(inner) => inner.typ(),
             other => panic!("expected array at metadata level 1, got {other:?}"),
         };
         let metadata_level_2 = match metadata_level_1 {
-            InlineTyView::Array(inner) => inner.typ(),
+            InlineTypeView::Array(inner) => inner.typ(),
             other => panic!("expected array at metadata level 2, got {other:?}"),
         };
         let metadata_inner = match metadata_level_2 {
-            InlineTyView::Option(inner) => inner.typ(),
+            InlineTypeView::Option(inner) => inner.typ(),
             other => panic!("expected option in metadata field, got {other:?}"),
         };
         assert!(matches!(
             metadata_inner,
-            InlineTyView::Primitive(PrimitiveTy::Bool)
+            InlineTypeView::Primitive(PrimitiveTy::Bool)
         ));
 
         assert!(fields.next().is_none());
@@ -648,14 +652,14 @@ mod test {
         assert_eq!(success.name.as_str(), "success");
         assert!(matches!(
             success.typ,
-            InlineTyView::Primitive(PrimitiveTy::Bool)
+            InlineTypeView::Primitive(PrimitiveTy::Bool)
         ));
 
         let error = fields.next().expect("error field");
         assert_eq!(error.name.as_str(), "error");
         assert!(matches!(
             error.typ,
-            InlineTyView::Primitive(PrimitiveTy::String)
+            InlineTypeView::Primitive(PrimitiveTy::String)
         ));
         assert!(fields.next().is_none());
     }
@@ -700,11 +704,11 @@ mod test {
         assert!(fields.next().is_none());
 
         match name.typ {
-            InlineTyView::NamedReference(reference) => {
+            InlineTypeView::NamedReference(reference) => {
                 assert_eq!(reference.name, "Foo");
                 assert!(matches!(
                     reference.typ(),
-                    TypeView::Inline(InlineTyView::Primitive(PrimitiveTy::String))
+                    TypeView::Inline(InlineTypeView::Primitive(PrimitiveTy::String))
                 ));
             }
             other => panic!("expected named reference, got {other:?}"),
@@ -765,24 +769,27 @@ mod test {
 
         let id = fields.next().expect("id field");
         assert_eq!(id.name.as_str(), "id");
-        assert!(matches!(id.typ, InlineTyView::Primitive(PrimitiveTy::I64)));
+        assert!(matches!(
+            id.typ,
+            InlineTypeView::Primitive(PrimitiveTy::I64)
+        ));
 
         let title = fields.next().expect("title field");
         assert_eq!(title.name.as_str(), "title");
         assert!(matches!(
             title.typ,
-            InlineTyView::Primitive(PrimitiveTy::String)
+            InlineTypeView::Primitive(PrimitiveTy::String)
         ));
 
         let status = fields.next().expect("status field");
         assert_eq!(status.name.as_str(), "status");
         let option_inner = match status.typ {
-            InlineTyView::Option(inner) => inner.typ(),
+            InlineTypeView::Option(inner) => inner.typ(),
             other => panic!("expected option for status field, got {other:?}"),
         };
 
         let status_enum = match option_inner {
-            InlineTyView::NamedReference(reference) => {
+            InlineTypeView::NamedReference(reference) => {
                 assert_eq!(reference.name, "Status");
                 match reference.typ() {
                     TypeView::Enum(enm) => enm,
@@ -866,9 +873,9 @@ mod test {
             other => panic!("expected named root reference, got {other:?}"),
         };
 
-        assert!(matches!(response.body, InlineTyView::NamedReference(_)));
+        assert!(matches!(response.body, InlineTypeView::NamedReference(_)));
         let status_enum = match response.body {
-            InlineTyView::NamedReference(reference) => match reference.typ() {
+            InlineTypeView::NamedReference(reference) => match reference.typ() {
                 TypeView::Enum(enm) => enm,
                 other => panic!("expected enum response body, got {other:?}"),
             },

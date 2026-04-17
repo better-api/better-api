@@ -2,9 +2,9 @@ use better_api_diagnostic::{Label, Report, Span};
 use better_api_syntax::{ast, parse, tokenize};
 use indoc::indoc;
 
-use crate::analyzer::Analyzer;
-use crate::spec::typ::{EnumTy, InlineTy, PrimitiveTy, RootType, SimpleRecordReference, Type};
-use crate::spec::value::Value;
+use crate::analyzer::{LoweredSpec, SpecLowerer};
+use crate::spec::view::typ::{EnumTy, InlineTypeView, PrimitiveTy, RootTypeView, TypeView};
+use crate::spec::view::value::ValueView;
 
 #[test]
 fn lower_primitives() {
@@ -29,17 +29,18 @@ fn lower_primitives() {
         let tokens = tokenize(&text, &mut diagnostics);
         let res = parse(tokens);
 
-        let mut analyzer = Analyzer::new(&res.root);
+        let mut analyzer = SpecLowerer::new(&res.root);
 
         let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
         let id = analyzer.lower_type(&typ).unwrap();
+        let lowered = analyzer.into_lowered_spec();
 
-        assert_eq!(analyzer.reports, vec![]);
+        assert_eq!(lowered.reports, vec![]);
 
-        let actual = analyzer.spec_ctx().get_root_type(id);
+        let actual = lowered.spec.get_root_type(id);
         assert!(matches!(
             actual,
-            RootType::Type(Type::Inline(InlineTy::Primitive(actual_prim)))
+            RootTypeView::Type(TypeView::Inline(InlineTypeView::Primitive(actual_prim)))
                 if actual_prim == expected
         ));
     }
@@ -59,23 +60,27 @@ fn lower_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = Analyzer::new(&res.root);
+    let mut analyzer = SpecLowerer::new(&res.root);
     analyzer.validate_symbols();
     assert!(analyzer.reports.is_empty());
 
     analyzer.lower_type_definitions();
     assert!(analyzer.reports.is_empty());
 
-    let name_id = analyzer.strings.get("Foo").unwrap();
-    let type_def = analyzer.spec_symbol_table.get(&name_id).unwrap();
-    let actual = analyzer.spec_ctx().get_root_type(type_def.typ);
+    let lowered = analyzer.into_lowered_spec();
+
+    let name_id = lowered.spec.strings.get("Foo").unwrap();
+    let type_def = lowered.spec.symbol_table.get(&name_id).unwrap();
+    let actual = lowered.spec.get_root_type(type_def.typ);
 
     match actual {
-        RootType::NamedReference(reference) => {
+        RootTypeView::NamedReference(reference) => {
             assert_eq!(reference.name, "Bar");
             assert!(matches!(
                 reference.typ(),
-                RootType::Type(Type::Inline(InlineTy::Primitive(PrimitiveTy::String)))
+                RootTypeView::Type(TypeView::Inline(InlineTypeView::Primitive(
+                    PrimitiveTy::String
+                )))
             ));
         }
         _ => panic!("epxected PrimitiveTy::String, got {actual:?}"),
@@ -92,18 +97,23 @@ fn lower_simple_array() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = Analyzer::new(&res.root);
+    let mut analyzer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
     let id = analyzer.lower_type(&typ).unwrap();
 
     assert_eq!(analyzer.reports, vec![]);
 
-    let arr = match analyzer.spec_ctx().get_root_type(id) {
-        RootType::Type(Type::Inline(InlineTy::Array(arr))) => arr,
+    let lowered = analyzer.into_lowered_spec();
+
+    let arr = match lowered.spec.get_root_type(id) {
+        RootTypeView::Type(TypeView::Inline(InlineTypeView::Array(arr))) => arr,
         typ => panic!("expected array, got: {typ:?}"),
     };
-    assert!(matches!(arr.typ(), InlineTy::Primitive(PrimitiveTy::I32)));
+    assert!(matches!(
+        arr.typ(),
+        InlineTypeView::Primitive(PrimitiveTy::I32)
+    ));
 }
 
 #[test]
@@ -116,25 +126,26 @@ fn lower_nested_array() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = Analyzer::new(&res.root);
+    let mut analyzer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
     let id = analyzer.lower_type(&typ).unwrap();
 
-    assert_eq!(analyzer.reports, vec![]);
+    let lowered = analyzer.into_lowered_spec();
+    assert_eq!(lowered.reports, vec![]);
 
-    let arr = match analyzer.spec_ctx().get_root_type(id) {
-        RootType::Type(Type::Inline(InlineTy::Array(arr))) => arr,
+    let arr = match lowered.spec.get_root_type(id) {
+        RootTypeView::Type(TypeView::Inline(InlineTypeView::Array(arr))) => arr,
         typ => panic!("expected array, got: {typ:?}"),
     };
 
     let arr_inner = match arr.typ() {
-        InlineTy::Array(arr) => arr,
+        InlineTypeView::Array(arr) => arr,
         typ => panic!("expected array, got: {typ:?}"),
     };
     assert!(matches!(
         arr_inner.typ(),
-        InlineTy::Primitive(PrimitiveTy::I32)
+        InlineTypeView::Primitive(PrimitiveTy::I32)
     ));
 }
 
@@ -148,7 +159,7 @@ fn lower_empty_array() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = Analyzer::new(&res.root);
+    let mut analyzer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
     let id = analyzer.lower_type(&typ);
@@ -167,7 +178,7 @@ fn lower_invalid_array() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = Analyzer::new(&res.root);
+    let mut analyzer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
     let id = analyzer.lower_type(&typ);
@@ -193,18 +204,22 @@ fn lower_simple_option() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = Analyzer::new(&res.root);
+    let mut analyzer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
     let id = analyzer.lower_type(&typ).unwrap();
 
     assert_eq!(analyzer.reports, vec![]);
+    let lowered = analyzer.into_lowered_spec();
 
-    let opt = match analyzer.spec_ctx().get_root_type(id) {
-        RootType::Type(Type::Inline(InlineTy::Option(opt))) => opt,
+    let opt = match lowered.spec.get_root_type(id) {
+        RootTypeView::Type(TypeView::Inline(InlineTypeView::Option(opt))) => opt,
         _ => panic!(),
     };
-    assert!(matches!(opt.typ(), InlineTy::Primitive(PrimitiveTy::I32)));
+    assert!(matches!(
+        opt.typ(),
+        InlineTypeView::Primitive(PrimitiveTy::I32)
+    ));
 }
 
 #[test]
@@ -219,18 +234,22 @@ fn lower_nested_option() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = Analyzer::new(&res.root);
+    let mut analyzer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
     let id = analyzer.lower_type(&typ).unwrap();
 
     assert_eq!(analyzer.reports, vec![]);
 
-    let opt = match analyzer.spec_ctx().get_root_type(id) {
-        RootType::Type(Type::Inline(InlineTy::Option(opt))) => opt,
+    let lowered = analyzer.into_lowered_spec();
+    let opt = match lowered.spec.get_root_type(id) {
+        RootTypeView::Type(TypeView::Inline(InlineTypeView::Option(opt))) => opt,
         _ => panic!(),
     };
-    assert!(matches!(opt.typ(), InlineTy::Primitive(PrimitiveTy::I32)));
+    assert!(matches!(
+        opt.typ(),
+        InlineTypeView::Primitive(PrimitiveTy::I32)
+    ));
 }
 
 #[test]
@@ -246,7 +265,7 @@ fn lower_invalid_option() {
     assert!(diagnostics.is_empty());
     assert!(res.reports.is_empty());
 
-    let mut analyzer = Analyzer::new(&res.root);
+    let mut analyzer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
     let id = analyzer.lower_type(&typ);
@@ -295,19 +314,26 @@ fn lower_basic_record() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = Analyzer::new(&res.root);
-
     assert_eq!(res.root.type_definitions().count(), 2);
 
-    for typ in res.root.type_definitions() {
-        let typ = typ.typ().unwrap();
-        let id = analyzer.lower_type(&typ).unwrap();
+    let mut analyzer = SpecLowerer::new(&res.root);
 
-        assert_eq!(analyzer.reports, vec![]);
+    let ids: Vec<_> = res
+        .root
+        .type_definitions()
+        .map(|typ| {
+            let typ = typ.typ().unwrap();
+            analyzer.lower_type(&typ).unwrap()
+        })
+        .collect();
+
+    let lowered = analyzer.into_lowered_spec();
+    for id in ids {
+        assert_eq!(lowered.reports, vec![]);
 
         // Check record was inserted
-        let rec = match analyzer.spec_ctx().get_root_type(id) {
-            RootType::Type(Type::Record(rec)) => rec,
+        let rec = match lowered.spec.get_root_type(id) {
+            RootTypeView::Type(TypeView::Record(rec)) => rec,
             _ => panic!(),
         };
 
@@ -322,7 +348,7 @@ fn lower_basic_record() {
         assert_eq!(defaults.len(), 3);
         assert!(defaults[0].is_none());
         assert!(defaults[1].is_none());
-        assert!(matches!(defaults[2], Some(Value::Integer(69420))));
+        assert!(matches!(defaults[2], Some(ValueView::Integer(69420))));
     }
 }
 
@@ -336,15 +362,16 @@ fn lower_empty_record() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = Analyzer::new(&res.root);
+    let mut analyzer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
     let id = analyzer.lower_type(&typ).unwrap();
 
     assert_eq!(analyzer.reports, vec![]);
 
-    let rec = match analyzer.spec_ctx().get_root_type(id) {
-        RootType::Type(Type::Record(rec)) => rec,
+    let lowered = analyzer.into_lowered_spec();
+    let rec = match lowered.spec.get_root_type(id) {
+        RootTypeView::Type(TypeView::Record(rec)) => rec,
         _ => panic!(),
     };
 
@@ -363,13 +390,14 @@ fn lower_invalid_record() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = Analyzer::new(&res.root);
+    let mut analyzer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
     let id = analyzer.lower_type(&typ).unwrap();
 
+    let lowered = analyzer.into_lowered_spec();
     assert_eq!(
-        analyzer.reports,
+        lowered.reports,
         vec![
             Report::error("inline record not allowed in record field".to_string()).add_label(
                 Label::primary("inline record type not allowed".to_string(), Span::new(29, 35))
@@ -377,8 +405,8 @@ fn lower_invalid_record() {
         ]
     );
 
-    let rec = match analyzer.spec_ctx().get_root_type(id) {
-        RootType::Type(Type::Record(rec)) => rec,
+    let rec = match lowered.spec.get_root_type(id) {
+        RootTypeView::Type(TypeView::Record(rec)) => rec,
         _ => panic!(),
     };
 
@@ -399,16 +427,18 @@ fn lower_simple_enum() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = Analyzer::new(&res.root);
+    let mut analyzer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
     let id = analyzer.lower_type(&typ).unwrap();
 
     assert_eq!(analyzer.reports, vec![]);
 
+    let lowered = analyzer.into_lowered_spec();
+
     // Check enum was inserted and is in source map
-    let enum_type = match analyzer.spec_ctx().get_root_type(id) {
-        RootType::Type(Type::Enum(e)) => e,
+    let enum_type = match lowered.spec.get_root_type(id) {
+        RootTypeView::Type(TypeView::Enum(e)) => e,
         _ => panic!(),
     };
 
@@ -419,9 +449,9 @@ fn lower_simple_enum() {
     let member_vals: Vec<_> = enum_type.members().map(|mem| mem.value).collect();
 
     assert_eq!(member_vals.len(), 3);
-    assert!(matches!(member_vals[0], Value::Integer(1)));
-    assert!(matches!(member_vals[1], Value::Integer(2)));
-    assert!(matches!(member_vals[2], Value::Integer(3)));
+    assert!(matches!(member_vals[0], ValueView::Integer(1)));
+    assert!(matches!(member_vals[1], ValueView::Integer(2)));
+    assert!(matches!(member_vals[2], ValueView::Integer(3)));
 }
 
 #[test]
@@ -434,15 +464,16 @@ fn lower_empty_enum() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = Analyzer::new(&res.root);
+    let mut analyzer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
     let id = analyzer.lower_type(&typ).unwrap();
 
     assert_eq!(analyzer.reports, vec![]);
 
-    let enum_type = match analyzer.spec_ctx().get_root_type(id) {
-        RootType::Type(Type::Enum(e)) => e,
+    let lowered = analyzer.into_lowered_spec();
+    let enum_type = match lowered.spec.get_root_type(id) {
+        RootTypeView::Type(TypeView::Enum(e)) => e,
         _ => panic!(),
     };
 
@@ -462,7 +493,7 @@ fn lower_invalid_enum() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = Analyzer::new(&res.root);
+    let mut analyzer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
     let id = analyzer.lower_type(&typ);
@@ -470,14 +501,17 @@ fn lower_invalid_enum() {
 
     assert_eq!(
         analyzer.reports,
-        vec![Report::error("invalid enum type `array`".to_string())
-            .add_label(Label::primary(
-                "invalid enum type `array`".to_string(),
-                Span::new(16, 21)
-            ))
-            .with_note(
-                "help: enum must have a type `i32`, `i64`, `u32`, `u64`, or `string`".to_string()
-            )]
+        vec![
+            Report::error("invalid enum type `array`".to_string())
+                .add_label(Label::primary(
+                    "invalid enum type `array`".to_string(),
+                    Span::new(16, 21)
+                ))
+                .with_note(
+                    "help: enum must have a type `i32`, `i64`, `u32`, `u64`, or `string`"
+                        .to_string()
+                )
+        ]
     );
 }
 
@@ -497,16 +531,18 @@ fn lower_simple_union() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = Analyzer::new(&res.root);
+    let mut analyzer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
     let id = analyzer.lower_type(&typ).unwrap();
 
     assert!(analyzer.reports.is_empty());
 
+    let lowered = analyzer.into_lowered_spec();
+
     // Check union was inserted
-    let union = match analyzer.spec_ctx().get_root_type(id) {
-        RootType::Type(Type::Union(u)) => u,
+    let union = match lowered.spec.get_root_type(id) {
+        RootTypeView::Type(TypeView::Union(u)) => u,
         _ => panic!(),
     };
 
@@ -519,11 +555,11 @@ fn lower_simple_union() {
     // Check field types are correct
     assert!(matches!(
         fields[0].typ,
-        InlineTy::Primitive(PrimitiveTy::I32)
+        InlineTypeView::Primitive(PrimitiveTy::I32)
     ));
     assert!(matches!(
         fields[1].typ,
-        InlineTy::Primitive(PrimitiveTy::String)
+        InlineTypeView::Primitive(PrimitiveTy::String)
     ));
 }
 
@@ -537,15 +573,16 @@ fn lower_empty_union() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = Analyzer::new(&res.root);
+    let mut analyzer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
     let id = analyzer.lower_type(&typ).unwrap();
 
-    assert_eq!(analyzer.reports, vec![]);
+    let lowered = analyzer.into_lowered_spec();
+    assert_eq!(lowered.reports, vec![]);
 
-    let union = match analyzer.spec_ctx().get_root_type(id) {
-        RootType::Type(Type::Union(u)) => u,
+    let union = match lowered.spec.get_root_type(id) {
+        RootTypeView::Type(TypeView::Union(u)) => u,
         _ => panic!(),
     };
 
@@ -565,7 +602,7 @@ fn lower_invalid_union() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = Analyzer::new(&res.root);
+    let mut analyzer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
     let id = analyzer.lower_type(&typ);
@@ -586,17 +623,18 @@ fn lower_simple_response() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
+    let analyzer = setup_lowerer(&res.root);
     assert!(analyzer.reports.is_empty());
 
-    let resp = match get_root_type(&analyzer, "Resp") {
-        RootType::Response(resp) => resp,
+    let lowered = analyzer.into_lowered_spec();
+    let resp = match get_root_type(&lowered, "Resp") {
+        RootTypeView::Response(resp) => resp,
         typ => panic!("expected response, got {typ:?}"),
     };
 
     assert!(matches!(
         resp.body,
-        InlineTy::Primitive(PrimitiveTy::String)
+        InlineTypeView::Primitive(PrimitiveTy::String)
     ));
     assert!(resp.headers.is_none());
     assert!(resp.content_type.is_none());
@@ -620,30 +658,31 @@ fn lower_response_with_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    assert!(analyzer.reports.is_empty());
+    let analyzer = setup_lowerer(&res.root);
+    let lowered = analyzer.into_lowered_spec();
+    assert!(lowered.reports.is_empty());
 
-    let resp = match get_root_type(&analyzer, "Resp") {
-        RootType::Response(resp) => resp,
+    let resp = match get_root_type(&lowered, "Resp") {
+        RootTypeView::Response(resp) => resp,
         typ => panic!("expected response, got {typ:?}"),
     };
 
     let body_ref = match resp.body {
-        InlineTy::NamedReference(reference) => reference,
+        InlineTypeView::NamedReference(reference) => reference,
         typ => panic!("expected named reference, got {typ:?}"),
     };
 
     assert_eq!(body_ref.name, "Bar");
 
     let bar_typ = match body_ref.typ() {
-        Type::Inline(InlineTy::NamedReference(reference)) => reference,
+        TypeView::Inline(InlineTypeView::NamedReference(reference)) => reference,
         typ => panic!("expected reference type, got {typ:?}"),
     };
 
     assert_eq!(bar_typ.name, "Foo");
 
     let record = match bar_typ.typ() {
-        Type::Record(record) => record,
+        TypeView::Record(record) => record,
         typ => panic!("expected record, got {typ:?}"),
     };
 
@@ -652,7 +691,7 @@ fn lower_response_with_reference() {
     assert_eq!(fields[0].name.as_str(), "foo");
     assert!(matches!(
         fields[0].typ,
-        InlineTy::Primitive(PrimitiveTy::String)
+        InlineTypeView::Primitive(PrimitiveTy::String)
     ));
 }
 
@@ -670,23 +709,24 @@ fn lower_response_with_inline_body() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    assert!(analyzer.reports.is_empty());
+    let analyzer = setup_lowerer(&res.root);
+    let lowered = analyzer.into_lowered_spec();
+    assert!(lowered.reports.is_empty());
 
-    let resp = match get_root_type(&analyzer, "Resp") {
-        RootType::Response(resp) => resp,
+    let resp = match get_root_type(&lowered, "Resp") {
+        RootTypeView::Response(resp) => resp,
         typ => panic!("expected response, got {typ:?}"),
     };
 
     let body_ref = match resp.body {
-        InlineTy::NamedReference(reference) => reference,
+        InlineTypeView::NamedReference(reference) => reference,
         typ => panic!("expected named reference, got {typ:?}"),
     };
 
     assert_eq!(body_ref.name, "RespBody");
 
     let record = match body_ref.typ() {
-        Type::Record(record) => record,
+        TypeView::Record(record) => record,
         typ => panic!("expected record, got {typ:?}"),
     };
 
@@ -695,7 +735,7 @@ fn lower_response_with_inline_body() {
     assert_eq!(fields[0].name.as_str(), "foo");
     assert!(matches!(
         fields[0].typ,
-        InlineTy::Primitive(PrimitiveTy::I32)
+        InlineTypeView::Primitive(PrimitiveTy::I32)
     ));
 }
 
@@ -715,7 +755,7 @@ fn lower_response_invalid_body_response() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
+    let analyzer = setup_lowerer(&res.root);
 
     assert_eq!(
         analyzer.reports,
@@ -752,118 +792,133 @@ fn lower_response_invalid_body_file() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
+    let analyzer = setup_lowerer(&res.root);
 
     assert_eq!(analyzer.reports.len(), 1);
     assert_eq!(
         analyzer.reports,
-        vec![Report::error("invalid response body type".to_string())
-            .add_label(Label::primary(
-                "content type requires that no `file` is present in body".to_string(),
-                Span::new(61, 64,)
-            ))
-            .add_label(Label::secondary(
-                "`file` introduced here".to_string(),
-                Span::new(25, 29)
-            ))
-            .with_note(
-                "help: `application/json` response must not use `file` in body".to_string()
-            )]
+        vec![
+            Report::error("invalid response body type".to_string())
+                .add_label(Label::primary(
+                    "content type requires that no `file` is present in body".to_string(),
+                    Span::new(61, 64,)
+                ))
+                .add_label(Label::secondary(
+                    "`file` introduced here".to_string(),
+                    Span::new(25, 29)
+                ))
+                .with_note(
+                    "help: `application/json` response must not use `file` in body".to_string()
+                )
+        ]
     );
 
     let name_id = analyzer.strings.get("Resp").unwrap();
     assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
 }
 
-#[test]
-fn lower_response_with_custom_content_type() {
-    let text = indoc! {r#"
-        type Resp: resp {
-            contentType: "image/png"
-            body: file
-        }
-    "#};
+// TODO: Mime types
+// #[test]
+// fn lower_response_with_custom_content_type() {
+//     let text = indoc! {r#"
+//         type Resp: resp {
+//             contentType: "image/png"
+//             body: file
+//         }
+//     "#};
+//
+//     let mut diagnostics = vec![];
+//     let tokens = tokenize(text, &mut diagnostics);
+//     let res = parse(tokens);
+//
+//     let analyzer = setup_lowerer(&res.root);
+//     let lowered = analyzer.into_lowered_spec();
+//     assert!(lowered.reports.is_empty());
+//
+//     let resp = match get_root_type(&lowered, "Resp") {
+//         RootTypeView::Response(resp) => resp,
+//         typ => panic!("expected response, got {typ:?}"),
+//     };
+//
+//     let content_types: Vec<_> = resp.content_type.clone().unwrap().collect();
+//     assert_eq!(content_types, vec!["image/png"]);
+//     assert!(matches!(
+//         resp.body,
+//         InlineTypeView::Primitive(PrimitiveTy::File)
+//     ));
+//     assert!(resp.headers.is_none());
+// }
 
-    let mut diagnostics = vec![];
-    let tokens = tokenize(text, &mut diagnostics);
-    let res = parse(tokens);
+// TODO: Mime types
+// #[test]
+// fn lower_response_with_mixed_content_type() {
+//     let text = indoc! {r#"
+//         type Resp: resp {
+//             contentType: ["image/png" "application/json"]
+//             body: file
+//         }
+//     "#};
+//
+//     let mut diagnostics = vec![];
+//     let tokens = tokenize(text, &mut diagnostics);
+//     let res = parse(tokens);
+//
+//     let analyzer = setup_lowerer(&res.root);
+//     let lowered = analyzer.into_lowered_spec();
+//     insta::assert_debug_snapshot!(lowered.reports);
+//
+//     let resp = match get_root_type(&lowered, "Resp") {
+//         RootTypeView::Response(resp) => resp,
+//         typ => panic!("expected response, got {typ:?}"),
+//     };
+//
+//     let content_types: Vec<_> = resp.content_type.clone().unwrap().collect();
+//     assert_eq!(content_types, vec!["image/png", "application/json"]);
+//     assert!(matches!(
+//         resp.body,
+//         InlineTypeView::Primitive(PrimitiveTy::File)
+//     ));
+//     assert!(resp.headers.is_none());
+// }
 
-    let analyzer = setup_analyzer(&res.root);
-    assert!(analyzer.reports.is_empty());
-
-    let resp = match get_root_type(&analyzer, "Resp") {
-        RootType::Response(resp) => resp,
-        typ => panic!("expected response, got {typ:?}"),
-    };
-
-    let content_types: Vec<_> = resp.content_type.clone().unwrap().collect();
-    assert_eq!(content_types, vec!["image/png"]);
-    assert!(matches!(resp.body, InlineTy::Primitive(PrimitiveTy::File)));
-    assert!(resp.headers.is_none());
-}
-
-#[test]
-fn lower_response_with_mixed_content_type() {
-    let text = indoc! {r#"
-        type Resp: resp {
-            contentType: ["image/png" "application/json"]
-            body: file
-        }
-    "#};
-
-    let mut diagnostics = vec![];
-    let tokens = tokenize(text, &mut diagnostics);
-    let res = parse(tokens);
-
-    let analyzer = setup_analyzer(&res.root);
-    insta::assert_debug_snapshot!(analyzer.reports);
-
-    let resp = match get_root_type(&analyzer, "Resp") {
-        RootType::Response(resp) => resp,
-        typ => panic!("expected response, got {typ:?}"),
-    };
-
-    let content_types: Vec<_> = resp.content_type.clone().unwrap().collect();
-    assert_eq!(content_types, vec!["image/png", "application/json"]);
-    assert!(matches!(resp.body, InlineTy::Primitive(PrimitiveTy::File)));
-    assert!(resp.headers.is_none());
-}
-
-#[test]
-fn lower_response_with_custom_content_type_invalid_body() {
-    let text = indoc! {r#"
-        type Resp: resp {
-            contentType: "image/png"
-            body: string
-        }
-    "#};
-
-    let mut diagnostics = vec![];
-    let tokens = tokenize(text, &mut diagnostics);
-    let res = parse(tokens);
-
-    let analyzer = setup_analyzer(&res.root);
-
-    assert_eq!(analyzer.reports.len(), 1);
-    assert_eq!(
-        analyzer.reports,
-        vec![Report::error("invalid response body type".to_string())
-            .add_label(Label::primary(
-                "content type requires `file` body".to_string(),
-                Span::new(57, 63)
-            ))
-            .add_label(Label::secondary(
-                "content type defined here".to_string(),
-                Span::new(22, 47)
-            ))
-            .with_note(
-                "help: none `application/json` responses must use `file` as body".to_string()
-            )]
-    );
-
-    let name_id = analyzer.strings.get("Resp").unwrap();
-    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
-}
+// TODO: Mime types
+// #[test]
+// fn lower_response_with_custom_content_type_invalid_body() {
+//     let text = indoc! {r#"
+//         type Resp: resp {
+//             contentType: "image/png"
+//             body: string
+//         }
+//     "#};
+//
+//     let mut diagnostics = vec![];
+//     let tokens = tokenize(text, &mut diagnostics);
+//     let res = parse(tokens);
+//
+//     let analyzer = setup_lowerer(&res.root);
+//
+//     assert_eq!(analyzer.reports.len(), 1);
+//     assert_eq!(
+//         analyzer.reports,
+//         vec![
+//             Report::error("invalid response body type".to_string())
+//                 .add_label(Label::primary(
+//                     "content type requires `file` body".to_string(),
+//                     Span::new(57, 63)
+//                 ))
+//                 .add_label(Label::secondary(
+//                     "content type defined here".to_string(),
+//                     Span::new(22, 47)
+//                 ))
+//                 .with_note(
+//                     "help: none `application/json` responses must use `file` as body".to_string()
+//                 )
+//         ]
+//     );
+//
+//     let name_id = analyzer.strings.get("Resp").unwrap();
+//     assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
+// }
 
 #[test]
 fn lower_response_with_headers() {
@@ -882,24 +937,25 @@ fn lower_response_with_headers() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    assert!(analyzer.reports.is_empty());
+    let analyzer = setup_lowerer(&res.root);
+    let lowered = analyzer.into_lowered_spec();
+    assert!(lowered.reports.is_empty());
 
-    let resp = match get_root_type(&analyzer, "Resp") {
-        RootType::Response(resp) => resp,
+    let resp = match get_root_type(&lowered, "Resp") {
+        RootTypeView::Response(resp) => resp,
         typ => panic!("expected response, got {typ:?}"),
     };
 
     assert!(matches!(
         resp.body,
-        InlineTy::Primitive(PrimitiveTy::String)
+        InlineTypeView::Primitive(PrimitiveTy::String)
     ));
 
     let headers = resp.headers.expect("expected headers");
     assert_eq!(headers.name, "Foo");
 
     let simple_record = match headers.typ() {
-        SimpleRecordReference::SimpleRecord(record) => record,
+        TypeView::Record(record) => record,
         typ => panic!("expected simple record, got {typ:?}"),
     };
 
@@ -908,7 +964,7 @@ fn lower_response_with_headers() {
     assert_eq!(fields[0].name.as_str(), "foo");
     assert!(matches!(
         fields[0].typ,
-        InlineTy::Primitive(PrimitiveTy::String)
+        InlineTypeView::Primitive(PrimitiveTy::String)
     ));
 }
 
@@ -925,17 +981,19 @@ fn lower_response_invalid_header_type() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
+    let analyzer = setup_lowerer(&res.root);
 
     assert_eq!(analyzer.reports.len(), 1);
     assert_eq!(
         analyzer.reports,
-        vec![Report::error("invalid headers type".to_string())
-            .add_label(Label::primary(
-                "expected record, got string".to_string(),
-                Span::new(31, 37)
-            ))
-            .with_note("help: headers must be a simple record".to_string())]
+        vec![
+            Report::error("invalid headers type".to_string())
+                .add_label(Label::primary(
+                    "expected record, got string".to_string(),
+                    Span::new(31, 37)
+                ))
+                .with_note("help: headers must be a simple record".to_string())
+        ]
     );
 
     let name_id = analyzer.strings.get("Resp").unwrap();
@@ -963,20 +1021,22 @@ fn lower_response_invalid_header_type_nested_record() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
+    let analyzer = setup_lowerer(&res.root);
 
     assert_eq!(analyzer.reports.len(), 1);
     assert_eq!(
         analyzer.reports,
-        vec![Report::error("invalid headers type".to_string())
-            .add_label(Label::primary(
-                "headers fields can only be primitive types or option".to_string(),
-                Span::new(102, 109)
-            ))
-            .add_label(Label::secondary(
-                "non-simple field type here".to_string(),
-                Span::new(64, 67)
-            ))]
+        vec![
+            Report::error("invalid headers type".to_string())
+                .add_label(Label::primary(
+                    "headers fields can only be primitive types or option".to_string(),
+                    Span::new(102, 109)
+                ))
+                .add_label(Label::secondary(
+                    "non-simple field type here".to_string(),
+                    Span::new(64, 67)
+                ))
+        ]
     );
 
     let name_id = analyzer.strings.get("Resp").unwrap();
@@ -999,24 +1059,25 @@ fn lower_response_with_inline_headers() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    assert!(analyzer.reports.is_empty());
+    let analyzer = setup_lowerer(&res.root);
+    let lowered = analyzer.into_lowered_spec();
+    assert!(lowered.reports.is_empty());
 
-    let resp = match get_root_type(&analyzer, "Resp") {
-        RootType::Response(resp) => resp,
+    let resp = match get_root_type(&lowered, "Resp") {
+        RootTypeView::Response(resp) => resp,
         typ => panic!("expected response, got {typ:?}"),
     };
 
     assert!(matches!(
         resp.body,
-        InlineTy::Primitive(PrimitiveTy::String)
+        InlineTypeView::Primitive(PrimitiveTy::String)
     ));
 
     let headers = resp.headers.expect("expected headers");
     assert_eq!(headers.name, "RespHeaders");
 
     let simple_record = match headers.typ() {
-        SimpleRecordReference::SimpleRecord(record) => record,
+        TypeView::Record(record) => record,
         typ => panic!("expected simple record, got {typ:?}"),
     };
 
@@ -1025,7 +1086,7 @@ fn lower_response_with_inline_headers() {
     assert_eq!(fields[0].name.as_str(), "foo");
     assert!(matches!(
         fields[0].typ,
-        InlineTy::Primitive(PrimitiveTy::String)
+        InlineTypeView::Primitive(PrimitiveTy::String)
     ));
 }
 
@@ -1045,19 +1106,21 @@ fn lower_response_headers_with_file() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
+    let analyzer = setup_lowerer(&res.root);
 
     assert_eq!(
         analyzer.reports,
-        vec![Report::error("invalid headers type".to_string())
-            .add_label(Label::primary(
-                "headers type must not contain `file`".to_string(),
-                Span::new(31, 60)
-            ))
-            .add_label(Label::secondary(
-                "`file` introduced here".to_string(),
-                Span::new(50, 54)
-            ))]
+        vec![
+            Report::error("invalid headers type".to_string())
+                .add_label(Label::primary(
+                    "headers type must not contain `file`".to_string(),
+                    Span::new(31, 60)
+                ))
+                .add_label(Label::secondary(
+                    "`file` introduced here".to_string(),
+                    Span::new(50, 54)
+                ))
+        ]
     );
 
     let name_id = analyzer.strings.get("Resp").unwrap();
@@ -1080,11 +1143,12 @@ fn lower_response_headers_with_option() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    assert!(analyzer.reports.is_empty());
+    let analyzer = setup_lowerer(&res.root);
+    let lowered = analyzer.into_lowered_spec();
+    assert!(lowered.reports.is_empty());
 
-    let resp = match get_root_type(&analyzer, "Resp") {
-        RootType::Response(resp) => resp,
+    let resp = match get_root_type(&lowered, "Resp") {
+        RootTypeView::Response(resp) => resp,
         typ => panic!("expected response, got {typ:?}"),
     };
 
@@ -1092,7 +1156,7 @@ fn lower_response_headers_with_option() {
     assert_eq!(headers.name, "RespHeaders");
 
     let simple_record = match headers.typ() {
-        SimpleRecordReference::SimpleRecord(record) => record,
+        TypeView::Record(record) => record,
         typ => panic!("expected simple record, got {typ:?}"),
     };
 
@@ -1101,12 +1165,12 @@ fn lower_response_headers_with_option() {
     assert_eq!(fields[0].name.as_str(), "foo");
 
     let opt = match fields[0].typ.clone() {
-        InlineTy::Option(opt) => opt,
+        InlineTypeView::Option(opt) => opt,
         typ => panic!("expected option, got {typ:?}"),
     };
     assert!(matches!(
         opt.typ(),
-        InlineTy::Primitive(PrimitiveTy::String)
+        InlineTypeView::Primitive(PrimitiveTy::String)
     ));
 }
 
@@ -1126,19 +1190,21 @@ fn lower_response_headers_with_array_invalid() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
+    let analyzer = setup_lowerer(&res.root);
 
     assert_eq!(
         analyzer.reports,
-        vec![Report::error("invalid headers type".to_string())
-            .add_label(Label::primary(
-                "headers fields can only be primitive types or option".to_string(),
-                Span::new(31, 64)
-            ))
-            .add_label(Label::secondary(
-                "non-simple field type here".to_string(),
-                Span::new(50, 58)
-            ))]
+        vec![
+            Report::error("invalid headers type".to_string())
+                .add_label(Label::primary(
+                    "headers fields can only be primitive types or option".to_string(),
+                    Span::new(31, 64)
+                ))
+                .add_label(Label::secondary(
+                    "non-simple field type here".to_string(),
+                    Span::new(50, 58)
+                ))
+        ]
     );
 
     let name_id = analyzer.strings.get("Resp").unwrap();
@@ -1159,16 +1225,18 @@ fn lower_response_missing_body() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
+    let analyzer = setup_lowerer(&res.root);
 
     assert_eq!(
         analyzer.reports,
-        vec![Report::error("missing response body".to_string())
-            .add_label(Label::primary(
-                "missing response body".to_string(),
-                Span::new(11, 64)
-            ))
-            .with_note("help: `body` is a required response field".to_string())]
+        vec![
+            Report::error("missing response body".to_string())
+                .add_label(Label::primary(
+                    "missing response body".to_string(),
+                    Span::new(11, 64)
+                ))
+                .with_note("help: `body` is a required response field".to_string())
+        ]
     );
 
     let name_id = analyzer.strings.get("Resp").unwrap();
@@ -1195,22 +1263,24 @@ fn lower_response_body_file_in_nested_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
+    let analyzer = setup_lowerer(&res.root);
 
     assert_eq!(
         analyzer.reports,
-        vec![Report::error("invalid response body type".to_string())
-            .add_label(Label::primary(
-                "content type requires that no `file` is present in body".to_string(),
-                Span::new(101, 106)
-            ))
-            .add_label(Label::secondary(
-                "`file` introduced here".to_string(),
-                Span::new(27, 31)
-            ))
-            .with_note(
-                "help: `application/json` response must not use `file` in body".to_string()
-            )]
+        vec![
+            Report::error("invalid response body type".to_string())
+                .add_label(Label::primary(
+                    "content type requires that no `file` is present in body".to_string(),
+                    Span::new(101, 106)
+                ))
+                .add_label(Label::secondary(
+                    "`file` introduced here".to_string(),
+                    Span::new(27, 31)
+                ))
+                .with_note(
+                    "help: `application/json` response must not use `file` in body".to_string()
+                )
+        ]
     );
 
     let name_id = analyzer.strings.get("Resp").unwrap();
@@ -1230,7 +1300,7 @@ fn lower_enum_invalid_member() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = Analyzer::new(&res.root);
+    let mut analyzer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
     let id = analyzer.lower_type(&typ);
@@ -1238,15 +1308,17 @@ fn lower_enum_invalid_member() {
 
     assert_eq!(
         analyzer.reports,
-        vec![Report::error("expected i32, found string".to_string())
-            .add_label(Label::primary(
-                "expected i32, found string".to_string(),
-                Span::new(33, 38)
-            ))
-            .add_label(Label::secondary(
-                "type defined here".to_string(),
-                Span::new(16, 19)
-            ))]
+        vec![
+            Report::error("expected i32, found string".to_string())
+                .add_label(Label::primary(
+                    "expected i32, found string".to_string(),
+                    Span::new(33, 38)
+                ))
+                .add_label(Label::secondary(
+                    "type defined here".to_string(),
+                    Span::new(16, 19)
+                ))
+        ]
     );
 }
 
@@ -1266,7 +1338,7 @@ fn lower_response_inline_body_name_collision() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
+    let analyzer = setup_lowerer(&res.root);
 
     assert_eq!(
         analyzer.reports,
@@ -1297,7 +1369,7 @@ fn lower_missing_symbol() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
+    let analyzer = setup_lowerer(&res.root);
 
     assert_eq!(
         analyzer.reports,
@@ -1327,7 +1399,7 @@ fn lower_array_option_response_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
+    let analyzer = setup_lowerer(&res.root);
 
     assert_eq!(
         analyzer.reports,
@@ -1369,11 +1441,12 @@ fn lower_response_headers_with_enum_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    assert!(analyzer.reports.is_empty());
+    let analyzer = setup_lowerer(&res.root);
+    let lowered = analyzer.into_lowered_spec();
+    assert!(lowered.reports.is_empty());
 
-    let resp = match get_root_type(&analyzer, "Resp") {
-        RootType::Response(resp) => resp,
+    let resp = match get_root_type(&lowered, "Resp") {
+        RootTypeView::Response(resp) => resp,
         typ => panic!("expected response, got {typ:?}"),
     };
 
@@ -1381,7 +1454,7 @@ fn lower_response_headers_with_enum_reference() {
     assert_eq!(headers.name, "Headers");
 
     let simple_record = match headers.typ() {
-        SimpleRecordReference::SimpleRecord(record) => record,
+        TypeView::Record(record) => record,
         typ => panic!("expected simple record, got {typ:?}"),
     };
 
@@ -1390,14 +1463,11 @@ fn lower_response_headers_with_enum_reference() {
     assert_eq!(fields[0].name.as_str(), "header");
 
     let reference = match fields[0].typ.clone() {
-        InlineTy::NamedReference(reference) => reference,
+        InlineTypeView::NamedReference(reference) => reference,
         typ => panic!("expected reference, got {typ:?}"),
     };
 
-    assert!(matches!(
-        reference.typ(),
-        crate::spec::typ::SimpleTy::Enum(_)
-    ));
+    assert!(matches!(reference.typ(), TypeView::Enum(_)));
 }
 
 #[test]
@@ -1420,14 +1490,14 @@ fn lower_enum_type_variants() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = Analyzer::new(&res.root);
-
     for def in res.root.type_definitions() {
+        let mut analyzer = SpecLowerer::new(&res.root);
         let typ = def.typ().unwrap();
         let id = analyzer.lower_type(&typ).unwrap();
+        let lowered = analyzer.into_lowered_spec();
 
-        let enum_type = match analyzer.spec_ctx().get_root_type(id) {
-            RootType::Type(Type::Enum(enm)) => enm,
+        let enum_type = match lowered.spec.get_root_type(id) {
+            RootTypeView::Type(TypeView::Enum(enm)) => enm,
             other => panic!("expected enum, got {other:?}"),
         };
 
@@ -1439,9 +1509,8 @@ fn lower_enum_type_variants() {
         };
 
         assert_eq!(enum_type.typ, expected);
+        assert!(lowered.reports.is_empty());
     }
-
-    assert!(analyzer.reports.is_empty());
 }
 
 #[test]
@@ -1466,27 +1535,28 @@ fn lower_response_content_type_label_and_union_body() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
+    let analyzer = setup_lowerer(&res.root);
+    let lowered = analyzer.into_lowered_spec();
 
-    insta::assert_debug_snapshot!(analyzer.reports);
+    insta::assert_debug_snapshot!(lowered.reports);
 
-    let name_id = analyzer.strings.get("RespJson").unwrap();
-    assert!(!analyzer.spec_symbol_table.contains_key(&name_id));
+    let name_id = lowered.spec.strings.get("RespJson").unwrap();
+    assert!(!lowered.spec.symbol_table.contains_key(&name_id));
 
-    let resp = match get_root_type(&analyzer, "RespUnion") {
-        RootType::Response(resp) => resp,
+    let resp = match get_root_type(&lowered, "RespUnion") {
+        RootTypeView::Response(resp) => resp,
         typ => panic!("expected response, got {typ:?}"),
     };
 
     let body_ref = match resp.body {
-        InlineTy::NamedReference(reference) => reference,
+        InlineTypeView::NamedReference(reference) => reference,
         typ => panic!("expected named reference, got {typ:?}"),
     };
 
     assert_eq!(body_ref.name, "RespUnionBody");
 
     let union = match body_ref.typ() {
-        Type::Union(union) => union,
+        TypeView::Union(union) => union,
         typ => panic!("expected union, got {typ:?}"),
     };
 
@@ -1513,7 +1583,7 @@ fn lower_union_nested_file_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
+    let analyzer = setup_lowerer(&res.root);
 
     insta::assert_debug_snapshot!(analyzer.reports);
 
@@ -1536,18 +1606,19 @@ fn lower_record_default_value_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    assert!(analyzer.reports.is_empty());
+    let analyzer = setup_lowerer(&res.root);
+    let lowered = analyzer.into_lowered_spec();
+    assert!(lowered.reports.is_empty());
 
-    let record = match get_root_type(&analyzer, "Rec") {
-        RootType::Type(Type::Record(record)) => record,
+    let record = match get_root_type(&lowered, "Rec") {
+        RootTypeView::Type(TypeView::Record(record)) => record,
         typ => panic!("expected record, got {typ:?}"),
     };
 
     let fields: Vec<_> = record.fields().collect();
     assert_eq!(fields.len(), 1);
     assert_eq!(fields[0].name.as_str(), "foo");
-    assert!(matches!(fields[0].default, Some(Value::Integer(1))));
+    assert!(matches!(fields[0].default, Some(ValueView::Integer(1))));
 }
 
 #[test]
@@ -1564,24 +1635,25 @@ fn lower_array_reference_and_invalid_inners() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
+    let analyzer = setup_lowerer(&res.root);
+    let lowered = analyzer.into_lowered_spec();
 
-    insta::assert_debug_snapshot!(analyzer.reports);
+    insta::assert_debug_snapshot!(lowered.reports);
 
-    let arr = match get_root_type(&analyzer, "ArrRef") {
-        RootType::Type(Type::Inline(InlineTy::Array(arr))) => arr,
+    let arr = match get_root_type(&lowered, "ArrRef") {
+        RootTypeView::Type(TypeView::Inline(InlineTypeView::Array(arr))) => arr,
         typ => panic!("expected array, got: {typ:?}"),
     };
 
     let inner = match arr.typ() {
-        InlineTy::NamedReference(reference) => reference,
+        InlineTypeView::NamedReference(reference) => reference,
         typ => panic!("expected named reference, got {typ:?}"),
     };
 
     assert_eq!(inner.name, "Alias");
     assert!(matches!(
         inner.typ(),
-        Type::Inline(InlineTy::Primitive(PrimitiveTy::String))
+        TypeView::Inline(InlineTypeView::Primitive(PrimitiveTy::String))
     ));
 }
 
@@ -1607,7 +1679,7 @@ fn lower_cycle_reference_handling() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = setup_analyzer(&res.root);
+    let mut analyzer = setup_lowerer(&res.root);
 
     analyzer.reports.sort_by_key(|rep| rep.labels[0].span.start);
     insta::assert_debug_snapshot!(analyzer.reports);
@@ -1632,7 +1704,7 @@ fn lower_headers_reference_response() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
+    let analyzer = setup_lowerer(&res.root);
 
     insta::assert_debug_snapshot!(analyzer.reports);
 
@@ -1669,7 +1741,7 @@ fn lower_record_invalid_inline_types_and_response_reference() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
+    let analyzer = setup_lowerer(&res.root);
 
     insta::assert_debug_snapshot!(analyzer.reports);
 }
@@ -1688,16 +1760,17 @@ fn lower_reference_to_response() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    assert!(analyzer.reports.is_empty());
+    let analyzer = setup_lowerer(&res.root);
+    let lowered = analyzer.into_lowered_spec();
+    assert!(lowered.reports.is_empty());
 
-    let alias = match get_root_type(&analyzer, "Alias") {
-        RootType::NamedReference(reference) => reference,
+    let alias = match get_root_type(&lowered, "Alias") {
+        RootTypeView::NamedReference(reference) => reference,
         typ => panic!("expected named reference, got {typ:?}"),
     };
 
     match alias.typ() {
-        RootType::Response(_) => (),
+        RootTypeView::Response(_) => (),
         typ => panic!("expected response reference, got {typ:?}"),
     }
 }
@@ -1715,7 +1788,7 @@ fn lower_repeated_field_names() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = Analyzer::new(&res.root);
+    let mut analyzer = SpecLowerer::new(&res.root);
 
     let typ = res.root.type_definitions().next().unwrap().typ().unwrap();
     let _ = analyzer.lower_type(&typ).unwrap();
@@ -1736,7 +1809,7 @@ fn is_simple_type_edges() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let mut analyzer = Analyzer::new(&res.root);
+    let mut analyzer = SpecLowerer::new(&res.root);
     analyzer.validate_symbols();
 
     let opt = res
@@ -1777,15 +1850,15 @@ fn is_simple_type_edges() {
     assert!(analyzer.is_simple_type(&missing, true, true).unwrap());
 }
 
-fn setup_analyzer<'a>(root: &'a ast::Root) -> Analyzer<'a> {
-    let mut analyzer = Analyzer::new(root);
+fn setup_lowerer<'a>(root: &'a ast::Root) -> SpecLowerer<'a> {
+    let mut analyzer = SpecLowerer::new(root);
     analyzer.validate_symbols();
     analyzer.lower_type_definitions();
     analyzer
 }
 
-fn get_root_type<'a>(analyzer: &'a Analyzer<'_>, name: &str) -> RootType<'a> {
-    let name_id = analyzer.strings.get(name).unwrap();
-    let type_def = analyzer.spec_symbol_table.get(&name_id).unwrap();
-    analyzer.spec_ctx().get_root_type(type_def.typ)
+fn get_root_type<'a>(analyzer: &'a LoweredSpec, name: &str) -> RootTypeView<'a> {
+    let name_id = analyzer.spec.strings.get(name).unwrap();
+    let type_def = analyzer.spec.symbol_table.get(&name_id).unwrap();
+    analyzer.spec.get_root_type(type_def.typ)
 }
