@@ -5,12 +5,16 @@ use better_api_syntax::{TextRange, ast};
 use crate::analyzer::compare::value_matches_type;
 use crate::analyzer::symbols::{ResolvedSymbol, deref, report_missing, resolve};
 use crate::analyzer::value::{lower_mime_types, lower_value};
-use crate::analyzer::{Analyzer, Context, SymbolMap};
-use crate::spec::typ::{
-    EnumTy, FieldBuilder, InlineTyId, OptionArrayBuilder, PrimitiveTy, ResponseTyId, RootRef,
-    RootTypeId, SimpleRecordReferenceId, TypeArena, TypeDefData, TypeId, TypeRef,
+use crate::analyzer::{Context, SpecLowerer, SymbolMap};
+use crate::spec::arena::typ::TypeDefData;
+use crate::spec::arena::typ::builder::{
+    FieldBuilder, OptionArrayBuilder, RootRef, TypeArenaBuilder, TypeRef,
 };
-use crate::spec::value::{ValueArena, ValueContext, ValueId};
+use crate::spec::arena::typ::id::{
+    InlineTypeId, ResponseTypeId, RootTypeId, SimpleRecordReferenceProof, TypeId,
+};
+use crate::spec::arena::value::{ValueArena, ValueId};
+use crate::spec::view::typ::{EnumTy, PrimitiveTy};
 use crate::text::{NameId, StringId, StringInterner};
 
 /// Represents type field with interned name.
@@ -92,11 +96,12 @@ impl<'a> ParsedType<'a> {
     }
 }
 
-impl<'a> Analyzer<'a> {
+impl<'a> SpecLowerer<'a> {
     /// Lowers type definitions.
     pub(crate) fn lower_type_definitions(&mut self) {
         let mut ctx = Context {
             strings: &mut self.strings,
+            mimes: &mut self.mimes,
             spec_symbol_table: &mut self.spec_symbol_table,
             symbol_map: &mut self.symbol_map,
             reports: &mut self.reports,
@@ -116,7 +121,7 @@ impl<'a> Analyzer<'a> {
     /// This method mustn't be called on [`ast::TypeResponse`]. If it's called
     /// on `ast::TypeResponse`, it will panic.
     ///
-    /// Use [`Oracle::lower_response`] for lowering response.
+    /// Use [`Analyzer::lower_response`] for lowering response.
     ///
     /// **Note:** You can should use this method to lower a _reference_ to a response.
     #[cfg_attr(
@@ -129,6 +134,7 @@ impl<'a> Analyzer<'a> {
     pub(crate) fn lower_type(&mut self, typ: &ast::Type) -> Option<RootTypeId> {
         let mut ctx = Context {
             strings: &mut self.strings,
+            mimes: &mut self.mimes,
             spec_symbol_table: &mut self.spec_symbol_table,
             symbol_map: &mut self.symbol_map,
             reports: &mut self.reports,
@@ -186,9 +192,10 @@ impl<'a> Analyzer<'a> {
         &mut self,
         resp: &ast::TypeResponse,
         name: &str,
-    ) -> Option<ResponseTyId> {
+    ) -> Option<ResponseTypeId> {
         let mut ctx = Context {
             strings: &mut self.strings,
+            mimes: &mut self.mimes,
             spec_symbol_table: &mut self.spec_symbol_table,
             symbol_map: &mut self.symbol_map,
             reports: &mut self.reports,
@@ -223,9 +230,10 @@ impl<'a> Analyzer<'a> {
         allow_array: bool,
         typ_name: &str,
         ref_name: &str,
-    ) -> Option<SimpleRecordReferenceId> {
+    ) -> Option<SimpleRecordReferenceProof> {
         let mut ctx = Context {
             strings: &mut self.strings,
+            mimes: &mut self.mimes,
             spec_symbol_table: &mut self.spec_symbol_table,
             symbol_map: &mut self.symbol_map,
             reports: &mut self.reports,
@@ -247,7 +255,7 @@ impl<'a> Analyzer<'a> {
 /// Lowers type definitions.
 pub(crate) fn lower_type_definitions(
     ctx: &mut Context,
-    types: &mut TypeArena,
+    types: &mut TypeArenaBuilder,
     values: &mut ValueArena,
 ) {
     for def in ctx.root.type_definitions() {
@@ -258,7 +266,7 @@ pub(crate) fn lower_type_definitions(
 /// Lowers type definition node.
 fn lower_type_def(
     ctx: &mut Context,
-    types: &mut TypeArena,
+    types: &mut TypeArenaBuilder,
     values: &mut ValueArena,
     def: &ast::TypeDefinition,
 ) {
@@ -280,7 +288,7 @@ fn lower_type_def(
     };
 
     // Insert type to symbol table if not already present.
-    // The duplicate type definition error is reported by [`Oracle::validate_symbols`].
+    // The duplicate type definition error is reported by [`Analyzer::validate_symbols`].
     ctx.spec_symbol_table.entry(name_id).or_insert(TypeDefData {
         typ: type_id,
         name: name_id,
@@ -304,14 +312,14 @@ fn lower_type_def(
 /// **Note:** You can should use this function to lower a _reference_ to a response.
 pub(crate) fn lower_type(
     ctx: &mut Context,
-    types: &mut TypeArena,
+    types: &mut TypeArenaBuilder,
     values: &mut ValueArena,
     typ: &ast::Type,
 ) -> Option<RootTypeId> {
     match ParsedType::new(typ, ctx.strings) {
         ParsedType::Primitive(primitive) => Some(types.add_primitive(primitive).into()),
         ParsedType::Reference { name, range } => validate_reference(ctx, name, range)
-            .map(|valid_ref| Some(types.add_reference(valid_ref.into())))?,
+            .map(|valid_ref| Some(types.add_root_reference(valid_ref.into())))?,
         ParsedType::Enum(en) => lower_enum(ctx, types, values, en).map(|id| id.into()),
         ParsedType::Record(record) => Some(lower_record(ctx, types, values, record).into()),
         ParsedType::Union(union) => lower_union(ctx, types, values, union).map(|id| id.into()),
@@ -408,7 +416,7 @@ pub(crate) fn is_simple_type(
 /// Lowers enum type and inserts it into arena.
 fn lower_enum(
     ctx: &mut Context,
-    types: &mut TypeArena,
+    types: &mut TypeArenaBuilder,
     values: &mut ValueArena,
     typ: &ast::Enum,
 ) -> Option<TypeId> {
@@ -452,11 +460,11 @@ fn lower_enum(
 /// header and body names.
 pub(crate) fn lower_response(
     ctx: &mut Context,
-    types: &mut TypeArena,
+    types: &mut TypeArenaBuilder,
     values: &mut ValueArena,
     resp: &ast::TypeResponse,
     name: &str,
-) -> Option<ResponseTyId> {
+) -> Option<ResponseTypeId> {
     // Is response valid. We don't want to early return, because
     // we want to validate as many things as possible and capture as many
     // errors as possible.
@@ -470,7 +478,7 @@ pub(crate) fn lower_response(
     let content_type_id = resp
         .content_type()
         .and_then(|v| v.value())
-        .and_then(|v| lower_mime_types(values, ctx.strings, ctx.reports, &v));
+        .and_then(|v| lower_mime_types(ctx.mimes, ctx.reports, &v));
 
     // Parse and validate header type
     let mut headers_id = None;
@@ -513,14 +521,9 @@ pub(crate) fn lower_response(
 
     // Does content type require the response body to be `file`
     let requires_file = content_type_id.is_some_and(|id| {
-        let val_ctx = ValueContext {
-            strings: ctx.strings,
-            values,
-        };
-
-        val_ctx
-            .get_mime_types(id)
-            .any(|mime| mime != "application/json")
+        ctx.mimes
+            .get_mime_range(id)
+            .any(|mime| mime.as_ref() != "application/json")
     });
 
     // Check that response body is `file` by also resolving references
@@ -574,9 +577,8 @@ pub(crate) fn lower_response(
 
     let body_id = ensure_inline(ctx, &body, body_id, &format!("{name}Body"), types)?;
 
-    // Safety: We checked that body is not a response, and that it's inlined.
-    let body_id = unsafe { InlineTyId::new_unchecked(body_id) };
-
+    // Safety: We know that body is not a response and it's inlined.
+    let body_id = unsafe { InlineTypeId::from_root_type_id(body_id) };
     let id = types.add_response(body_id, headers_id, content_type_id);
     Some(id)
 }
@@ -590,11 +592,11 @@ pub(crate) fn lower_response(
 /// Some(_) is returned. If any validation fails, reports are generated and None is returned.
 pub(crate) fn lower_simple_record_param(
     ctx: &mut Context,
-    types: &mut TypeArena,
+    types: &mut TypeArenaBuilder,
     values: &mut ValueArena,
     node: &ast::Type,
     conf: SimpleRecordParamConfig<'_>,
-) -> Option<SimpleRecordReferenceId> {
+) -> Option<SimpleRecordReferenceProof> {
     let SimpleRecordParamConfig {
         allow_option,
         allow_array,
@@ -665,7 +667,10 @@ pub(crate) fn lower_simple_record_param(
 
     if is_valid {
         // Safety: We have checked that it's a simple record, and that it's behind a reference.
-        let id = unsafe { SimpleRecordReferenceId::new_unchecked(id) };
+        let id = unsafe {
+            let id = InlineTypeId::from_root_type_id(id);
+            SimpleRecordReferenceProof::new(id)
+        };
         Some(id)
     } else {
         None
@@ -675,7 +680,7 @@ pub(crate) fn lower_simple_record_param(
 /// Lowers record type and inserts it into arena.
 fn lower_record(
     ctx: &mut Context,
-    types: &mut TypeArena,
+    types: &mut TypeArenaBuilder,
     values: &mut ValueArena,
     record: &ast::Record,
 ) -> TypeId {
@@ -687,7 +692,7 @@ fn lower_record(
 /// Lowers union type and inserts it into arena.
 fn lower_union(
     ctx: &mut Context,
-    types: &mut TypeArena,
+    types: &mut TypeArenaBuilder,
     values: &mut ValueArena,
     union: &ast::Union,
 ) -> Option<TypeId> {
@@ -1125,7 +1130,7 @@ pub(crate) fn ensure_inline(
     node: &ast::Type,
     id: RootTypeId,
     name: &str,
-    types: &mut TypeArena,
+    types: &mut TypeArenaBuilder,
 ) -> Option<RootTypeId> {
     // If type is already inline, there's nothing to do.
     if TypeClass::from(node).is_inline() {
@@ -1174,7 +1179,7 @@ pub(crate) fn ensure_inline(
     );
 
     // Create a new reference and return it.
-    let ref_id = types.add_reference(RootRef(name_id));
+    let ref_id = types.add_root_reference(RootRef(name_id));
     Some(ref_id)
 }
 
@@ -1239,17 +1244,17 @@ fn validate_reference(
 /// Lowers array or option by using the [`OptionArrayBuilder`].
 ///
 /// It inserts the `inner` type to the builder and returns the id of the constructed
-/// Array or Option type. All intermediate types are inserted into the source map.
+/// Array or Option type.
 fn lower_array_option(
     ctx: &mut Context,
     inner: &ast::Type,
     mut builder: OptionArrayBuilder,
     outer_type: InvalidOuterContext,
-) -> Option<TypeId> {
+) -> Option<InlineTypeId> {
     match ParsedType::new(inner, ctx.strings) {
         ParsedType::Primitive(primitive) => {
             let res = builder.finish_primitive(primitive);
-            Some(res.container_id)
+            Some(res)
         }
         ParsedType::Reference { name, range } => match validate_reference(ctx, name, range) {
             None => None,
@@ -1263,7 +1268,7 @@ fn lower_array_option(
             }
             Some(ValidRef::Type(reference)) => {
                 let res = builder.finish_reference(reference);
-                Some(res.container_id)
+                Some(res)
             }
         },
         ParsedType::Array(arr) => {

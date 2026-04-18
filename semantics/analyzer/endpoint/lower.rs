@@ -13,15 +13,15 @@ use crate::analyzer::typ::{
     require_not_response, require_with_deref,
 };
 use crate::analyzer::value::lower_mime_types;
-use crate::analyzer::{Analyzer, Context, RangeMap};
-use crate::path::{Path, PathId, PathParamIterator, PathPart};
-use crate::spec::SpecContext;
-use crate::spec::endpoint::{
-    Endpoint, EndpointArena, EndpointBuilder, EndpointData, EndpointId, EndpointResponseId,
-    EndpointResponseTypeId, ResponseStatus, Route, RouteBuilder, RouteId,
+use crate::analyzer::{Context, SpecLowerer};
+use crate::path::{PathId, PathPart};
+use crate::spec::arena::endpoint::{
+    EndpointArena, EndpointBuilder, EndpointFields, EndpointId, EndpointResponseId,
+    EndpointResponseTypeId, ResponseStatus, RouteBuilder, RouteId,
 };
-use crate::spec::typ::{InlineTyId, ResponseReferenceId, SimpleRecordReference, TypeArena};
-use crate::spec::value::{ValueArena, ValueContext};
+use crate::spec::arena::typ::builder::TypeArenaBuilder;
+use crate::spec::arena::typ::id::{InlineTypeId, ResponseReferenceProof};
+use crate::spec::arena::value::ValueArena;
 use crate::text::{self, NameId, StringId, StringInterner};
 
 /// Helper trait to unify endpoint arena and route builder.
@@ -29,7 +29,7 @@ trait EndpointParent {
     fn add_endpoint<'a>(
         &'a mut self,
         path: PathPart,
-        data: EndpointData,
+        data: EndpointFields,
     ) -> (EndpointBuilder<'a>, PathId);
 
     fn add_route<'a>(
@@ -44,7 +44,7 @@ impl EndpointParent for EndpointArena {
     fn add_endpoint<'a>(
         &'a mut self,
         path: PathPart,
-        data: EndpointData,
+        data: EndpointFields,
     ) -> (EndpointBuilder<'a>, PathId) {
         self.add_endpoint(path, data)
     }
@@ -64,7 +64,7 @@ impl EndpointParent for RouteBuilder<'_> {
     fn add_endpoint<'a>(
         &'a mut self,
         path: PathPart,
-        data: EndpointData,
+        data: EndpointFields,
     ) -> (EndpointBuilder<'a>, PathId) {
         self.add_endpoint(path, data)
     }
@@ -119,12 +119,13 @@ struct EndpointContext<'o, 'a> {
     endpoint_names: HashMap<NameId, TextRange>,
 }
 
-impl<'a> Analyzer<'a> {
+impl<'a> SpecLowerer<'a> {
     /// Lowers routes and endpoints
     pub(crate) fn lower_endpoints_and_routes(&mut self) {
         let mut ctx = EndpointContext {
             ctx: Context {
                 strings: &mut self.strings,
+                mimes: &mut self.mimes,
                 spec_symbol_table: &mut self.spec_symbol_table,
                 symbol_map: &mut self.symbol_map,
                 reports: &mut self.reports,
@@ -156,28 +157,28 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Validate route and endpoint paths.
-    ///
-    /// It checks all paths are unique, parameters are unique, and that parameters match
-    /// endpoint's `path` record.
-    pub(crate) fn validate_paths(&mut self) {
-        let spec_ctx = SpecContext {
-            strings: &self.strings,
-            symbol_table: &self.spec_symbol_table,
-            values: &self.values,
-            types: &self.types,
-            endpoints: &self.endpoints,
-        };
-
-        validate_paths(&self.range_map, &mut self.reports, &spec_ctx);
-    }
+    // /// Validate route and endpoint paths.
+    // ///
+    // /// It checks all paths are unique, parameters are unique, and that parameters match
+    // /// endpoint's `path` record.
+    // pub(crate) fn validate_paths(&mut self) {
+    //     let spec_ctx = SpecContext {
+    //         strings: &self.strings,
+    //         symbol_table: &self.spec_symbol_table,
+    //         values: &self.values,
+    //         types: &self.types,
+    //         endpoints: &self.endpoints,
+    //     };
+    //
+    //     validate_paths(&self.range_map, &mut self.reports, &spec_ctx);
+    // }
 }
 
 /// Lower a route
 fn lower_route<P: EndpointParent>(
     ctx: &mut EndpointContext,
     values: &mut ValueArena,
-    types: &mut TypeArena,
+    types: &mut TypeArenaBuilder,
     parent: &mut P,
     route: &ast::Route,
 ) -> Option<RouteId> {
@@ -221,7 +222,7 @@ fn lower_route<P: EndpointParent>(
 fn lower_endpoint<P: EndpointParent>(
     ctx: &mut EndpointContext,
     values: &mut ValueArena,
-    types: &mut TypeArena,
+    types: &mut TypeArenaBuilder,
     parent: &mut P,
     endpoint: &ast::Endpoint,
 ) -> Option<EndpointId> {
@@ -333,18 +334,14 @@ fn lower_endpoint<P: EndpointParent>(
     let accept_id = endpoint
         .accept()
         .and_then(|a| a.value())
-        .and_then(|v| lower_mime_types(values, ctx.ctx.strings, ctx.ctx.reports, &v));
+        .and_then(|v| lower_mime_types(ctx.ctx.mimes, ctx.ctx.reports, &v));
 
     // Does accept parameter requires the request body to be `file`
     let requires_file = accept_id.is_some_and(|id| {
-        let val_ctx = ValueContext {
-            strings: ctx.ctx.strings,
-            values,
-        };
-
-        val_ctx
-            .get_mime_types(id)
-            .any(|mime| mime != "application/json")
+        ctx.ctx
+            .mimes
+            .get_mime_range(id)
+            .any(|mime| mime.as_ref() != "application/json")
     });
 
     // Validate and lower request body.
@@ -388,7 +385,7 @@ fn lower_endpoint<P: EndpointParent>(
         move |ctx, path, path_range| {
             let (builder, path_id) = parent.add_endpoint(
                 path,
-                EndpointData {
+                EndpointFields {
                     method: method?,
                     name: name_id,
                     path_param,
@@ -455,7 +452,7 @@ fn lower_endpoint<P: EndpointParent>(
 fn lower_responses<P: ResponseParent>(
     ctx: &mut EndpointContext,
     values: &mut ValueArena,
-    types: &mut TypeArena,
+    types: &mut TypeArenaBuilder,
     parent: &mut P,
     behavior: LowerResponseBehavior,
     responses: impl Iterator<Item = ast::EndpointResponse>,
@@ -496,12 +493,12 @@ fn lower_responses<P: ResponseParent>(
 /// Validate and lower request body.
 fn lower_request_body(
     ctx: &mut Context,
-    types: &mut TypeArena,
+    types: &mut TypeArenaBuilder,
     values: &mut ValueArena,
     requires_file: bool,
     endpoint: &ast::Endpoint,
     name: &str,
-) -> Result<Option<InlineTyId>, ()> {
+) -> Result<Option<InlineTypeId>, ()> {
     let body = endpoint.request_body().and_then(|b| b.typ());
     let endpoint_range = endpoint.syntax().text_range();
     let accept_range = endpoint.accept().map(|a| a.syntax().text_range());
@@ -586,7 +583,7 @@ fn lower_request_body(
     let body_id = ensure_inline(ctx, &body, body_id, name, types).ok_or(())?;
 
     // Safety: We checked that body is not a response, and that it's inlined.
-    let body_id = unsafe { InlineTyId::new_unchecked(body_id) };
+    let body_id = unsafe { InlineTypeId::from_root_type_id(body_id) };
     Ok(Some(body_id))
 }
 
@@ -647,7 +644,7 @@ enum LowerResponseBehavior {
 fn lower_endpoint_response<P: ResponseParent>(
     ctx: &mut Context,
     values: &mut ValueArena,
-    types: &mut TypeArena,
+    types: &mut TypeArenaBuilder,
     parent: &mut P,
     resp: &ast::EndpointResponse,
     behavior: LowerResponseBehavior,
@@ -674,7 +671,7 @@ fn lower_endpoint_response<P: ResponseParent>(
                 let resp_id = ensure_inline(ctx, &typ, resp_id.into(), &resp_name, types)?;
 
                 // Safety: We know it's a response and we have made sure that it's behind a reference.
-                let resp_id = unsafe { ResponseReferenceId::new_unchecked(resp_id) };
+                let resp_id = unsafe { ResponseReferenceProof::new(resp_id) };
                 Some(EndpointResponseTypeId::Response(resp_id))
             }
             LowerResponseBehavior::Route => {
@@ -692,13 +689,13 @@ fn lower_endpoint_response<P: ResponseParent>(
             match deref(ctx.strings, ctx.symbol_map, ctx.root, reference)? {
                 ast::Type::TypeResponse(_) => {
                     // Safety: We know it's a reference to a response
-                    let id = unsafe { ResponseReferenceId::new_unchecked(reference_id) };
+                    let id = unsafe { ResponseReferenceProof::new(reference_id) };
                     Some(EndpointResponseTypeId::Response(id))
                 }
 
                 _ => {
                     // Safety: We know it's a reference to a type that isn't a response
-                    let id = unsafe { InlineTyId::new_unchecked(reference_id) };
+                    let id = unsafe { InlineTypeId::from_root_type_id(reference_id) };
                     Some(EndpointResponseTypeId::InlineType(id))
                 }
             }
@@ -711,7 +708,7 @@ fn lower_endpoint_response<P: ResponseParent>(
                 let id = ensure_inline(ctx, &typ, id, &resp_name, types)?;
 
                 // Safety: We know it's a type and we made sure it's inline
-                let id = unsafe { InlineTyId::new_unchecked(id) };
+                let id = unsafe { InlineTypeId::from_root_type_id(id) };
                 Some(EndpointResponseTypeId::InlineType(id))
             }
             LowerResponseBehavior::Route => {
@@ -720,7 +717,7 @@ fn lower_endpoint_response<P: ResponseParent>(
                         let id = lower_type(ctx, types, values, &typ)?;
 
                         // Safety: We know it's inline type
-                        let id = unsafe { InlineTyId::new_unchecked(id) };
+                        let id = unsafe { InlineTypeId::from_root_type_id(id) };
                         Some(EndpointResponseTypeId::InlineType(id))
                     }
                     TypeClass::Enum => {
@@ -748,7 +745,9 @@ fn lower_endpoint_response<P: ResponseParent>(
                         None
                     }
                     TypeClass::Response => {
-                        unreachable!("response is handled separately by the outer match statement")
+                        unreachable!(
+                            "response should be handled separately by the outer match statement"
+                        )
                     }
                 }
             }
@@ -759,350 +758,6 @@ fn lower_endpoint_response<P: ResponseParent>(
     let status = status?;
     parent.add_response(status, type_id?, None);
     Some(status)
-}
-
-type UniquePathMap<'a> = HashMap<http::Method, HashMap<Path<'a>, TextRange>>;
-
-/// Validate endpoint and route paths.
-///
-/// Specifically this checks:
-/// - endpoint paths are unique across the whole tree
-/// - visible path params are unique in each scope
-/// - endpoint path params type matches visible path params
-fn validate_paths<'a>(range_map: &RangeMap, reports: &mut Vec<Report>, spec_ctx: &'a SpecContext) {
-    // Unique paths and their ranges.
-    let mut path_unique: UniquePathMap<'a> = HashMap::new();
-
-    // Path params extract from path and descendants. Updated during traversal.
-    let mut scoped_params: HashMap<&'a str, TextRange> = HashMap::new();
-
-    // Shared buffer for type fields of Endpoint::path_params
-    let mut fields_buf: HashMap<&'a str, TextRange> = HashMap::new();
-
-    for endpoint in spec_ctx.root_endpoints() {
-        validate_endpoint_path_unique(range_map, reports, &endpoint, &mut path_unique);
-
-        let fields = PathParamTypeFields::from_endpoint_path(range_map, &mut fields_buf, &endpoint);
-
-        validate_path_params(
-            range_map,
-            reports,
-            &mut scoped_params,
-            fields,
-            &endpoint.path,
-            |_, _, _| {},
-        );
-    }
-
-    for route in spec_ctx.root_routes() {
-        validate_route_paths_unique(range_map, reports, &route, &mut path_unique);
-        validate_route_path_params(
-            range_map,
-            reports,
-            &mut scoped_params,
-            &mut fields_buf,
-            &route,
-        );
-    }
-}
-
-/// Auxiliary method to validate if endpoint path is unique.
-fn validate_endpoint_path_unique<'a>(
-    range_map: &RangeMap,
-    reports: &mut Vec<Report>,
-    endpoint: &Endpoint<'a>,
-    existing_paths: &mut UniquePathMap<'a>,
-) {
-    let path_id = endpoint.path.id();
-    let path_range = range_map
-        .path
-        .get(&path_id)
-        .expect("endpoint paths should be inserted into range map");
-
-    if let Some(existing_range) = existing_paths
-        .get(&endpoint.method)
-        .and_then(|h| h.get(&endpoint.path))
-    {
-        reports.push(
-            Report::error("duplicated endpoint path".to_string())
-                .add_label(Label::primary(
-                    "duplicated endpoint path".to_string(),
-                    (*path_range).into(),
-                ))
-                .add_label(Label::secondary(
-                    "same path first defined here".to_string(),
-                    (*existing_range).into(),
-                )),
-        );
-    } else {
-        existing_paths
-            .entry(endpoint.method.clone())
-            .or_default()
-            .insert(endpoint.path.clone(), *path_range);
-    }
-}
-
-/// Auxiliary method to validate if route descendants have unique endpoint paths.
-///
-/// `existing_paths` is shared across all roots, so this enforces global uniqueness.
-fn validate_route_paths_unique<'a>(
-    range_map: &RangeMap,
-    reports: &mut Vec<Report>,
-    route: &Route<'a>,
-    existing_paths: &mut UniquePathMap<'a>,
-) {
-    for endpoint in route.endpoints() {
-        validate_endpoint_path_unique(range_map, reports, &endpoint, existing_paths);
-    }
-
-    for route in route.routes() {
-        validate_route_paths_unique(range_map, reports, &route, existing_paths);
-    }
-}
-
-/// Auxiliary method to validate route path params and all descendants.
-///
-/// This also maintains path params in scope while descending the tree.
-fn validate_route_path_params<'a>(
-    range_map: &RangeMap,
-    reports: &mut Vec<Report>,
-    scoped_params: &mut HashMap<&'a str, TextRange>,
-    fields_buf: &mut HashMap<&'a str, TextRange>,
-    route: &Route<'a>,
-) {
-    // Validate self and then children
-    validate_path_params(
-        range_map,
-        reports,
-        scoped_params,
-        PathParamTypeFields::Ignore,
-        &route.path,
-        |range_map, reports, scoped_params| {
-            // Validate child endpoints.
-            for endpoint in route.endpoints() {
-                let fields =
-                    PathParamTypeFields::from_endpoint_path(range_map, fields_buf, &endpoint);
-
-                validate_path_params(
-                    range_map,
-                    reports,
-                    scoped_params,
-                    fields,
-                    &endpoint.path,
-                    |_, _, _| {},
-                );
-            }
-
-            // Validate child routes.
-            for route in route.routes() {
-                validate_route_path_params(range_map, reports, scoped_params, fields_buf, &route);
-            }
-        },
-    );
-}
-
-/// Path parameter type fields that should be validated.
-///
-/// This wraps endpoint `path` attribute fields together with validation mode.
-enum PathParamTypeFields<'a, 'b> {
-    /// Don't validate path parameter type fields
-    Ignore,
-
-    /// There are no type fields
-    None,
-
-    /// There was an error during lowering of path parameter type
-    Error,
-
-    /// Path parameter type fields that should be validated
-    Some {
-        fields: &'b mut HashMap<&'a str, TextRange>,
-        path_attribute_name_range: TextRange,
-    },
-}
-
-impl<'a, 'b> PathParamTypeFields<'a, 'b> {
-    fn from_endpoint_path(
-        range_map: &RangeMap,
-        fields_buf: &'b mut HashMap<&'a str, TextRange>,
-        endpoint: &Endpoint<'a>,
-    ) -> Self {
-        fields_buf.clear();
-
-        // If there is no params attribute name in endpoint, there for sure isn't any parameters.
-        let Some(attr_name_range) = range_map.endpoint_path_attribute_name.get(&endpoint.id) else {
-            return Self::None;
-        };
-
-        // We have parameter name, but we don't have a concrete lowered type.
-        // This means there was an error during lowering of the path params type.
-        let Some(mut path_param) = endpoint.path_param.clone() else {
-            return Self::Error;
-        };
-
-        let record = loop {
-            match path_param.typ() {
-                SimpleRecordReference::SimpleRecord(record) => break record,
-                SimpleRecordReference::NamedReference(reference) => path_param = reference,
-            }
-        };
-
-        for field in record.fields() {
-            let range = range_map
-                .field_name
-                .get(&field.id)
-                .expect("record field name should be inserted into range map");
-            fields_buf.insert(field.name.as_str(), *range);
-        }
-
-        Self::Some {
-            fields: fields_buf,
-            path_attribute_name_range: *attr_name_range,
-        }
-    }
-}
-
-/// Validate that path parameters are unique and endpoint path param type is valid.
-///
-/// This function is used for endpoint and route path validation.
-///
-/// It adds params from current path segment to scope, validates descendants,
-/// validates endpoint's [path type fields](Endpoint::path_param), then removes params introduced by this segment.
-fn validate_path_params<'a, F>(
-    range_map: &RangeMap,
-    reports: &mut Vec<Report>,
-    scoped_params: &mut HashMap<&'a str, TextRange>,
-    path_param_fields: PathParamTypeFields<'a, '_>,
-    path: &Path<'a>,
-    mut validate_descendants: F,
-) where
-    F: FnMut(&RangeMap, &mut Vec<Report>, &mut HashMap<&'a str, TextRange>),
-{
-    let segment = match path.part() {
-        PathPart::Empty => None,
-        PathPart::Segment(seg) => Some(seg),
-    };
-
-    let range = range_map
-        .path
-        .get(&path.id())
-        .expect("endpoint paths should be inserted into range map");
-
-    // Populate map with params of the new segment
-    if let Some(segment) = segment {
-        let path_params = PathParamIterator::new(segment, *range);
-        for (param, range) in path_params {
-            match scoped_params.get(param) {
-                None => {
-                    scoped_params.insert(param, range);
-                }
-                Some(existing_range) => {
-                    reports.push(
-                        Report::error(format!("path parameter '{param}' already defined"))
-                            .add_label(Label::primary(
-                                "path parameter already defined".to_string(),
-                                range.into(),
-                            ))
-                            .add_label(Label::secondary(
-                                "previously defined here".to_string(),
-                                (*existing_range).into(),
-                            )),
-                    );
-                }
-            }
-        }
-    }
-
-    // Validate params of descendants, based on the inner function from caller.
-    validate_descendants(range_map, reports, scoped_params);
-
-    compare_path_params_to_type(reports, *range, scoped_params, path_param_fields);
-
-    // Clean params from the hashmap
-    if let Some(segment) = segment {
-        let path_params = PathParamIterator::new(segment, *range);
-        for (param, range) in path_params {
-            let Some(stored_range) = scoped_params.get(param) else {
-                continue;
-            };
-
-            // If ranges don't match, the param was defined by one of the parents,
-            // which means we shouldn't be the ones removing it.
-            if range == *stored_range {
-                scoped_params.remove(param);
-            }
-        }
-    }
-}
-
-/// Compare visible path parameters to endpoint's path param type.
-///
-/// It checks that all params in path are defined in the type,
-/// and vice versa.
-fn compare_path_params_to_type<'a>(
-    reports: &mut Vec<Report>,
-    path_range: TextRange,
-    scoped_params: &HashMap<&'a str, TextRange>,
-    path_param_fields: PathParamTypeFields<'a, '_>,
-) {
-    let (fields, path_attribute_range) = match path_param_fields {
-        PathParamTypeFields::Ignore | PathParamTypeFields::Error => return,
-        PathParamTypeFields::None => {
-            if scoped_params.is_empty() {
-                return;
-            } else {
-                reports.push(
-                    Report::error("missing path parameters type".to_string()).add_label(
-                        Label::primary(
-                            "missing path parameters type".to_string(),
-                            path_range.into(),
-                        ),
-                    ).with_note("help: endpoint's path contains path parameters. You must define their type in `path` attribute.".to_string()),
-                );
-                return;
-            }
-        }
-        PathParamTypeFields::Some {
-            fields,
-            path_attribute_name_range,
-        } => (fields, path_attribute_name_range),
-    };
-
-    for (p_name, p_range) in scoped_params.iter() {
-        if fields.contains_key(p_name) {
-            continue;
-        }
-
-        reports.push(
-            Report::error(format!("missing field for path parameter `{p_name}`"))
-                .add_label(Label::primary(
-                    "missing field for path parameter".to_string(),
-                    path_attribute_range.into(),
-                ))
-                .add_label(Label::secondary(
-                    "path parameter defined here".to_string(),
-                    (*p_range).into(),
-                )),
-        );
-    }
-
-    for (f_name, f_range) in fields.iter() {
-        if scoped_params.contains_key(f_name) {
-            continue;
-        }
-
-        reports.push(
-            Report::error(format!("invalid path parameters field `{f_name}`"))
-                .add_label(Label::primary(
-                    "field not defined in path".to_string(),
-                    (*f_range).into(),
-                ))
-                .with_note(
-                    "help: endpoint's path attribute can only contain fields defined in the path"
-                        .to_string(),
-                ),
-        );
-    }
 }
 
 /// Name of the auto generated type for endpoint response

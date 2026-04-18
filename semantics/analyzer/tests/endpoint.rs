@@ -2,10 +2,11 @@ use better_api_syntax::{ast, parse, tokenize};
 use http::{Method, StatusCode};
 use indoc::indoc;
 
-use crate::analyzer::Analyzer;
+use crate::analyzer::{LoweredSpec, SpecLowerer};
 use crate::path::PathPart;
-use crate::spec::endpoint::{EndpointResponseType, ResponseStatus};
-use crate::spec::typ::{InlineTy, PrimitiveTy, ResponseReference, SimpleRecordReference, Type};
+use crate::spec::arena::endpoint::ResponseStatus;
+use crate::spec::view::endpoint::EndpointResponseType;
+use crate::spec::view::typ::{InlineTypeView, PrimitiveTy, RootTypeView, TypeView};
 
 #[test]
 fn lower_simple_endpoint() {
@@ -21,10 +22,10 @@ fn lower_simple_endpoint() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    assert_eq!(analyzer.reports, vec![]);
+    let lowered = lower_spec(&res.root);
+    assert_eq!(lowered.reports, vec![]);
 
-    let mut root_endpoints = analyzer.spec_ctx().root_endpoints();
+    let mut root_endpoints = lowered.spec.root_endpoints();
     let endpoint = root_endpoints.next().expect("expected endpoint");
     assert!(root_endpoints.next().is_none());
 
@@ -42,10 +43,10 @@ fn lower_simple_endpoint() {
     assert_eq!(responses[0].status, ResponseStatus::Code(StatusCode::OK));
     assert!(matches!(
         responses[0].typ,
-        EndpointResponseType::InlineType(InlineTy::Primitive(PrimitiveTy::String))
+        EndpointResponseType::InlineType(InlineTypeView::Primitive(PrimitiveTy::String))
     ));
 
-    assert_eq!(analyzer.spec_ctx().root_routes().count(), 0);
+    assert_eq!(lowered.spec.root_routes().count(), 0);
 }
 
 #[test]
@@ -79,10 +80,10 @@ fn lower_complex_valid_endpoint() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    assert_eq!(analyzer.reports, vec![]);
+    let lowered = lower_spec(&res.root);
+    assert_eq!(lowered.reports, vec![]);
 
-    let mut root_endpoints = analyzer.spec_ctx().root_endpoints();
+    let mut root_endpoints = lowered.spec.root_endpoints();
     let endpoint = root_endpoints.next().expect("expected endpoint");
     assert!(root_endpoints.next().is_none());
 
@@ -96,7 +97,7 @@ fn lower_complex_valid_endpoint() {
     assert_eq!(query.name, "Query");
 
     let query_record = match query.typ() {
-        SimpleRecordReference::SimpleRecord(record) => record,
+        TypeView::Record(record) => record,
         typ => panic!("expected simple record, got {typ:?}"),
     };
     let query_fields: Vec<_> = query_record.fields().collect();
@@ -104,7 +105,7 @@ fn lower_complex_valid_endpoint() {
     assert_eq!(query_fields[0].name.as_str(), "foo");
     assert!(matches!(
         query_fields[0].typ,
-        InlineTy::Primitive(PrimitiveTy::String)
+        InlineTypeView::Primitive(PrimitiveTy::String)
     ));
 
     let headers = endpoint
@@ -114,7 +115,7 @@ fn lower_complex_valid_endpoint() {
     assert_eq!(headers.name, "fooHeaders");
 
     let headers_record = match headers.typ() {
-        SimpleRecordReference::SimpleRecord(record) => record,
+        TypeView::Record(record) => record,
         typ => panic!("expected simple record, got {typ:?}"),
     };
     let header_fields: Vec<_> = headers_record.fields().collect();
@@ -122,12 +123,12 @@ fn lower_complex_valid_endpoint() {
     assert_eq!(header_fields[0].name.as_str(), "foo");
 
     let header_opt = match header_fields[0].typ.clone() {
-        InlineTy::Option(opt) => opt,
+        InlineTypeView::Option(opt) => opt,
         typ => panic!("expected option, got {typ:?}"),
     };
     assert!(matches!(
         header_opt.typ(),
-        InlineTy::Primitive(PrimitiveTy::String)
+        InlineTypeView::Primitive(PrimitiveTy::String)
     ));
 
     let request_body = endpoint
@@ -135,13 +136,13 @@ fn lower_complex_valid_endpoint() {
         .clone()
         .expect("expected request body");
     let request_body_ref = match request_body {
-        InlineTy::NamedReference(reference) => reference,
+        InlineTypeView::NamedReference(reference) => reference,
         typ => panic!("expected named reference, got {typ:?}"),
     };
     assert_eq!(request_body_ref.name, "fooRequestBody");
 
     let request_body_record = match request_body_ref.typ() {
-        Type::Record(record) => record,
+        TypeView::Record(record) => record,
         typ => panic!("expected record, got {typ:?}"),
     };
     let request_body_fields: Vec<_> = request_body_record.fields().collect();
@@ -153,7 +154,7 @@ fn lower_complex_valid_endpoint() {
         .expect("expected `foo` field");
     assert!(matches!(
         foo_field.typ,
-        InlineTy::Primitive(PrimitiveTy::String)
+        InlineTypeView::Primitive(PrimitiveTy::String)
     ));
 
     let bar_field = request_body_fields
@@ -161,20 +162,20 @@ fn lower_complex_valid_endpoint() {
         .find(|field| field.name.as_str() == "bar")
         .expect("expected `bar` field");
     let bar_opt = match bar_field.typ.clone() {
-        InlineTy::Option(opt) => opt,
+        InlineTypeView::Option(opt) => opt,
         typ => panic!("expected option, got {typ:?}"),
     };
     let bar_arr = match bar_opt.typ() {
-        InlineTy::Array(arr) => arr,
+        InlineTypeView::Array(arr) => arr,
         typ => panic!("expected array, got {typ:?}"),
     };
     let bar_inner_opt = match bar_arr.typ() {
-        InlineTy::Option(opt) => opt,
+        InlineTypeView::Option(opt) => opt,
         typ => panic!("expected option, got {typ:?}"),
     };
     assert!(matches!(
         bar_inner_opt.typ(),
-        InlineTy::Primitive(PrimitiveTy::I32)
+        InlineTypeView::Primitive(PrimitiveTy::I32)
     ));
 
     let responses: Vec<_> = endpoint.responses().collect();
@@ -188,19 +189,19 @@ fn lower_complex_valid_endpoint() {
     assert_eq!(response_reference.name, "fooDefaultResponse");
 
     let response = match response_reference.typ() {
-        ResponseReference::Response(response) => response,
+        RootTypeView::Response(response) => response,
         typ => panic!("expected response type, got {typ:?}"),
     };
 
     let content_types: Vec<_> = response
         .content_type
-        .clone()
         .expect("expected content type")
+        .map(|mime| mime.as_ref())
         .collect();
     assert_eq!(content_types, vec!["image/png"]);
     assert!(matches!(
         response.body,
-        InlineTy::Primitive(PrimitiveTy::File)
+        InlineTypeView::Primitive(PrimitiveTy::File)
     ));
 }
 
@@ -229,12 +230,12 @@ fn lower_simple_valid_routes() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    assert_eq!(analyzer.reports, vec![]);
+    let lowered = lower_spec(&res.root);
+    assert_eq!(lowered.reports, vec![]);
 
-    assert_eq!(analyzer.spec_ctx().root_endpoints().count(), 0);
+    assert_eq!(lowered.spec.root_endpoints().count(), 0);
 
-    let mut root_routes = analyzer.spec_ctx().root_routes();
+    let mut root_routes = lowered.spec.root_routes();
     let root_route = root_routes.next().expect("expected root route");
     assert!(root_routes.next().is_none());
 
@@ -247,7 +248,7 @@ fn lower_simple_valid_routes() {
     );
     assert!(matches!(
         root_responses[0].typ,
-        EndpointResponseType::InlineType(InlineTy::Primitive(PrimitiveTy::String))
+        EndpointResponseType::InlineType(InlineTypeView::Primitive(PrimitiveTy::String))
     ));
 
     let root_endpoints: Vec<_> = root_route.endpoints().collect();
@@ -264,7 +265,7 @@ fn lower_simple_valid_routes() {
     );
     assert!(matches!(
         foo_responses[0].typ,
-        EndpointResponseType::InlineType(InlineTy::Primitive(PrimitiveTy::String))
+        EndpointResponseType::InlineType(InlineTypeView::Primitive(PrimitiveTy::String))
     ));
 
     let child_routes: Vec<_> = root_route.routes().collect();
@@ -286,7 +287,7 @@ fn lower_simple_valid_routes() {
     );
     assert!(matches!(
         bar_responses[0].typ,
-        EndpointResponseType::InlineType(InlineTy::Primitive(PrimitiveTy::String))
+        EndpointResponseType::InlineType(InlineTypeView::Primitive(PrimitiveTy::String))
     ));
 }
 
@@ -302,8 +303,8 @@ fn lower_invalid_endpoint_missing_name() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    insta::assert_debug_snapshot!(analyzer.reports);
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
 }
 
 #[test]
@@ -321,8 +322,8 @@ fn lower_invalid_endpoint_repeated_response_status() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    insta::assert_debug_snapshot!(analyzer.reports);
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
 }
 
 #[test]
@@ -338,8 +339,8 @@ fn lower_invalid_route_repeated_response_status() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    insta::assert_debug_snapshot!(analyzer.reports);
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
 }
 
 #[test]
@@ -368,8 +369,8 @@ fn lower_invalid_route_non_inline_response_types() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    insta::assert_debug_snapshot!(analyzer.reports);
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
 }
 
 #[test]
@@ -387,8 +388,8 @@ fn lower_invalid_endpoint_response_status_code() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    insta::assert_debug_snapshot!(analyzer.reports);
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
 }
 
 #[test]
@@ -407,8 +408,8 @@ fn lower_invalid_endpoint_headers_param() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    insta::assert_debug_snapshot!(analyzer.reports);
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
 }
 
 #[test]
@@ -427,8 +428,8 @@ fn lower_invalid_endpoint_accept_type() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    insta::assert_debug_snapshot!(analyzer.reports);
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
 }
 
 #[test]
@@ -447,8 +448,8 @@ fn lower_invalid_endpoint_missing_request_body() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    insta::assert_debug_snapshot!(analyzer.reports);
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
 }
 
 #[test]
@@ -470,8 +471,8 @@ fn lower_invalid_endpoint_request_body_not_file() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    insta::assert_debug_snapshot!(analyzer.reports);
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
 }
 
 #[test]
@@ -496,8 +497,8 @@ fn lower_invalid_endpoint_request_body_contains_file() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    insta::assert_debug_snapshot!(analyzer.reports);
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
 }
 
 #[test]
@@ -517,12 +518,12 @@ fn lower_invalid_endpoint_request_body_file_with_json_accept() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
+    let lowered = lower_spec(&res.root);
     assert!(
-        format!("{:?}", analyzer.reports).contains("`accept` defined here"),
+        format!("{:?}", lowered.reports).contains("`accept` defined here"),
         "expected `accept` location to be present in report"
     );
-    insta::assert_debug_snapshot!(analyzer.reports);
+    insta::assert_debug_snapshot!(lowered.reports);
 }
 
 #[test]
@@ -543,8 +544,8 @@ fn lower_invalid_endpoint_request_body_is_response() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    insta::assert_debug_snapshot!(analyzer.reports);
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
 }
 
 #[test]
@@ -569,8 +570,8 @@ fn lower_invalid_endpoint_paths_not_unique() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    insta::assert_debug_snapshot!(analyzer.reports);
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
 }
 
 #[test]
@@ -595,8 +596,8 @@ fn lower_invalid_endpoint_paths_params_not_unique() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    insta::assert_debug_snapshot!(analyzer.reports);
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
 }
 
 #[test]
@@ -613,8 +614,8 @@ fn lower_invalid_endpoint_paths_missing_path_attribute() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    insta::assert_debug_snapshot!(analyzer.reports);
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
 }
 
 #[test]
@@ -641,8 +642,8 @@ fn lower_invalid_endpoint_paths_attribute_mismatch() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    insta::assert_debug_snapshot!(analyzer.reports);
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
 }
 
 #[test]
@@ -663,8 +664,8 @@ fn lower_invalid_endpoint_path_params_option_or_array() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    insta::assert_debug_snapshot!(analyzer.reports);
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
 }
 
 #[test]
@@ -679,8 +680,8 @@ fn lower_invalid_endpoint_missing_response() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    insta::assert_debug_snapshot!(analyzer.reports);
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
 }
 
 #[test]
@@ -701,8 +702,8 @@ fn lower_warning_get_with_request_body() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    insta::assert_debug_snapshot!(analyzer.reports);
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
 }
 
 #[test]
@@ -723,8 +724,8 @@ fn lower_invalid_endpoint_repeated_name() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    insta::assert_debug_snapshot!(analyzer.reports);
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
 }
 
 #[test]
@@ -745,15 +746,17 @@ fn lower_valid_endpoint_same_path_different_method() {
     let tokens = tokenize(text, &mut diagnostics);
     let res = parse(tokens);
 
-    let analyzer = setup_analyzer(&res.root);
-    assert!(analyzer.reports.is_empty());
+    let lowered = lower_spec(&res.root);
+    assert!(lowered.reports.is_empty());
 }
 
-fn setup_analyzer<'a>(root: &'a ast::Root) -> Analyzer<'a> {
-    let mut analyzer = Analyzer::new(root);
-    analyzer.validate_symbols();
-    analyzer.lower_type_definitions();
-    analyzer.lower_endpoints_and_routes();
-    analyzer.validate_paths();
-    analyzer
+fn lower_spec(root: &ast::Root) -> LoweredSpec {
+    let mut lowerer = SpecLowerer::new(root);
+    lowerer.validate_symbols();
+    lowerer.lower_type_definitions();
+    lowerer.lower_endpoints_and_routes();
+
+    let mut lowered = lowerer.into_lowered_spec();
+    lowered.validate_paths();
+    lowered
 }

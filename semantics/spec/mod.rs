@@ -1,82 +1,55 @@
 //! Contains definition of a valid spec
+//!
+//! <div class="warning">TODO: Add overview of the spec module and how to use it</div>
 
 use std::collections::HashMap;
 
-use crate::text::{StringId, StringInterner};
+use crate::{
+    mime::MimeArena,
+    spec::arena::typ,
+    text::{StringId, StringInterner},
+};
 
-pub mod endpoint;
-pub mod typ;
-pub mod value;
+pub(crate) mod arena;
+
+pub mod metadata;
+pub mod view;
 
 pub(crate) type SymbolTable = HashMap<StringId, typ::TypeDefData>;
 
 /// Valid semantic specification
-///
-/// Usually constructed by [`Oracle`](crate::Oracle).
 #[derive(derive_more::Debug, Clone)]
 pub struct Spec {
     #[debug(skip)]
     pub(crate) strings: StringInterner,
+    pub(crate) mimes: MimeArena,
     pub(crate) symbol_table: SymbolTable,
 
-    pub metadata: Metadata,
+    /// Metadata of the spec.
+    pub metadata: metadata::Metadata,
 
-    pub(crate) values: value::ValueArena,
-    pub(crate) types: typ::TypeArena,
-    pub(crate) endpoints: endpoint::EndpointArena,
-}
-
-/// Metadata of Better API spec
-#[derive(Debug, Clone, Default)]
-pub struct Metadata {
-    pub better_api_version: String,
-
-    pub version: String,
-    pub name: String,
-    pub description: Option<String>,
-
-    pub servers: Vec<Server>,
-}
-
-/// Server that is part of spec metadata
-#[derive(Debug, Clone)]
-pub struct Server {
-    pub name: String,
-    pub url: String,
-
-    pub docs: Option<String>,
+    pub(crate) values: arena::value::ValueArena,
+    pub(crate) types: arena::typ::TypeArena,
+    pub(crate) endpoints: arena::endpoint::EndpointArena,
 }
 
 impl Spec {
-    /// Get [view](SpecContext) over a spec.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Used by internal tests and upcoming crate consumers"
-        )
-    )]
-    pub(crate) fn ctx<'a>(&'a self) -> SpecContext<'a> {
-        SpecContext {
-            strings: &self.strings,
-            symbol_table: &self.symbol_table,
-            values: &self.values,
-            types: &self.types,
-            endpoints: &self.endpoints,
-        }
-    }
-
     #[cfg(test)]
     pub(crate) fn new_test() -> Self {
+        let symbol_table = SymbolTable::default();
+        let types = typ::builder::TypeArenaBuilder::default()
+            .finish(&symbol_table)
+            .expect("empty type arena builder should always finish");
+
         Self {
             strings: Default::default(),
-            symbol_table: Default::default(),
+            mimes: Default::default(),
+            symbol_table,
 
             values: Default::default(),
-            types: Default::default(),
+            types,
             endpoints: Default::default(),
-
-            metadata: Metadata {
+            metadata: metadata::Metadata {
                 better_api_version: "0.1.0".to_string(),
                 version: "1.0".to_string(),
                 name: "test spec".to_string(),
@@ -85,15 +58,4 @@ impl Spec {
             },
         }
     }
-}
-
-/// View over a [`Spec`] used for querying data.
-#[derive(Clone, Copy)]
-pub(crate) struct SpecContext<'a> {
-    pub(crate) strings: &'a StringInterner,
-    pub(crate) symbol_table: &'a SymbolTable,
-
-    pub(crate) values: &'a value::ValueArena,
-    pub(crate) types: &'a typ::TypeArena,
-    pub(crate) endpoints: &'a endpoint::EndpointArena,
 }

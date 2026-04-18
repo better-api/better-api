@@ -1,11 +1,13 @@
+use std::str::FromStr;
+
 use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast::{self, AstNode};
 
-use crate::analyzer::Analyzer;
-use crate::spec::value::{
-    ArrayBuilder, MimeTypesId, ObjectBuilder, PrimitiveValue, ValueArena, ValueId,
-};
-use crate::text::{NameId, StringId, StringInterner, parse_string};
+use crate::analyzer::SpecLowerer;
+use crate::mime::Mime;
+use crate::mime::{MimeArena, MimeRangeId};
+use crate::spec::arena::value::{ArrayBuilder, ObjectBuilder, PrimitiveValue, ValueArena, ValueId};
+use crate::text::{NameId, StringInterner, parse_string};
 
 /// Represents object field with interned name.
 #[derive(Clone)]
@@ -14,7 +16,7 @@ struct InternedField {
     field: ast::ObjectField,
 }
 
-impl<'a> Analyzer<'a> {
+impl<'a> SpecLowerer<'a> {
     /// Sugar method for lowering a value. Calls [`lower_value`].
     #[cfg_attr(
         not(test),
@@ -216,39 +218,35 @@ fn check_object_fields_unique(
 
 /// Validates value is a valid collection of mime types and lowers it.
 pub(crate) fn lower_mime_types(
-    values: &mut ValueArena,
-    strings: &mut StringInterner,
+    mimes: &mut MimeArena,
     reports: &mut Vec<Report>,
     value: &ast::Value,
-) -> Option<MimeTypesId> {
+) -> Option<MimeRangeId> {
     match value {
         ast::Value::String(_) => {
-            let string_id = validate_mime_type_aux(strings, reports, value)?;
-            let value_id = values.add_primitive(PrimitiveValue::String(string_id));
+            let mime = validate_mime_type_aux(reports, value)?;
 
-            // Safety: `validate_mime_type` has checked that the string is a valid mime type.
-            let mime_type_id = unsafe { MimeTypesId::new_unchecked(value_id) };
-            Some(mime_type_id)
+            let id = mimes.add_mime(mime);
+            Some(id)
         }
         ast::Value::Array(arr) => {
             let mut file_range = None;
             let mut json_range = None;
 
-            let mut builder = values.start_array();
+            let mut builder = mimes.start_range();
 
             for item in arr.values() {
-                let string_id = validate_mime_type_aux(strings, reports, &item)?;
-                builder.add_primitive(PrimitiveValue::String(string_id));
+                let mime = validate_mime_type_aux(reports, &item)?;
+                builder.add(mime.clone());
 
-                let val_str = strings.resolve(string_id);
-                if val_str == "application/json" {
+                if mime.as_ref() == "application/json" {
                     json_range = Some(item.syntax().text_range());
                 } else {
                     file_range = Some(item.syntax().text_range());
                 }
             }
 
-            let value_id = builder.finish();
+            let range_id = builder.finish();
 
             if let Some(file_range) = file_range
                 && let Some(json_range) = json_range
@@ -286,9 +284,7 @@ pub(crate) fn lower_mime_types(
                 );
             }
 
-            // Safety: We have checked that all values in array are valid mime type strings
-            let mime_type_id = unsafe { MimeTypesId::new_unchecked(value_id) };
-            Some(mime_type_id)
+            Some(range_id)
         }
         _ => {
             reports.push(
@@ -305,11 +301,7 @@ pub(crate) fn lower_mime_types(
 }
 
 /// Helper function for validating that a value is String that represents a mime type.
-fn validate_mime_type_aux(
-    strings: &mut StringInterner,
-    reports: &mut Vec<Report>,
-    value: &ast::Value,
-) -> Option<StringId> {
+fn validate_mime_type_aux(reports: &mut Vec<Report>, value: &ast::Value) -> Option<Mime> {
     let ast::Value::String(string) = value else {
         reports.push(
             Report::error(format!("expected string, got {value}")).add_label(Label::primary(
@@ -323,8 +315,18 @@ fn validate_mime_type_aux(
     let token = string.string();
     let string = parse_string(&token, Some(reports));
 
-    // TODO: Validate it's actually a mime type
-
-    let id = strings.get_or_intern(string);
-    Some(id)
+    match Mime::from_str(&string) {
+        Ok(mime) => Some(mime),
+        Err(_) => {
+            reports.push(
+                Report::error(format!("`{string}` is not a valid mime type")).add_label(
+                    Label::primary(
+                        "not a valid mime type".to_string(),
+                        value.syntax().text_range().into(),
+                    ),
+                ),
+            );
+            None
+        }
+    }
 }

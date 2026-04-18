@@ -2,11 +2,11 @@ use better_api_diagnostic::{Label, Report};
 use better_api_syntax::ast::AstNode;
 use better_api_syntax::{TextRange, ast};
 
-use crate::analyzer::Analyzer;
+use crate::analyzer::SpecLowerer;
 use crate::spec;
 use crate::text::parse_string;
 
-impl<'a> Analyzer<'a> {
+impl<'a> SpecLowerer<'a> {
     pub(crate) fn lower_metadata(&mut self) {
         let mut res_version = None;
         for (idx, version) in self.root.api_versions().enumerate() {
@@ -69,7 +69,7 @@ impl<'a> Analyzer<'a> {
         if let (Some(version), Some(name), Some(api_version)) =
             (res_version, res_name, res_api_version)
         {
-            self.metadata = spec::Metadata {
+            self.metadata = spec::metadata::Metadata {
                 better_api_version: api_version,
                 version,
                 name,
@@ -129,7 +129,7 @@ impl<'a> Analyzer<'a> {
         );
     }
 
-    fn lower_server(&mut self, server: &ast::Server) -> Option<spec::Server> {
+    fn lower_server(&mut self, server: &ast::Server) -> Option<spec::metadata::Server> {
         let value = server.value()?;
         let ast::Value::Object(object) = value else {
             let range = server.syntax().text_range();
@@ -146,7 +146,7 @@ impl<'a> Analyzer<'a> {
         let url = self.get_server_field(&object, "url");
 
         if let (Some(name), Some(url)) = (name, url) {
-            Some(spec::Server {
+            Some(spec::metadata::Server {
                 name,
                 url,
                 // TODO: Extract docs
@@ -222,7 +222,7 @@ mod test {
     use better_api_syntax::{parse, tokenize};
     use indoc::indoc;
 
-    use crate::analyzer::Analyzer;
+    use crate::analyzer::SpecLowerer;
 
     #[test]
     fn lower_basic_metadata() {
@@ -257,11 +257,11 @@ mod test {
         let tokens = tokenize(text, &mut diagnostics);
         let res = parse(tokens);
 
-        let mut oracle = Analyzer::new(&res.root);
-        oracle.analyze();
-        insta::assert_debug_snapshot!(oracle.reports);
+        let lowerer = SpecLowerer::new(&res.root);
+        let lowered = lowerer.lower_spec();
+        insta::assert_debug_snapshot!(lowered.reports);
 
-        let metadata = &oracle.metadata;
+        let metadata = &lowered.spec.metadata;
         assert_eq!(metadata.version, "1.2");
         assert_eq!(metadata.name, "test");
         assert_eq!(metadata.better_api_version, "0.1");

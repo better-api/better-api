@@ -1,9 +1,10 @@
 use better_api_diagnostic::{Label, Report, Span};
 use better_api_syntax::{Parse, ast, parse, tokenize};
+
 use indoc::indoc;
 
-use crate::analyzer::Analyzer;
-use crate::spec::value::{Value, ValueContext, ValueId};
+use crate::analyzer::SpecLowerer;
+use crate::spec::{arena::value::ValueId, view::value::ValueView};
 
 #[test]
 fn lower_primitive_values() {
@@ -17,18 +18,18 @@ fn lower_primitive_values() {
 
     let res = parse_text(text);
 
-    let mut analyzer = Analyzer::new(&res.root);
-    let values: Vec<_> = lower_values(&mut analyzer, &res.root)
-        .into_iter()
-        .map(|id| get_value(&analyzer, id))
-        .collect();
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let ids = lower_values(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
 
-    assert!(analyzer.reports.is_empty());
-    assert!(matches!(values[0], Value::Integer(10)));
-    assert!(matches!(values[1], Value::Float(4.2)));
-    assert!(matches!(values[2], Value::Bool(true)));
-    assert!(matches!(values[3], Value::Bool(false)));
-    assert!(matches!(values[4], Value::Null));
+    let values: Vec<_> = ids.into_iter().map(|id| spec.spec.get_value(id)).collect();
+
+    assert!(spec.reports.is_empty());
+    assert!(matches!(values[0], ValueView::Integer(10)));
+    assert!(matches!(values[1], ValueView::Float(4.2)));
+    assert!(matches!(values[2], ValueView::Bool(true)));
+    assert!(matches!(values[3], ValueView::Bool(false)));
+    assert!(matches!(values[4], ValueView::Null));
 }
 
 #[test]
@@ -40,15 +41,14 @@ fn lower_string_values() {
 
     let res = parse_text(text);
 
-    let mut analyzer = Analyzer::new(&res.root);
-    let values: Vec<_> = lower_values(&mut analyzer, &res.root)
-        .into_iter()
-        .map(|id| get_value(&analyzer, id))
-        .collect();
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let ids = lower_values(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
+    let values: Vec<_> = ids.into_iter().map(|id| spec.spec.get_value(id)).collect();
 
-    assert!(analyzer.reports.is_empty());
-    assert!(matches!(values[0], Value::String("hello world")));
-    assert!(matches!(values[1], Value::String("hello\nworld\t\"\\")));
+    assert!(spec.reports.is_empty());
+    assert!(matches!(values[0], ValueView::String("hello world")));
+    assert!(matches!(values[1], ValueView::String("hello\nworld\t\"\\")));
 }
 
 #[test]
@@ -61,57 +61,59 @@ fn lower_array_values() {
 
     let res = parse_text(text);
 
-    let mut analyzer = Analyzer::new(&res.root);
-    let ids = lower_values(&mut analyzer, &res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let ids = lower_values(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
 
-    assert!(analyzer.reports.is_empty());
+    assert!(spec.reports.is_empty());
 
-    let simple = match get_value(&analyzer, ids[0]) {
-        Value::Array(array) => array,
+    let simple = match spec.spec.get_value(ids[0]) {
+        ValueView::Array(array) => array,
         value => panic!("expected array, got {value:?}"),
     };
     let simple_items: Vec<_> = simple.items().map(|item| item.value).collect();
     assert_eq!(simple_items.len(), 3);
-    assert!(matches!(simple_items[0], Value::Integer(1)));
-    assert!(matches!(simple_items[1], Value::Integer(2)));
-    assert!(matches!(simple_items[2], Value::Integer(3)));
+    assert!(matches!(simple_items[0], ValueView::Integer(1)));
+    assert!(matches!(simple_items[1], ValueView::Integer(2)));
+    assert!(matches!(simple_items[2], ValueView::Integer(3)));
 
-    let empty = match get_value(&analyzer, ids[1]) {
-        Value::Array(array) => array,
+    let empty = match spec.spec.get_value(ids[1]) {
+        ValueView::Array(array) => array,
         value => panic!("expected array, got {value:?}"),
     };
     assert_eq!(empty.items().count(), 0);
 
-    let nested = match get_value(&analyzer, ids[2]) {
-        Value::Array(array) => array,
+    let nested = match spec.spec.get_value(ids[2]) {
+        ValueView::Array(array) => array,
         value => panic!("expected array, got {value:?}"),
     };
     let nested_items: Vec<_> = nested.items().map(|item| item.value).collect();
     assert_eq!(nested_items.len(), 3);
-    assert!(matches!(nested_items[0], Value::Integer(1)));
-    assert!(matches!(nested_items[2], Value::Integer(4)));
+    assert!(matches!(nested_items[0], ValueView::Integer(1)));
+    assert!(matches!(nested_items[2], ValueView::Integer(4)));
 
     let inner = match nested_items[1].clone() {
-        Value::Array(array) => array,
+        ValueView::Array(array) => array,
         value => panic!("expected nested array, got {value:?}"),
     };
     let inner_items: Vec<_> = inner.items().map(|item| item.value).collect();
     assert_eq!(inner_items.len(), 2);
-    assert!(matches!(inner_items[0], Value::Integer(2)));
-    assert!(matches!(inner_items[1], Value::Integer(3)));
+    assert!(matches!(inner_items[0], ValueView::Integer(2)));
+    assert!(matches!(inner_items[1], ValueView::Integer(3)));
 }
 
 #[test]
 fn lower_empty_object() {
     let res = parse_text("name: {}");
 
-    let mut analyzer = Analyzer::new(&res.root);
-    let id = lower_first_value(&mut analyzer, &res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let id = lower_first_value(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
 
-    assert!(analyzer.reports.is_empty());
+    assert!(spec.reports.is_empty());
 
-    let object = match get_value(&analyzer, id) {
-        Value::Object(object) => object,
+    let object = match spec.spec.get_value(id) {
+        ValueView::Object(object) => object,
         value => panic!("expected object, got {value:?}"),
     };
     assert_eq!(object.fields().count(), 0);
@@ -133,11 +135,13 @@ fn lower_object_fields_are_stable() {
 
     let res = parse_text(text);
 
-    let mut analyzer = Analyzer::new(&res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let ids = lower_values(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
 
-    for id in lower_values(&mut analyzer, &res.root) {
-        let object = match get_value(&analyzer, id) {
-            Value::Object(object) => object,
+    for id in ids {
+        let object = match spec.spec.get_value(id) {
+            ValueView::Object(object) => object,
             value => panic!("expected object, got {value:?}"),
         };
 
@@ -145,11 +149,11 @@ fn lower_object_fields_are_stable() {
         assert_eq!(fields.len(), 2);
         assert_eq!(fields[0].name.as_str(), "foo");
         assert_eq!(fields[1].name.as_str(), "bar");
-        assert!(matches!(fields[0].value, Value::Integer(10)));
-        assert!(matches!(fields[1].value, Value::String("test")));
+        assert!(matches!(fields[0].value, ValueView::Integer(10)));
+        assert!(matches!(fields[1].value, ValueView::String("test")));
     }
 
-    assert!(analyzer.reports.is_empty());
+    assert!(spec.reports.is_empty());
 }
 
 #[test]
@@ -163,13 +167,14 @@ fn lower_object_with_string_keys() {
 
     let res = parse_text(text);
 
-    let mut analyzer = Analyzer::new(&res.root);
-    let id = lower_first_value(&mut analyzer, &res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let id = lower_first_value(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
 
-    assert!(analyzer.reports.is_empty());
+    assert!(spec.reports.is_empty());
 
-    let object = match get_value(&analyzer, id) {
-        Value::Object(object) => object,
+    let object = match spec.spec.get_value(id) {
+        ValueView::Object(object) => object,
         value => panic!("expected object, got {value:?}"),
     };
     let fields: Vec<_> = object.fields().collect();
@@ -177,8 +182,8 @@ fn lower_object_with_string_keys() {
     assert_eq!(fields.len(), 2);
     assert_eq!(fields[0].name.as_str(), "foo-bar");
     assert_eq!(fields[1].name.as_str(), "baz");
-    assert!(matches!(fields[0].value, Value::Integer(10)));
-    assert!(matches!(fields[1].value, Value::Integer(20)));
+    assert!(matches!(fields[0].value, ValueView::Integer(10)));
+    assert!(matches!(fields[1].value, ValueView::Integer(20)));
 }
 
 #[test]
@@ -192,20 +197,21 @@ fn lower_object_skips_missing_value() {
 
     let res = parse_text(text);
 
-    let mut analyzer = Analyzer::new(&res.root);
-    let id = lower_first_value(&mut analyzer, &res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let id = lower_first_value(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
 
-    assert!(analyzer.reports.is_empty());
+    assert!(spec.reports.is_empty());
 
-    let object = match get_value(&analyzer, id) {
-        Value::Object(object) => object,
+    let object = match spec.spec.get_value(id) {
+        ValueView::Object(object) => object,
         value => panic!("expected object, got {value:?}"),
     };
     let fields: Vec<_> = object.fields().collect();
 
     assert_eq!(fields.len(), 1);
     assert_eq!(fields[0].name.as_str(), "bar");
-    assert!(matches!(fields[0].value, Value::Integer(20)));
+    assert!(matches!(fields[0].value, ValueView::Integer(20)));
 }
 
 #[test]
@@ -219,11 +225,12 @@ fn lower_object_reports_invalid_field_name() {
 
     let res = parse_text(text);
 
-    let mut analyzer = Analyzer::new(&res.root);
-    let id = lower_first_value(&mut analyzer, &res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let id = lower_first_value(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
 
     assert_eq!(
-        analyzer.reports,
+        spec.reports,
         vec![
             Report::error("invalid name".to_string())
                 .add_label(Label::primary("invalid name".to_string(), Span::new(12, 26)))
@@ -233,15 +240,15 @@ fn lower_object_reports_invalid_field_name() {
         ]
     );
 
-    let object = match get_value(&analyzer, id) {
-        Value::Object(object) => object,
+    let object = match spec.spec.get_value(id) {
+        ValueView::Object(object) => object,
         value => panic!("expected object, got {value:?}"),
     };
     let fields: Vec<_> = object.fields().collect();
 
     assert_eq!(fields.len(), 1);
     assert_eq!(fields[0].name.as_str(), "valid");
-    assert!(matches!(fields[0].value, Value::Integer(20)));
+    assert!(matches!(fields[0].value, ValueView::Integer(20)));
 }
 
 #[test]
@@ -256,11 +263,12 @@ fn lower_object_reports_duplicate_keys() {
 
     let res = parse_text(text);
 
-    let mut analyzer = Analyzer::new(&res.root);
-    let id = lower_first_value(&mut analyzer, &res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let id = lower_first_value(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
 
     assert_eq!(
-        analyzer.reports,
+        spec.reports,
         vec![
             Report::error("repeated object key `foo`".to_string()).add_label(Label::primary(
                 "repeated object key".to_string(),
@@ -269,8 +277,8 @@ fn lower_object_reports_duplicate_keys() {
         ]
     );
 
-    let object = match get_value(&analyzer, id) {
-        Value::Object(object) => object,
+    let object = match spec.spec.get_value(id) {
+        ValueView::Object(object) => object,
         value => panic!("expected object, got {value:?}"),
     };
     let fields: Vec<_> = object.fields().collect();
@@ -279,9 +287,9 @@ fn lower_object_reports_duplicate_keys() {
     assert_eq!(fields[0].name.as_str(), "foo");
     assert_eq!(fields[1].name.as_str(), "foo");
     assert_eq!(fields[2].name.as_str(), "bar");
-    assert!(matches!(fields[0].value, Value::Integer(10)));
-    assert!(matches!(fields[1].value, Value::Integer(10)));
-    assert!(matches!(fields[2].value, Value::Integer(20)));
+    assert!(matches!(fields[0].value, ValueView::Integer(10)));
+    assert!(matches!(fields[1].value, ValueView::Integer(10)));
+    assert!(matches!(fields[2].value, ValueView::Integer(20)));
 }
 
 #[test]
@@ -296,13 +304,14 @@ fn lower_nested_object() {
 
     let res = parse_text(text);
 
-    let mut analyzer = Analyzer::new(&res.root);
-    let id = lower_first_value(&mut analyzer, &res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let id = lower_first_value(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
 
-    assert!(analyzer.reports.is_empty());
+    assert!(spec.reports.is_empty());
 
-    let object = match get_value(&analyzer, id) {
-        Value::Object(object) => object,
+    let object = match spec.spec.get_value(id) {
+        ValueView::Object(object) => object,
         value => panic!("expected object, got {value:?}"),
     };
     let fields: Vec<_> = object.fields().collect();
@@ -311,14 +320,14 @@ fn lower_nested_object() {
     assert_eq!(fields[0].name.as_str(), "outer");
 
     let inner_object = match fields[0].value.clone() {
-        Value::Object(object) => object,
+        ValueView::Object(object) => object,
         value => panic!("expected nested object, got {value:?}"),
     };
     let inner_fields: Vec<_> = inner_object.fields().collect();
 
     assert_eq!(inner_fields.len(), 1);
     assert_eq!(inner_fields[0].name.as_str(), "inner");
-    assert!(matches!(inner_fields[0].value, Value::Integer(42)));
+    assert!(matches!(inner_fields[0].value, ValueView::Integer(42)));
 }
 
 #[test]
@@ -344,13 +353,14 @@ fn lower_complex_nested_structure() {
 
     let res = parse_text(text);
 
-    let mut analyzer = Analyzer::new(&res.root);
-    let id = lower_first_value(&mut analyzer, &res.root);
+    let mut lowerer = SpecLowerer::new(&res.root);
+    let id = lower_first_value(&mut lowerer, &res.root);
+    let spec = lowerer.into_lowered_spec();
 
-    assert!(analyzer.reports.is_empty());
+    assert!(spec.reports.is_empty());
 
-    let object = match get_value(&analyzer, id) {
-        Value::Object(object) => object,
+    let object = match spec.spec.get_value(id) {
+        ValueView::Object(object) => object,
         value => panic!("expected object, got {value:?}"),
     };
     let fields: Vec<_> = object.fields().collect();
@@ -360,44 +370,44 @@ fn lower_complex_nested_structure() {
     assert_eq!(fields[1].name.as_str(), "metadata");
 
     let users = match fields[0].value.clone() {
-        Value::Array(array) => array,
+        ValueView::Array(array) => array,
         value => panic!("expected users array, got {value:?}"),
     };
     let users: Vec<_> = users.items().map(|item| item.value).collect();
     assert_eq!(users.len(), 2);
 
     let user1 = match users[0].clone() {
-        Value::Object(object) => object,
+        ValueView::Object(object) => object,
         value => panic!("expected user object, got {value:?}"),
     };
     let user1_fields: Vec<_> = user1.fields().collect();
     assert_eq!(user1_fields.len(), 2);
     assert_eq!(user1_fields[0].name.as_str(), "name");
     assert_eq!(user1_fields[1].name.as_str(), "age");
-    assert!(matches!(user1_fields[0].value, Value::String("alice")));
-    assert!(matches!(user1_fields[1].value, Value::Integer(30)));
+    assert!(matches!(user1_fields[0].value, ValueView::String("alice")));
+    assert!(matches!(user1_fields[1].value, ValueView::Integer(30)));
 
     let user2 = match users[1].clone() {
-        Value::Object(object) => object,
+        ValueView::Object(object) => object,
         value => panic!("expected user object, got {value:?}"),
     };
     let user2_fields: Vec<_> = user2.fields().collect();
     assert_eq!(user2_fields.len(), 2);
     assert_eq!(user2_fields[0].name.as_str(), "name");
     assert_eq!(user2_fields[1].name.as_str(), "age");
-    assert!(matches!(user2_fields[0].value, Value::String("bob")));
-    assert!(matches!(user2_fields[1].value, Value::Integer(25)));
+    assert!(matches!(user2_fields[0].value, ValueView::String("bob")));
+    assert!(matches!(user2_fields[1].value, ValueView::Integer(25)));
 
     let metadata = match fields[1].value.clone() {
-        Value::Object(object) => object,
+        ValueView::Object(object) => object,
         value => panic!("expected metadata object, got {value:?}"),
     };
     let metadata_fields: Vec<_> = metadata.fields().collect();
     assert_eq!(metadata_fields.len(), 2);
     assert_eq!(metadata_fields[0].name.as_str(), "count");
     assert_eq!(metadata_fields[1].name.as_str(), "active");
-    assert!(matches!(metadata_fields[0].value, Value::Integer(2)));
-    assert!(matches!(metadata_fields[1].value, Value::Bool(true)));
+    assert!(matches!(metadata_fields[0].value, ValueView::Integer(2)));
+    assert!(matches!(metadata_fields[1].value, ValueView::Bool(true)));
 }
 
 fn parse_text(text: &str) -> Parse {
@@ -410,21 +420,17 @@ fn parse_text(text: &str) -> Parse {
     parse(tokens.into_iter())
 }
 
-fn lower_first_value<'a>(analyzer: &mut Analyzer<'a>, root: &'a ast::Root) -> ValueId {
+fn lower_first_value<'a>(lowerer: &mut SpecLowerer<'a>, root: &'a ast::Root) -> ValueId {
     root.api_names()
         .next()
         .unwrap()
         .value()
-        .map(|value| analyzer.lower_value(&value))
+        .map(|value| lowerer.lower_value(&value))
         .unwrap()
 }
 
-fn lower_values<'a>(analyzer: &mut Analyzer<'a>, root: &'a ast::Root) -> Vec<ValueId> {
+fn lower_values<'a>(lowerer: &mut SpecLowerer<'a>, root: &'a ast::Root) -> Vec<ValueId> {
     root.api_names()
-        .map(|name| analyzer.lower_value(&name.value().unwrap()))
+        .map(|name| lowerer.lower_value(&name.value().unwrap()))
         .collect()
-}
-
-fn get_value<'a>(analyzer: &'a Analyzer<'a>, id: ValueId) -> Value<'a> {
-    ValueContext::from(analyzer.spec_ctx()).get_value(id)
 }
