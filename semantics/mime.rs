@@ -188,3 +188,90 @@ impl MimeArena {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn parse_mime(value: &str) -> Mime {
+        value.parse().expect("mime should parse")
+    }
+
+    #[test]
+    fn concrete_mime_try_from_accepts_only_non_wildcards() {
+        let json = parse_mime("application/json");
+        let problem_json = parse_mime("application/problem+json");
+
+        let concrete_json = ConcreteMime::try_from(json.clone())
+            .unwrap_or_else(|_| panic!("json should be concrete"));
+        let concrete_problem_json = ConcreteMime::try_from(problem_json.clone())
+            .unwrap_or_else(|_| panic!("problem json should be concrete"));
+
+        assert_eq!(concrete_json.as_mime(), &json);
+        assert_eq!(concrete_json.type_(), mime::APPLICATION);
+        assert_eq!(concrete_json.subtype(), mime::JSON);
+        assert_eq!(concrete_json.suffix(), None);
+
+        assert_eq!(concrete_problem_json.as_mime(), &problem_json);
+        assert_eq!(concrete_problem_json.type_(), mime::APPLICATION);
+        assert_eq!(concrete_problem_json.subtype(), "problem");
+        assert_eq!(concrete_problem_json.suffix(), Some(mime::JSON));
+
+        assert!(ConcreteMime::try_from(parse_mime("image/*")).is_err());
+        assert!(ConcreteMime::try_from(parse_mime("*/*")).is_err());
+    }
+
+    #[test]
+    fn arena_stores_mime_ranges_and_concrete_mimes() {
+        let mut arena = MimeArena::default();
+
+        let image_any = parse_mime("image/*");
+        let text_plain = parse_mime("text/plain");
+        let image_png = parse_mime("image/png");
+
+        let concrete_json = ConcreteMime::try_from(parse_mime("application/json"))
+            .unwrap_or_else(|_| panic!("json should be concrete"));
+        let concrete_problem_json = ConcreteMime::try_from(parse_mime("application/problem+json"))
+            .unwrap_or_else(|_| panic!("problem json should be concrete"));
+
+        let single_range = arena.add_mime(image_any.clone());
+        let json_id = arena.add_concrete_mime(concrete_json.clone());
+
+        let mut builder = arena.start_range();
+        builder.add(text_plain.clone());
+        builder.add(image_png.clone());
+        let mixed_range = builder.finish();
+
+        let problem_json_id = arena.add_concrete_mime(concrete_problem_json.clone());
+
+        assert_eq!(single_range, MimeRangeId { start: 0, end: 1 });
+        assert_eq!(json_id, ConcreteMimeId(1));
+        assert_eq!(mixed_range, MimeRangeId { start: 2, end: 4 });
+        assert_eq!(problem_json_id, ConcreteMimeId(4));
+
+        assert_eq!(
+            arena
+                .get_mime_range(single_range)
+                .cloned()
+                .collect::<Vec<_>>(),
+            vec![image_any]
+        );
+
+        assert_eq!(
+            arena
+                .get_mime_range(mixed_range)
+                .cloned()
+                .collect::<Vec<_>>(),
+            vec![text_plain, image_png],
+        );
+
+        assert_eq!(
+            arena.data[json_id.0 as usize],
+            Slot::ConcreteMime(concrete_json)
+        );
+        assert_eq!(
+            arena.data[problem_json_id.0 as usize],
+            Slot::ConcreteMime(concrete_problem_json)
+        );
+    }
+}
