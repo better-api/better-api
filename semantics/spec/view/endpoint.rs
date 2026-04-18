@@ -3,6 +3,7 @@
 //! Endpoints and routes reference types defined in the spec. See [`typ`](crate::spec::view::typ)
 //! documentation for more details on how types are structured and represented.
 
+use crate::mime::MimeRange;
 use crate::path::Path;
 use crate::spec::Spec;
 use crate::spec::arena::endpoint::{
@@ -91,7 +92,7 @@ pub struct EndpointView<'a> {
     pub headers: Option<NamedTypeRefView<'a>>,
 
     /// MIME types the endpoint accepts for the request body.
-    pub accept: Option<()>, // TODO: Mime types
+    pub accept: Option<MimeRange<'a>>,
 
     /// Request body type.
     pub request_body: Option<InlineTypeView<'a>>,
@@ -131,7 +132,7 @@ impl<'a> EndpointView<'a> {
                 .fields
                 .headers
                 .map(|id| spec.get_simple_record_type(id)),
-            accept: data.fields.accept, // TODO: Mime types
+            accept: data.fields.accept.map(|id| spec.mimes.get_mime_range(id)),
             request_body: data.fields.request_body.map(|id| spec.get_inline_type(id)),
             request_body_docs: data
                 .fields

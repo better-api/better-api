@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use better_api_diagnostic::{Report, Severity};
 use better_api_syntax::{TextRange, ast};
 
+use crate::mime::MimeArena;
 use crate::path::PathId;
 use crate::spec::arena::endpoint::{EndpointArena, EndpointId};
 use crate::spec::arena::typ::builder::TypeArenaBuilder;
@@ -82,6 +83,7 @@ pub(crate) struct LoweredSpec {
 pub(crate) struct SpecLowerer<'a> {
     // Valid spec data being constructed
     strings: StringInterner,
+    mimes: MimeArena,
     spec_symbol_table: SymbolTable,
 
     metadata: Metadata,
@@ -109,6 +111,7 @@ pub(crate) struct SpecLowerer<'a> {
 
 struct Context<'o, 'a> {
     strings: &'o mut StringInterner,
+    mimes: &'o mut MimeArena,
     spec_symbol_table: &'o mut SymbolTable,
     symbol_map: &'o mut SymbolMap,
     reports: &'o mut Vec<Report>,
@@ -125,6 +128,7 @@ impl<'a> SpecLowerer<'a> {
     fn new(root: &'a ast::Root) -> Self {
         Self {
             strings: Default::default(),
+            mimes: Default::default(),
             spec_symbol_table: Default::default(),
 
             metadata: Default::default(),
@@ -166,6 +170,7 @@ impl<'a> SpecLowerer<'a> {
         LoweredSpec {
             spec: Spec {
                 strings: self.strings,
+                mimes: self.mimes,
                 symbol_table: self.spec_symbol_table,
                 metadata: self.metadata,
                 values: self.values,

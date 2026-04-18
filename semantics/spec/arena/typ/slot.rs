@@ -1,3 +1,4 @@
+use crate::mime::MimeRangeId;
 use crate::spec::arena::typ::id::{InlineTypeId, SimpleRecordReferenceProof};
 use crate::spec::arena::typ::{EnumTy, PrimitiveTy};
 use crate::spec::arena::value::ValueId;
@@ -43,7 +44,7 @@ pub(super) enum Slot<Ref> {
     Response {
         body: InlineTypeId,
         headers: Option<SimpleRecordReferenceProof>,
-        content_type: Option<()>, // TODO: Mime type
+        content_type: Option<MimeRangeId>,
     },
     Record {
         // Index after the last field in the record.

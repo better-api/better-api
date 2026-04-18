@@ -1,3 +1,4 @@
+use crate::mime::MimeRangeId;
 use crate::spec::SymbolTable;
 use crate::spec::arena::typ::arena::TypeArena;
 use crate::spec::arena::typ::id::{
@@ -429,8 +430,7 @@ impl TypeArenaBuilder {
         &mut self,
         body: InlineTypeId,
         headers: Option<SimpleRecordReferenceProof>,
-        // TODO: mime type
-        content_type: Option<()>,
+        content_type: Option<MimeRangeId>,
     ) -> ResponseTypeId {
         let idx = self.data.len();
         self.data.push(Slot::Response {

@@ -101,6 +101,7 @@ impl<'a> SpecLowerer<'a> {
     pub(crate) fn lower_type_definitions(&mut self) {
         let mut ctx = Context {
             strings: &mut self.strings,
+            mimes: &mut self.mimes,
             spec_symbol_table: &mut self.spec_symbol_table,
             symbol_map: &mut self.symbol_map,
             reports: &mut self.reports,
@@ -133,6 +134,7 @@ impl<'a> SpecLowerer<'a> {
     pub(crate) fn lower_type(&mut self, typ: &ast::Type) -> Option<RootTypeId> {
         let mut ctx = Context {
             strings: &mut self.strings,
+            mimes: &mut self.mimes,
             spec_symbol_table: &mut self.spec_symbol_table,
             symbol_map: &mut self.symbol_map,
             reports: &mut self.reports,
@@ -193,6 +195,7 @@ impl<'a> SpecLowerer<'a> {
     ) -> Option<ResponseTypeId> {
         let mut ctx = Context {
             strings: &mut self.strings,
+            mimes: &mut self.mimes,
             spec_symbol_table: &mut self.spec_symbol_table,
             symbol_map: &mut self.symbol_map,
             reports: &mut self.reports,
@@ -230,6 +233,7 @@ impl<'a> SpecLowerer<'a> {
     ) -> Option<SimpleRecordReferenceProof> {
         let mut ctx = Context {
             strings: &mut self.strings,
+            mimes: &mut self.mimes,
             spec_symbol_table: &mut self.spec_symbol_table,
             symbol_map: &mut self.symbol_map,
             reports: &mut self.reports,
@@ -474,7 +478,7 @@ pub(crate) fn lower_response(
     let content_type_id = resp
         .content_type()
         .and_then(|v| v.value())
-        .and_then(|v| lower_mime_types(values, ctx.strings, ctx.reports, &v));
+        .and_then(|v| lower_mime_types(ctx.mimes, ctx.reports, &v));
 
     // Parse and validate header type
     let mut headers_id = None;
@@ -516,18 +520,10 @@ pub(crate) fn lower_response(
     }
 
     // Does content type require the response body to be `file`
-    let requires_file = content_type_id.is_some_and(|_id| {
-        // let val_ctx = ValueContext {
-        //     strings: ctx.strings,
-        //     values,
-        // };
-        //
-        // val_ctx
-        //     .get_mime_types(id)
-        //     .any(|mime| mime != "application/json")
-
-        // TODO: Check if any mime type is not application/json
-        false
+    let requires_file = content_type_id.is_some_and(|id| {
+        ctx.mimes
+            .get_mime_range(id)
+            .any(|mime| mime.as_ref() != "application/json")
     });
 
     // Check that response body is `file` by also resolving references

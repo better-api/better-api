@@ -817,108 +817,113 @@ fn lower_response_invalid_body_file() {
     assert!(!lowerer.spec_symbol_table.contains_key(&name_id));
 }
 
-// TODO: Mime types
-// #[test]
-// fn lower_response_with_custom_content_type() {
-//     let text = indoc! {r#"
-//         type Resp: resp {
-//             contentType: "image/png"
-//             body: file
-//         }
-//     "#};
-//
-//     let mut diagnostics = vec![];
-//     let tokens = tokenize(text, &mut diagnostics);
-//     let res = parse(tokens);
-//
-//     let lowerer = setup_lowerer(&res.root);
-//     let lowered = lowerer.into_lowered_spec();
-//     assert!(lowered.reports.is_empty());
-//
-//     let resp = match get_root_type(&lowered, "Resp") {
-//         RootTypeView::Response(resp) => resp,
-//         typ => panic!("expected response, got {typ:?}"),
-//     };
-//
-//     let content_types: Vec<_> = resp.content_type.clone().unwrap().collect();
-//     assert_eq!(content_types, vec!["image/png"]);
-//     assert!(matches!(
-//         resp.body,
-//         InlineTypeView::Primitive(PrimitiveTy::File)
-//     ));
-//     assert!(resp.headers.is_none());
-// }
+#[test]
+fn lower_response_with_custom_content_type() {
+    let text = indoc! {r#"
+        type Resp: resp {
+            contentType: "image/png"
+            body: file
+        }
+    "#};
 
-// TODO: Mime types
-// #[test]
-// fn lower_response_with_mixed_content_type() {
-//     let text = indoc! {r#"
-//         type Resp: resp {
-//             contentType: ["image/png" "application/json"]
-//             body: file
-//         }
-//     "#};
-//
-//     let mut diagnostics = vec![];
-//     let tokens = tokenize(text, &mut diagnostics);
-//     let res = parse(tokens);
-//
-//     let lowerer = setup_lowerer(&res.root);
-//     let lowered = lowerer.into_lowered_spec();
-//     insta::assert_debug_snapshot!(lowered.reports);
-//
-//     let resp = match get_root_type(&lowered, "Resp") {
-//         RootTypeView::Response(resp) => resp,
-//         typ => panic!("expected response, got {typ:?}"),
-//     };
-//
-//     let content_types: Vec<_> = resp.content_type.clone().unwrap().collect();
-//     assert_eq!(content_types, vec!["image/png", "application/json"]);
-//     assert!(matches!(
-//         resp.body,
-//         InlineTypeView::Primitive(PrimitiveTy::File)
-//     ));
-//     assert!(resp.headers.is_none());
-// }
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
 
-// TODO: Mime types
-// #[test]
-// fn lower_response_with_custom_content_type_invalid_body() {
-//     let text = indoc! {r#"
-//         type Resp: resp {
-//             contentType: "image/png"
-//             body: string
-//         }
-//     "#};
-//
-//     let mut diagnostics = vec![];
-//     let tokens = tokenize(text, &mut diagnostics);
-//     let res = parse(tokens);
-//
-//     let lowerer = setup_lowerer(&res.root);
-//
-//     assert_eq!(lowerer.reports.len(), 1);
-//     assert_eq!(
-//         lowerer.reports,
-//         vec![
-//             Report::error("invalid response body type".to_string())
-//                 .add_label(Label::primary(
-//                     "content type requires `file` body".to_string(),
-//                     Span::new(57, 63)
-//                 ))
-//                 .add_label(Label::secondary(
-//                     "content type defined here".to_string(),
-//                     Span::new(22, 47)
-//                 ))
-//                 .with_note(
-//                     "help: none `application/json` responses must use `file` as body".to_string()
-//                 )
-//         ]
-//     );
-//
-//     let name_id = lowerer.strings.get("Resp").unwrap();
-//     assert!(!lowerer.spec_symbol_table.contains_key(&name_id));
-// }
+    let lowerer = setup_lowerer(&res.root);
+    let lowered = lowerer.into_lowered_spec();
+    assert!(lowered.reports.is_empty());
+
+    let resp = match get_root_type(&lowered, "Resp") {
+        RootTypeView::Response(resp) => resp,
+        typ => panic!("expected response, got {typ:?}"),
+    };
+
+    let content_types: Vec<_> = resp
+        .content_type
+        .unwrap()
+        .map(|mime| mime.as_ref())
+        .collect();
+    assert_eq!(content_types, vec!["image/png"]);
+    assert!(matches!(
+        resp.body,
+        InlineTypeView::Primitive(PrimitiveTy::File)
+    ));
+    assert!(resp.headers.is_none());
+}
+
+#[test]
+fn lower_response_with_mixed_content_type() {
+    let text = indoc! {r#"
+        type Resp: resp {
+            contentType: ["image/png" "application/json"]
+            body: file
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let lowerer = setup_lowerer(&res.root);
+    let lowered = lowerer.into_lowered_spec();
+    insta::assert_debug_snapshot!(lowered.reports);
+
+    let resp = match get_root_type(&lowered, "Resp") {
+        RootTypeView::Response(resp) => resp,
+        typ => panic!("expected response, got {typ:?}"),
+    };
+
+    let content_types: Vec<_> = resp
+        .content_type
+        .unwrap()
+        .map(|mime| mime.as_ref())
+        .collect();
+    assert_eq!(content_types, vec!["image/png", "application/json"]);
+    assert!(matches!(
+        resp.body,
+        InlineTypeView::Primitive(PrimitiveTy::File)
+    ));
+    assert!(resp.headers.is_none());
+}
+
+#[test]
+fn lower_response_with_custom_content_type_invalid_body() {
+    let text = indoc! {r#"
+        type Resp: resp {
+            contentType: "image/png"
+            body: string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let lowerer = setup_lowerer(&res.root);
+
+    assert_eq!(lowerer.reports.len(), 1);
+    assert_eq!(
+        lowerer.reports,
+        vec![
+            Report::error("invalid response body type".to_string())
+                .add_label(Label::primary(
+                    "content type requires `file` body".to_string(),
+                    Span::new(57, 63)
+                ))
+                .add_label(Label::secondary(
+                    "content type defined here".to_string(),
+                    Span::new(22, 47)
+                ))
+                .with_note(
+                    "help: none `application/json` responses must use `file` as body".to_string()
+                )
+        ]
+    );
+
+    let name_id = lowerer.strings.get("Resp").unwrap();
+    assert!(!lowerer.spec_symbol_table.contains_key(&name_id));
+}
 
 #[test]
 fn lower_response_with_headers() {

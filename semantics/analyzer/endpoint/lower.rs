@@ -125,6 +125,7 @@ impl<'a> SpecLowerer<'a> {
         let mut ctx = EndpointContext {
             ctx: Context {
                 strings: &mut self.strings,
+                mimes: &mut self.mimes,
                 spec_symbol_table: &mut self.spec_symbol_table,
                 symbol_map: &mut self.symbol_map,
                 reports: &mut self.reports,
@@ -333,20 +334,14 @@ fn lower_endpoint<P: EndpointParent>(
     let accept_id = endpoint
         .accept()
         .and_then(|a| a.value())
-        .and_then(|v| lower_mime_types(values, ctx.ctx.strings, ctx.ctx.reports, &v));
+        .and_then(|v| lower_mime_types(ctx.ctx.mimes, ctx.ctx.reports, &v));
 
     // Does accept parameter requires the request body to be `file`
-    let requires_file = accept_id.is_some_and(|_id| {
-        // let val_ctx = ValueContext {
-        //     strings: ctx.ctx.strings,
-        //     values,
-        // };
-        //
-        // val_ctx
-        //     .get_mime_types(id)
-        //     .any(|mime| mime != "application/json")
-        // TODO: Check mime type is not application/json
-        false
+    let requires_file = accept_id.is_some_and(|id| {
+        ctx.ctx
+            .mimes
+            .get_mime_range(id)
+            .any(|mime| mime.as_ref() != "application/json")
     });
 
     // Validate and lower request body.

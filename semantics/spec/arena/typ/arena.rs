@@ -1,3 +1,4 @@
+use crate::mime::MimeRangeId;
 use crate::spec::SymbolTable;
 use crate::spec::arena::typ::id::{
     InlineTypeId, ResponseTypeId, RootTypeId, SimpleRecordReferenceProof, TypeFieldId, TypeId,
@@ -48,8 +49,7 @@ pub(crate) struct ResponseData {
     pub body: InlineTypeId,
     pub headers: Option<SimpleRecordReferenceProof>,
 
-    // TODO: Mime type
-    pub content_type: Option<()>,
+    pub content_type: Option<MimeRangeId>,
 }
 
 impl ResponseData {

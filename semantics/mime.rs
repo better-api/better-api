@@ -19,7 +19,7 @@
 pub use mime::Mime;
 
 /// A mime type without any wild cards.
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct ConcreteMime(Mime);
 
@@ -118,8 +118,9 @@ impl<'a> Drop for MimeRangeBuilder<'a> {
 }
 
 /// Iterator over [`Mime`] types.
-#[derive(Clone)]
+#[derive(derive_more::Debug, Clone)]
 pub struct MimeRange<'a> {
+    #[debug(skip)]
     arena: &'a MimeArena,
 
     next: u32,
@@ -144,13 +145,13 @@ impl<'a> Iterator for MimeRange<'a> {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum Slot {
     Mime(Mime),
     ConcreteMime(ConcreteMime),
 }
 
-#[derive(Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct MimeArena {
     data: Vec<Slot>,
 }

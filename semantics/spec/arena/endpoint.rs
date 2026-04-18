@@ -13,6 +13,7 @@
 //! Construction is handled by [`Analyzer`](crate::analyzer::Analyzer). It builds the internal
 //! arenas and performs validation before data is exposed through [`Spec`](crate::spec::Spec).
 
+use crate::mime::MimeRangeId;
 use crate::path::{Path, PathArena, PathId, PathPart};
 use crate::spec::arena::typ::id::{
     InlineTypeId, ResponseReferenceProof, SimpleRecordReferenceProof,
@@ -261,7 +262,7 @@ pub(crate) struct EndpointFields {
     pub headers: Option<SimpleRecordReferenceProof>,
 
     /// MIME types the endpoint accepts for the request body.
-    pub accept: Option<()>, // TODO: Mime types
+    pub accept: Option<MimeRangeId>,
 
     /// Request body type.
     pub request_body: Option<InlineTypeId>,

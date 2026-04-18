@@ -31,6 +31,7 @@
 //! only contain non response types, we need to separate references to non-response types from
 //! references to any type.
 
+use crate::mime::MimeRange;
 use crate::spec::Spec;
 use crate::spec::arena::typ::arena::EnumCursor;
 use crate::spec::arena::typ::arena::RecordCursor;
@@ -423,8 +424,7 @@ pub struct ResponseTypeView<'a> {
     pub headers: Option<NamedTypeRefView<'a>>,
 
     /// Possible Content-Type header values.
-    // TODO:  Mime type
-    pub content_type: Option<()>,
+    pub content_type: Option<MimeRange<'a>>,
 }
 
 impl<'a> ResponseTypeView<'a> {
@@ -436,7 +436,7 @@ impl<'a> ResponseTypeView<'a> {
         Self {
             body: InlineTypeView::new(spec, data.body),
             headers: data.headers.map(|id| spec.get_simple_record_type(id)),
-            content_type: None, // TODO: mime types
+            content_type: data.content_type.map(|id| spec.mimes.get_mime_range(id)),
         }
     }
 }

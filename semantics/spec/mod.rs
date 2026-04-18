@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 
 use crate::{
+    mime::MimeArena,
     spec::arena::typ,
     text::{StringId, StringInterner},
 };
@@ -21,6 +22,7 @@ pub(crate) type SymbolTable = HashMap<StringId, typ::TypeDefData>;
 pub struct Spec {
     #[debug(skip)]
     pub(crate) strings: StringInterner,
+    pub(crate) mimes: MimeArena,
     pub(crate) symbol_table: SymbolTable,
 
     /// Metadata of the spec.
@@ -41,6 +43,7 @@ impl Spec {
 
         Self {
             strings: Default::default(),
+            mimes: Default::default(),
             symbol_table,
 
             values: Default::default(),
