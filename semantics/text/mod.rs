@@ -7,7 +7,7 @@
 use std::borrow::Cow;
 
 use better_api_diagnostic::{Label, Report, Span};
-use better_api_syntax::{TextRange, ast};
+use better_api_syntax::{SyntaxToken, TextRange, ast};
 
 #[cfg(test)]
 mod test;
@@ -224,6 +224,36 @@ pub(crate) fn parse_string<'a>(
     }
 
     Cow::Owned(res)
+}
+
+pub(crate) fn parse_comments<T>(mut comment: impl Iterator<Item = T>) -> Option<String>
+where
+    T: Into<SyntaxToken>,
+{
+    let first = comment.next()?;
+    let token = first.into();
+    let cleaned = clean_comment_token(&token);
+
+    // TODO: Implement the rest of it. I have to:
+    // - get number of whitespace characters at the beginning of cleaned
+    // - remove the same number of whitespace chars (or less) of all other lines (iter items).
+    // - when counting number of whitespace chars, I probably want to use whitespace iter and not
+    //   just bytes. Otherwise it might be awkward to clean unicode strings.
+    // - join items with \n
+    // - if res.is_empty(), we should probably return None
+
+    todo!()
+}
+
+fn clean_comment_token(token: &SyntaxToken) -> &str {
+    let text = token.text().trim();
+    if let Some(s) = text.strip_prefix("///") {
+        s
+    } else if let Some(s) = text.strip_prefix("//!") {
+        s
+    } else {
+        text
+    }
 }
 
 fn maybe_push_report(reports: &mut Option<&mut Vec<Report>>, report: Report) {
