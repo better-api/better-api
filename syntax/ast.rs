@@ -1,8 +1,8 @@
 use crate::Kind::*;
 use crate::{Kind, Language, SyntaxNode, SyntaxToken};
 
-use rowan::TextRange;
 pub use rowan::ast::{AstNode, AstPtr};
+use rowan::{NodeOrToken, TextRange};
 
 // Helper macros to generator AST nodes as structs.
 macro_rules! ast_node {
@@ -80,6 +80,40 @@ macro_rules! ast_node {
     };
 }
 
+macro_rules! wraped_token {
+    (
+        #[from($kind:ident)]
+        $(#[$attr:meta])*
+        struct $name:ident;
+    ) =>{
+        $(#[$attr]) *
+        #[repr(transparent)]
+        pub struct $name(SyntaxToken);
+
+        impl $name {
+            fn new(token: SyntaxToken) -> Self {
+                assert_eq!(token.kind(), $kind);
+                Self(token)
+            }
+
+            /// Returns underlying token
+            pub fn token(&self) -> &SyntaxToken {
+                &self.0
+            }
+
+            /// Token's text range
+            pub fn text_range(&self) -> TextRange {
+                self.0.text_range()
+            }
+
+            /// Returns text of the token
+            pub fn text(&self) -> &str {
+                self.0.text()
+            }
+        }
+    };
+}
+
 ///////////////
 // Root node //
 ///////////////
@@ -145,50 +179,20 @@ ast_node! {
     struct Name;
 }
 
-/// Thin wrapper around token that is always `TOKEN_IDENTIFIER`.
-///
-/// Useful to separate identifier token from string token.
-#[repr(transparent)]
-pub struct IdentifierToken(SyntaxToken);
-
-impl IdentifierToken {
-    /// Returns underlying token
-    pub fn token(&self) -> &SyntaxToken {
-        &self.0
-    }
-
-    /// Token's text range
-    pub fn text_range(&self) -> TextRange {
-        self.0.text_range()
-    }
-
-    /// Returns text of the token
-    pub fn text(&self) -> &str {
-        self.0.text()
-    }
+wraped_token! {
+    #[from(TOKEN_IDENTIFIER)]
+    /// Thin wrapper around token that is always `TOKEN_IDENTIFIER`.
+    ///
+    /// Useful to separate identifier token from string token.
+    struct IdentifierToken;
 }
 
-/// Thin wrapper around token that is always `TOKEN_STRING`.
-///
-/// Useful to separate identifier token from string token.
-#[repr(transparent)]
-pub struct StringToken(SyntaxToken);
-
-impl StringToken {
-    /// Returns underlying token
-    pub fn token(&self) -> &SyntaxToken {
-        &self.0
-    }
-
-    /// Token's text range
-    pub fn text_range(&self) -> TextRange {
-        self.0.text_range()
-    }
-
-    /// Returns text of the token
-    pub fn text(&self) -> &str {
-        self.0.text()
-    }
+wraped_token! {
+    #[from(TOKEN_STRING)]
+    /// Thin wrapper around token that is always `TOKEN_STRING`.
+    ///
+    /// Useful to separate identifier token from string token.
+    struct StringToken;
 }
 
 /// [`Name`] can be an identifier or a string. This type provides that information
@@ -217,8 +221,8 @@ impl Name {
             .expect("parser should parse name correctly");
 
         match token.kind() {
-            TOKEN_IDENTIFIER => NameToken::Identifier(IdentifierToken(token)),
-            TOKEN_STRING => NameToken::String(StringToken(token)),
+            TOKEN_IDENTIFIER => NameToken::Identifier(IdentifierToken::new(token)),
+            TOKEN_STRING => NameToken::String(StringToken::new(token)),
             _ => unreachable!("parser should parse name correctly"),
         }
     }
@@ -230,10 +234,26 @@ ast_node! {
     struct Prologue;
 }
 
+wraped_token! {
+    #[from(TOKEN_DOC_COMMENT)]
+    /// Thin wrapper around token that is always `TOKEN_DOC_COMMENT`.
+    struct DocCommentToken;
+}
+
 impl Prologue {
     /// Returns the default modifier inside the prologue.
     pub fn default(&self) -> Option<Default> {
         self.0.children().find_map(Default::cast)
+    }
+
+    /// Returns iterator over doc comments inside the prologue.
+    pub fn doc_comments(&self) -> impl Iterator<Item = DocCommentToken> {
+        self.0.children_with_tokens().filter_map(|tk| match tk {
+            NodeOrToken::Token(tk) if tk.kind() == TOKEN_DOC_COMMENT => {
+                Some(DocCommentToken::new(tk))
+            }
+            _ => None,
+        })
     }
 }
 
@@ -326,7 +346,7 @@ impl String {
             "parser should parse strings correctly"
         );
 
-        StringToken(token)
+        StringToken::new(token)
     }
 }
 
@@ -532,7 +552,7 @@ impl TypeRef {
             "parser should parse type reference correctly"
         );
 
-        IdentifierToken(token)
+        IdentifierToken::new(token)
     }
 }
 
@@ -936,7 +956,7 @@ impl Path {
             "parser should parse path correctly"
         );
 
-        StringToken(token)
+        StringToken::new(token)
     }
 }
 
