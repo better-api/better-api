@@ -19,9 +19,6 @@ pub struct RouteView<'a> {
     /// Route path at this level of the hierarchy.
     pub path: Path<'a>,
 
-    /// Doc comments
-    pub docs: Option<&'a str>,
-
     #[debug(skip)]
     spec: &'a Spec,
 
@@ -58,7 +55,6 @@ impl<'a> RouteView<'a> {
     fn from_data(spec: &'a Spec, data: RouteData) -> Self {
         Self {
             path: spec.endpoints.get_path(data.path),
-            docs: data.docs.map(|id| spec.strings.resolve(id)),
             spec,
             route_cursor: spec.endpoints.route_cursor(data),
             endpoint_cursor: spec.endpoints.endpoint_cursor(data),
@@ -296,7 +292,6 @@ mod test {
         let mut spec = Spec::new_test();
         let string_id = string_type(&mut spec);
 
-        let api_docs = spec.strings.get_or_intern("api docs");
         let users_docs = spec.strings.get_or_intern("users docs");
 
         let health_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("health")) };
@@ -314,9 +309,7 @@ mod test {
         );
         health.finish();
 
-        let (mut api, _) = spec
-            .endpoints
-            .add_route(PathPart::Segment("/api"), Some(api_docs));
+        let (mut api, _) = spec.endpoints.add_route(PathPart::Segment("/api"));
         api.add_response(
             ResponseStatus::Default,
             EndpointResponseTypeId::InlineType(string_id),
@@ -334,7 +327,7 @@ mod test {
         );
         users.finish();
 
-        let (mut admin, _) = api.add_route(PathPart::Segment("/admin"), None);
+        let (mut admin, _) = api.add_route(PathPart::Segment("/admin"));
         let (mut stats, _) = admin.add_endpoint(
             PathPart::Segment("/stats"),
             endpoint_fields(stats_name, Method::GET, None),
@@ -372,7 +365,6 @@ mod test {
         let api = root_routes.next().expect("root api route");
         assert!(root_routes.next().is_none());
         assert_eq!(api.path.segments().as_slice(), &["/api"]);
-        assert_eq!(api.docs, Some("api docs"));
 
         let api_responses: Vec<_> = api.responses().collect();
         assert_eq!(api_responses.len(), 1);

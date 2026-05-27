@@ -151,13 +151,12 @@ pub(crate) struct RouteBuilder<'p> {
 }
 
 impl<'p> RouteBuilder<'p> {
-    fn new(parent: Parent<'p>, path: PathPart, docs: Option<StringId>) -> (Self, PathId) {
+    fn new(parent: Parent<'p>, path: PathPart) -> (Self, PathId) {
         let path_id = parent.paths.insert(parent.path_id, path);
 
         let idx = parent.data.len();
         parent.data.push(Slot::Route {
             path: path_id,
-            docs,
             end: 0,
         });
 
@@ -205,12 +204,8 @@ impl<'p> RouteBuilder<'p> {
     }
 
     /// Starts building a nested route under this route.
-    pub(crate) fn add_route<'a>(
-        &'a mut self,
-        path: PathPart,
-        docs: Option<StringId>,
-    ) -> (RouteBuilder<'a>, PathId) {
-        RouteBuilder::new(self.as_parent(), path, docs)
+    pub(crate) fn add_route<'a>(&'a mut self, path: PathPart) -> (RouteBuilder<'a>, PathId) {
+        RouteBuilder::new(self.as_parent(), path)
     }
 
     /// Finalize the route and return its [`RouteId`].
@@ -281,7 +276,6 @@ pub(crate) enum EndpointResponseTypeId {
 enum Slot {
     Route {
         path: PathId,
-        docs: Option<StringId>,
 
         /// Id after the last child of the route.
         /// Used for knowing when to stop iteration
@@ -308,7 +302,6 @@ enum Slot {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct RouteData {
     pub path: PathId,
-    pub docs: Option<StringId>,
 
     /// Index of the first child slot after the route slot itself.
     first: u32,
@@ -381,12 +374,8 @@ impl EndpointArena {
     }
 
     /// Start building a route at the root.
-    pub(crate) fn add_route<'a>(
-        &'a mut self,
-        path: PathPart,
-        docs: Option<StringId>,
-    ) -> (RouteBuilder<'a>, PathId) {
-        RouteBuilder::new(self.parent(), path, docs)
+    pub(crate) fn add_route<'a>(&'a mut self, path: PathPart) -> (RouteBuilder<'a>, PathId) {
+        RouteBuilder::new(self.parent(), path)
     }
 
     /// Returns the path stored for `id`.
@@ -412,13 +401,12 @@ impl EndpointArena {
     /// Returns route data for `id`.
     pub(crate) fn get_route(&self, id: RouteId) -> RouteData {
         let slot = &self.data[id.0 as usize];
-        let Slot::Route { path, docs, end } = slot else {
+        let Slot::Route { path, end } = slot else {
             unreachable!("RouteId must point to Slot::Route");
         };
 
         RouteData {
             path: *path,
-            docs: *docs,
             first: id.0 + 1,
             end: *end,
         }
@@ -503,7 +491,7 @@ impl EndpointArena {
                     current = *end;
                 }
                 Slot::Response { .. } => current += 1,
-                Slot::Route { path, docs, end } => {
+                Slot::Route { path, end } => {
                     debug_assert!(*end > current && *end <= c.end);
                     let next = RouteCursor {
                         next: *end,
@@ -511,7 +499,6 @@ impl EndpointArena {
                     };
                     let data = RouteData {
                         path: *path,
-                        docs: *docs,
                         first: current + 1,
                         end: *end,
                     };
@@ -662,7 +649,7 @@ mod test {
         );
         let health_id = health.finish();
 
-        let (mut api, api_path) = arena.add_route(PathPart::Segment("/api"), Some(route_docs));
+        let (mut api, api_path) = arena.add_route(PathPart::Segment("/api"));
         let api_response_id = api.add_response(
             ResponseStatus::Default,
             EndpointResponseTypeId::InlineType(bool_id),
@@ -692,7 +679,7 @@ mod test {
         );
         let users_id = users.finish();
 
-        let (mut admin, admin_path) = api.add_route(PathPart::Segment("/admin"), None);
+        let (mut admin, admin_path) = api.add_route(PathPart::Segment("/admin"));
         let (mut stats, stats_path) = admin.add_endpoint(
             PathPart::Segment("/stats"),
             endpoint_fields(stats_name, Method::GET, None),
@@ -732,7 +719,6 @@ mod test {
             arena.get_path(root_route.path).segments().as_slice(),
             &["/api"]
         );
-        assert_eq!(root_route.docs, Some(route_docs));
         assert!(arena.next_route(next_root_route).is_none());
 
         let (root_endpoint, next_root_endpoint) = arena

@@ -175,15 +175,20 @@ impl Root {
 
     /// Returns iterator over top comments.
     pub fn top_comments(&self) -> impl Iterator<Item = TopCommentToken> {
-        // TODO: Current implementation doesn't stop after top comments end.
-        // This also returns top comments in wrong places, which is not desired and
-        // needs fixing in the future.
-        self.0.children_with_tokens().filter_map(|tk| match tk {
-            NodeOrToken::Token(tk) if tk.kind() == TOKEN_TOP_COMMENT => {
-                Some(TopCommentToken::new(tk))
-            }
-            _ => None,
-        })
+        self.0
+            .children_with_tokens()
+            .take_while(|tk| {
+                matches!(
+                    tk.kind(),
+                    TOKEN_TOP_COMMENT | TOKEN_COMMENT | TOKEN_EOL | TOKEN_SPACE | TOKEN_ERROR
+                )
+            })
+            .filter_map(|tk| match tk {
+                NodeOrToken::Token(tk) if tk.kind() == TOKEN_TOP_COMMENT => {
+                    Some(TopCommentToken::new(tk))
+                }
+                _ => None,
+            })
     }
 }
 
@@ -345,6 +350,11 @@ ast_node! {
 impl Server {
     pub fn value(&self) -> Option<Value> {
         self.0.children().find_map(Value::cast)
+    }
+
+    /// Returns server's prologue.
+    pub fn prologue(&self) -> Option<Prologue> {
+        self.0.children().find_map(Prologue::cast)
     }
 }
 
@@ -926,6 +936,11 @@ impl Endpoint {
     pub fn responses(&self) -> impl Iterator<Item = EndpointResponse> {
         self.0.children().filter_map(EndpointResponse::cast)
     }
+
+    /// Returns endpoint prologue
+    pub fn prologue(&self) -> Option<Prologue> {
+        self.0.children().find_map(Prologue::cast)
+    }
 }
 
 ast_node! {
@@ -1070,6 +1085,11 @@ impl EndpointRequestBody {
     pub fn typ(&self) -> Option<Type> {
         self.0.children().find_map(Type::cast)
     }
+
+    /// Returns request body prologue
+    pub fn prologue(&self) -> Option<Prologue> {
+        self.0.children().find_map(Prologue::cast)
+    }
 }
 
 ast_node! {
@@ -1087,6 +1107,11 @@ impl EndpointResponse {
     /// Returns response type.
     pub fn typ(&self) -> Option<Type> {
         self.0.children().find_map(Type::cast)
+    }
+
+    /// Returns response prologue
+    pub fn prologue(&self) -> Option<Prologue> {
+        self.0.children().find_map(Prologue::cast)
     }
 }
 

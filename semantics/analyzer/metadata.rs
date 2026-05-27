@@ -144,13 +144,12 @@ impl<'a> SpecLowerer<'a> {
         let name = self.get_server_field(&object, "name");
         let url = self.get_server_field(&object, "url");
 
+        let docs = server
+            .prologue()
+            .and_then(|p| text::parse_comments(p.doc_comments()));
+
         if let (Some(name), Some(url)) = (name, url) {
-            Some(spec::metadata::Server {
-                name,
-                url,
-                // TODO: Extract docs
-                docs: None,
-            })
+            Some(spec::metadata::Server { name, url, docs })
         } else {
             None
         }

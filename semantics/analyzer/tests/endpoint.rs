@@ -292,6 +292,47 @@ fn lower_simple_valid_routes() {
 }
 
 #[test]
+fn lower_endpoint_doc_comments() {
+    let text = indoc! {r#"
+        route "/foo" {
+            /// Endpoint docs
+            POST {
+                name: "foo"
+
+                /// Request body docs
+                requestBody: rec {
+                    foo: string
+                }
+
+                /// Response docs
+                ///
+                /// With multiline
+                on 200: string
+            }
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let lowered = lower_spec(&res.root);
+    assert_eq!(lowered.reports, vec![]);
+
+    let mut root_routes = lowered.spec.root_routes();
+    let root_route = root_routes.next().expect("expected root route");
+
+    let mut endpoints = root_route.endpoints();
+    let endpoint = endpoints.next().expect("expected endpoint");
+    assert_eq!(endpoint.docs, Some("Endpoint docs"));
+    assert_eq!(endpoint.request_body_docs, Some("Request body docs"));
+
+    let mut responses = endpoint.responses();
+    let response = responses.next().expect("expected response");
+    assert_eq!(response.docs, Some("Response docs\n\nWith multiline"));
+}
+
+#[test]
 fn lower_invalid_endpoint_missing_name() {
     let text = indoc! {r#"
         GET {
