@@ -1,0 +1,41 @@
+---
+source: syntax/parser/basic.rs
+expression: res.node
+---
+NODE_ROOT@0..134
+  TOKEN_TOP_COMMENT@0..25 "//! This is a top com ..."
+  TOKEN_EOL@25..26 "\n"
+  TOKEN_EOL@26..27 "\n"
+  TOKEN_COMMENT@27..52 "// This is just a com ..."
+  TOKEN_EOL@52..53 "\n"
+  TOKEN_EOL@53..54 "\n"
+  NODE_SERVER@54..134
+    NODE_PROLOGUE@54..91
+      TOKEN_DOC_COMMENT@54..90 "/// This is a doc com ..."
+      TOKEN_EOL@90..91 "\n"
+    TOKEN_IDENTIFIER@91..97 "server"
+    TOKEN_COLON@97..98 ":"
+    TOKEN_SPACE@98..99 " "
+    NODE_OBJECT@99..133
+      TOKEN_CURLY_LEFT@99..100 "{"
+      TOKEN_EOL@100..101 "\n"
+      TOKEN_SPACE@101..105 "    "
+      NODE_OBJECT_FIELD@105..117
+        NODE_NAME@105..109
+          TOKEN_IDENTIFIER@105..109 "name"
+        TOKEN_COLON@109..110 ":"
+        TOKEN_SPACE@110..111 " "
+        NODE_VALUE_STRING@111..116
+          TOKEN_STRING@111..116 "\"foo\""
+        TOKEN_EOL@116..117 "\n"
+      TOKEN_SPACE@117..121 "    "
+      NODE_OBJECT_FIELD@121..132
+        NODE_NAME@121..124
+          TOKEN_IDENTIFIER@121..124 "url"
+        TOKEN_COLON@124..125 ":"
+        TOKEN_SPACE@125..126 " "
+        NODE_VALUE_STRING@126..131
+          TOKEN_STRING@126..131 "\"bar\""
+        TOKEN_EOL@131..132 "\n"
+      TOKEN_CURLY_RIGHT@132..133 "}"
+    TOKEN_EOL@133..134 "\n"

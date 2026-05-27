@@ -1,0 +1,57 @@
+---
+source: syntax/parser/basic.rs
+expression: res.reports
+---
+[
+    Report {
+        severity: Warning,
+        title: "unexpected doc comment",
+        labels: [
+            Label {
+                style: Primary,
+                message: "unexpected doc comment",
+                span: Span {
+                    start: 26,
+                    end: 57,
+                },
+            },
+        ],
+        note: Some(
+            "help: This doc comment has no effect and will be ignored. Use regular comment instead.",
+        ),
+    },
+    Report {
+        severity: Warning,
+        title: "unexpected doc comment",
+        labels: [
+            Label {
+                style: Primary,
+                message: "unexpected doc comment",
+                span: Span {
+                    start: 85,
+                    end: 121,
+                },
+            },
+        ],
+        note: Some(
+            "help: This doc comment has no effect and will be ignored. Use regular comment instead.",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "expected field name, found a top comment",
+        labels: [
+            Label {
+                style: Primary,
+                message: "expected field name",
+                span: Span {
+                    start: 168,
+                    end: 204,
+                },
+            },
+        ],
+        note: Some(
+            "help: field name must be an identifier or string",
+        ),
+    },
+]
