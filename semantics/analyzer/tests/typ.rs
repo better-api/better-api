@@ -564,6 +564,102 @@ fn lower_simple_union() {
 }
 
 #[test]
+fn lower_type_doc_comments() {
+    let text = indoc! {r#"
+        /// User record docs
+        type User: rec {
+            /// Id docs
+            id: string
+
+            /// Name docs
+            name: string
+        }
+
+        /// Event union docs
+        type Event: union {
+            /// Created docs
+            created: User
+
+            /// Deleted docs
+            deleted: string
+        }
+
+        /// Status enum docs
+        type Status: enum (string) {
+            /// Active docs
+            "active"
+
+            /// Disabled docs
+            ///
+            /// With multiline
+            "disabled"
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let lowerer = setup_lowerer(&res.root);
+    let lowered = lowerer.into_lowered_spec();
+    assert!(lowered.reports.is_empty());
+
+    // Check record User
+    let name_id = lowered.spec.strings.get("User").unwrap();
+    let type_def = lowered.spec.symbol_table.get(&name_id).unwrap();
+    assert_eq!(
+        type_def.docs.map(|id| lowered.spec.strings.resolve(id)),
+        Some("User record docs")
+    );
+
+    let record = match get_root_type(&lowered, "User") {
+        RootTypeView::Type(TypeView::Record(record)) => record,
+        typ => panic!("expected record, got {typ:?}"),
+    };
+
+    let fields: Vec<_> = record.fields().collect();
+    assert_eq!(fields.len(), 2);
+    assert_eq!(fields[0].docs, Some("Id docs"));
+    assert_eq!(fields[1].docs, Some("Name docs"));
+
+    // Check record Event
+    let name_id = lowered.spec.strings.get("Event").unwrap();
+    let type_def = lowered.spec.symbol_table.get(&name_id).unwrap();
+    assert_eq!(
+        type_def.docs.map(|id| lowered.spec.strings.resolve(id)),
+        Some("Event union docs")
+    );
+
+    let union = match get_root_type(&lowered, "Event") {
+        RootTypeView::Type(TypeView::Union(union)) => union,
+        typ => panic!("expected union, got {typ:?}"),
+    };
+
+    let fields: Vec<_> = union.fields().collect();
+    assert_eq!(fields.len(), 2);
+    assert_eq!(fields[0].docs, Some("Created docs"));
+    assert_eq!(fields[1].docs, Some("Deleted docs"));
+
+    // Check enum Status
+    let name_id = lowered.spec.strings.get("Status").unwrap();
+    let type_def = lowered.spec.symbol_table.get(&name_id).unwrap();
+    assert_eq!(
+        type_def.docs.map(|id| lowered.spec.strings.resolve(id)),
+        Some("Status enum docs")
+    );
+
+    let enum_type = match get_root_type(&lowered, "Status") {
+        RootTypeView::Type(TypeView::Enum(enum_type)) => enum_type,
+        typ => panic!("expected enum, got {typ:?}"),
+    };
+
+    let members: Vec<_> = enum_type.members().collect();
+    assert_eq!(members.len(), 2);
+    assert_eq!(members[0].docs, Some("Active docs"));
+    assert_eq!(members[1].docs, Some("Disabled docs\n\nWith multiline"));
+}
+
+#[test]
 fn lower_empty_union() {
     let text = indoc! {r#"
         type Foo: union {}

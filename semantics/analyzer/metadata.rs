@@ -3,8 +3,8 @@ use better_api_syntax::ast::AstNode;
 use better_api_syntax::{TextRange, ast};
 
 use crate::analyzer::SpecLowerer;
-use crate::spec;
 use crate::text::parse_string;
+use crate::{spec, text};
 
 impl<'a> SpecLowerer<'a> {
     pub(crate) fn lower_metadata(&mut self) {
@@ -65,7 +65,8 @@ impl<'a> SpecLowerer<'a> {
             .filter_map(|srv| self.lower_server(&srv))
             .collect();
 
-        println!("{res_version:?}, {res_name:?}, {res_api_version:?}");
+        let top_comment = text::parse_comments(self.root.top_comments());
+
         if let (Some(version), Some(name), Some(api_version)) =
             (res_version, res_name, res_api_version)
         {
@@ -74,9 +75,7 @@ impl<'a> SpecLowerer<'a> {
                 version,
                 name,
                 servers,
-
-                // TODO: Get description
-                description: None,
+                description: top_comment,
             }
         }
     }
@@ -145,13 +144,12 @@ impl<'a> SpecLowerer<'a> {
         let name = self.get_server_field(&object, "name");
         let url = self.get_server_field(&object, "url");
 
+        let docs = server
+            .prologue()
+            .and_then(|p| text::parse_comments(p.doc_comments()));
+
         if let (Some(name), Some(url)) = (name, url) {
-            Some(spec::metadata::Server {
-                name,
-                url,
-                // TODO: Extract docs
-                docs: None,
-            })
+            Some(spec::metadata::Server { name, url, docs })
         } else {
             None
         }
@@ -270,5 +268,31 @@ mod test {
         assert_eq!(metadata.servers[0].url, "https://api.example.com");
         assert_eq!(metadata.servers[1].name, "staging");
         assert_eq!(metadata.servers[1].url, "https://staging.example.com");
+    }
+
+    #[test]
+    fn lower_top_comment() {
+        let text = indoc! {r#"
+            //!  This is a top comment, with:
+            //!    - Some spacing
+            //!    - Indents
+            version: "1.2"
+            name: "test"
+            betterApi: "0.1"
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+        let res = parse(tokens);
+
+        let lowerer = SpecLowerer::new(&res.root);
+        let lowered = lowerer.lower_spec();
+
+        assert!(lowered.reports.is_empty());
+
+        assert_eq!(
+            lowered.spec.metadata.description.unwrap(),
+            "This is a top comment, with:\n  - Some spacing\n  - Indents"
+        );
     }
 }

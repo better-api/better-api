@@ -32,11 +32,7 @@ trait EndpointParent {
         data: EndpointFields,
     ) -> (EndpointBuilder<'a>, PathId);
 
-    fn add_route<'a>(
-        &'a mut self,
-        path: PathPart,
-        docs: Option<StringId>,
-    ) -> (RouteBuilder<'a>, PathId);
+    fn add_route<'a>(&'a mut self, path: PathPart) -> (RouteBuilder<'a>, PathId);
 }
 
 impl EndpointParent for EndpointArena {
@@ -50,12 +46,8 @@ impl EndpointParent for EndpointArena {
     }
 
     #[inline(always)]
-    fn add_route<'a>(
-        &'a mut self,
-        path: PathPart,
-        docs: Option<StringId>,
-    ) -> (RouteBuilder<'a>, PathId) {
-        self.add_route(path, docs)
+    fn add_route<'a>(&'a mut self, path: PathPart) -> (RouteBuilder<'a>, PathId) {
+        self.add_route(path)
     }
 }
 
@@ -70,12 +62,8 @@ impl EndpointParent for RouteBuilder<'_> {
     }
 
     #[inline(always)]
-    fn add_route<'a>(
-        &'a mut self,
-        path: PathPart,
-        docs: Option<StringId>,
-    ) -> (RouteBuilder<'a>, PathId) {
-        self.add_route(path, docs)
+    fn add_route<'a>(&'a mut self, path: PathPart) -> (RouteBuilder<'a>, PathId) {
+        self.add_route(path)
     }
 }
 
@@ -189,8 +177,7 @@ fn lower_route<P: EndpointParent>(
         route.syntax().text_range(),
         path_token,
         |ctx, path, path_range| {
-            // TODO: Get docs from doc comment
-            let (builder, path_id) = parent.add_route(path, None);
+            let (builder, path_id) = parent.add_route(path);
             ctx.ctx.range_map.path.insert(path_id, path_range);
             builder
         },
@@ -350,6 +337,13 @@ fn lower_endpoint<P: EndpointParent>(
     let req_body =
         lower_request_body(&mut ctx.ctx, types, values, requires_file, endpoint, &name).ok()?;
 
+    // Lower request body docs
+    let req_body_docs = endpoint.request_body().and_then(|b| {
+        b.prologue().and_then(|p| {
+            text::parse_comments(p.doc_comments()).map(|c| ctx.ctx.strings.get_or_intern(&c))
+        })
+    });
+
     // Check if GET method has a request body
     if method == Some(http::Method::GET)
         && let Some(req_body) = endpoint.request_body()
@@ -376,6 +370,11 @@ fn lower_endpoint<P: EndpointParent>(
         );
     }
 
+    // Lower docs
+    let docs = endpoint.prologue().and_then(|p| {
+        text::parse_comments(p.doc_comments()).map(|c| ctx.ctx.strings.get_or_intern(&c))
+    });
+
     // Lower path and start endpoint builder with the lowered path
     let path_token = endpoint.path().map(|p| p.string());
     let endpoint_builder = with_lowered_path(
@@ -393,10 +392,8 @@ fn lower_endpoint<P: EndpointParent>(
                     headers: headers_param,
                     accept: accept_id,
                     request_body: req_body,
-
-                    // TODO: Extract doc comments
-                    docs: None,
-                    request_body_docs: None,
+                    docs,
+                    request_body_docs: req_body_docs,
                 },
             );
 
@@ -754,9 +751,13 @@ fn lower_endpoint_response<P: ResponseParent>(
         },
     };
 
-    // TODO: Get docs from doc comments
+    // Lower docs
+    let docs = resp.prologue().and_then(|p| {
+        text::parse_comments(p.doc_comments()).map(|c| ctx.strings.get_or_intern(&c))
+    });
+
     let status = status?;
-    parent.add_response(status, type_id?, None);
+    parent.add_response(status, type_id?, docs);
     Some(status)
 }
 

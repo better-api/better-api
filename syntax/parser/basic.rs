@@ -321,4 +321,50 @@ mod test {
         insta::assert_debug_snapshot!(res.node);
         insta::assert_debug_snapshot!(res.reports);
     }
+
+    #[test]
+    fn parse_top_comment() {
+        let text = indoc! {r#"
+            //! This is a top comment
+            
+            // This is just a comment
+
+            /// This is a doc comment for server
+            server: {
+                name: "foo"
+                url: "bar"
+            }
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let res = parse(tokens);
+        insta::assert_debug_snapshot!(res.node);
+        assert!(res.reports.is_empty());
+    }
+
+    #[test]
+    fn parse_top_comment_advanced() {
+        let text = indoc! {r#"
+            // This is just a comment
+            /// This is invalid doc comment
+            //! This is a top comment
+
+            /// This is a doc comment for server
+            //! This is invalid top comment
+            server: {
+                //! This is also invalid top comment
+                name: "foo"
+                url: "bar"
+            }
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let res = parse(tokens);
+        insta::assert_debug_snapshot!(res.node);
+        insta::assert_debug_snapshot!(res.reports);
+    }
 }

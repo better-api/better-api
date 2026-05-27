@@ -4,10 +4,10 @@
 //! exposed via [`spec::view`](crate::spec::view) module. However, some of the types in this module
 //! are used in public API.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, str::FromStr};
 
 use better_api_diagnostic::{Label, Report, Span};
-use better_api_syntax::{TextRange, ast};
+use better_api_syntax::{SyntaxToken, TextRange, ast};
 
 #[cfg(test)]
 mod test;
@@ -224,6 +224,49 @@ pub(crate) fn parse_string<'a>(
     }
 
     Cow::Owned(res)
+}
+
+pub(crate) fn parse_comments<T>(mut comment: impl Iterator<Item = T>) -> Option<String>
+where
+    T: Into<SyntaxToken>,
+{
+    // Get whitespace prefix that has to be removed from all lines.
+    let first = comment.next()?;
+    let token = first.into();
+    let cleaned = clean_comment_token(&token);
+    let split_idx = cleaned
+        .chars()
+        .position(|c| !c.is_whitespace())
+        .unwrap_or(0);
+    let prefix = &cleaned[0..split_idx];
+
+    // Parse rest of comment lines
+    let mut res = cleaned[split_idx..].to_string();
+    for line in comment {
+        res.push('\n');
+
+        let token = line.into();
+        let cleaned = clean_comment_token(&token);
+        let cleaned = if let Some(s) = cleaned.strip_prefix(prefix) {
+            s
+        } else {
+            cleaned
+        };
+        res.push_str(cleaned);
+    }
+
+    if res.is_empty() { None } else { Some(res) }
+}
+
+fn clean_comment_token(token: &SyntaxToken) -> &str {
+    let text = token.text().trim();
+    if let Some(s) = text.strip_prefix("///") {
+        s
+    } else if let Some(s) = text.strip_prefix("//!") {
+        s
+    } else {
+        text
+    }
 }
 
 fn maybe_push_report(reports: &mut Option<&mut Vec<Report>>, report: Report) {

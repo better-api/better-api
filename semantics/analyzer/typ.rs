@@ -15,7 +15,7 @@ use crate::spec::arena::typ::id::{
 };
 use crate::spec::arena::value::{ValueArena, ValueId};
 use crate::spec::view::typ::{EnumTy, PrimitiveTy};
-use crate::text::{NameId, StringId, StringInterner};
+use crate::text::{self, NameId, StringId, StringInterner};
 
 /// Represents type field with interned name.
 #[derive(Clone)]
@@ -287,14 +287,17 @@ fn lower_type_def(
         return;
     };
 
+    // Lower docs
+    let docs = def.prologue().and_then(|p| {
+        text::parse_comments(p.doc_comments()).map(|c| ctx.strings.get_or_intern(&c))
+    });
+
     // Insert type to symbol table if not already present.
     // The duplicate type definition error is reported by [`Analyzer::validate_symbols`].
     ctx.spec_symbol_table.entry(name_id).or_insert(TypeDefData {
         typ: type_id,
         name: name_id,
-
-        // TODO: Extract docs from type definition prologue
-        docs: None,
+        docs,
     });
 }
 
@@ -441,8 +444,12 @@ fn lower_enum(
 
         let value_id = lower_value(values, ctx.strings, ctx.reports, &value);
 
-        // TODO: Get docs from prologue
-        builder.add_member(value_id, None);
+        // Lower docs
+        let docs = member.prologue().and_then(|p| {
+            text::parse_comments(p.doc_comments()).map(|c| ctx.strings.get_or_intern(&c))
+        });
+
+        builder.add_member(value_id, docs);
     }
 
     if is_valid {
@@ -779,13 +786,16 @@ fn parse_type_fields(
                 default_id = default.map(|val| lower_value(values, ctx.strings, ctx.reports, &val));
             }
 
+            // Lower docs
+            let docs = f.prologue().and_then(|p| {
+                text::parse_comments(p.doc_comments()).map(|c| ctx.strings.get_or_intern(&c))
+            });
+
             Some(InternedField {
                 name: name_id,
                 field: f,
                 default: default_id,
-
-                // TODO: Extract docs from field prologue
-                docs: None,
+                docs,
             })
         })
         .collect();
