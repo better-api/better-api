@@ -56,6 +56,8 @@ struct Parent<'p> {
 
     /// Path ID of the parent's path
     path_id: Option<PathId>,
+    /// ID of the parent's path
+    route_id: Option<RouteId>,
 }
 
 /// Helper type for adding responses to an endpoint.
@@ -78,6 +80,7 @@ impl<'p> EndpointBuilder<'p> {
         let idx = parent.data.len();
         parent.data.push(Slot::Endpoint {
             path: path_id,
+            parent_id: parent.route_id,
             fields: data,
             end: 0,
         });
@@ -157,6 +160,7 @@ impl<'p> RouteBuilder<'p> {
         let idx = parent.data.len();
         parent.data.push(Slot::Route {
             path: path_id,
+            parent_id: parent.route_id,
             end: 0,
         });
 
@@ -175,6 +179,7 @@ impl<'p> RouteBuilder<'p> {
             data: self.parent.data,
             paths: self.parent.paths,
             path_id: Some(self.path_id),
+            route_id: Some(self.start),
         }
     }
 
@@ -276,6 +281,7 @@ pub(crate) enum EndpointResponseTypeId {
 enum Slot {
     Route {
         path: PathId,
+        parent_id: Option<RouteId>,
 
         /// Id after the last child of the route.
         /// Used for knowing when to stop iteration
@@ -285,6 +291,7 @@ enum Slot {
         /// Path of the endpoint
         path: PathId,
 
+        parent_id: Option<RouteId>,
         fields: EndpointFields,
 
         /// Id after the last response of the endpoint.
@@ -302,6 +309,7 @@ enum Slot {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct RouteData {
     pub path: PathId,
+    pub(crate) parent_id: Option<RouteId>,
 
     /// Index of the first child slot after the route slot itself.
     first: u32,
@@ -311,6 +319,7 @@ pub(crate) struct RouteData {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct EndpointData {
     pub(crate) id: EndpointId,
+    pub(crate) parent_id: Option<RouteId>,
 
     pub path: PathId,
     pub fields: EndpointFields,
@@ -361,6 +370,7 @@ impl EndpointArena {
             data: &mut self.data,
             paths: &mut self.paths,
             path_id: None,
+            route_id: None,
         }
     }
 
@@ -385,12 +395,19 @@ impl EndpointArena {
 
     /// Returns endpoint data for `id`.
     pub(crate) fn get_endpoint(&self, id: EndpointId) -> EndpointData {
-        let Slot::Endpoint { path, fields, end } = &self.data[id.0 as usize] else {
+        let Slot::Endpoint {
+            path,
+            parent_id,
+            fields,
+            end,
+        } = &self.data[id.0 as usize]
+        else {
             unreachable!("EndpointId must point to Slot::Endpoint");
         };
 
         EndpointData {
             id,
+            parent_id: *parent_id,
             path: *path,
             fields: fields.clone(),
             first: id.0 + 1,
@@ -401,12 +418,18 @@ impl EndpointArena {
     /// Returns route data for `id`.
     pub(crate) fn get_route(&self, id: RouteId) -> RouteData {
         let slot = &self.data[id.0 as usize];
-        let Slot::Route { path, end } = slot else {
+        let Slot::Route {
+            path,
+            parent_id,
+            end,
+        } = slot
+        else {
             unreachable!("RouteId must point to Slot::Route");
         };
 
         RouteData {
             path: *path,
+            parent_id: *parent_id,
             first: id.0 + 1,
             end: *end,
         }
@@ -491,7 +514,11 @@ impl EndpointArena {
                     current = *end;
                 }
                 Slot::Response { .. } => current += 1,
-                Slot::Route { path, end } => {
+                Slot::Route {
+                    path,
+                    parent_id,
+                    end,
+                } => {
                     debug_assert!(*end > current && *end <= c.end);
                     let next = RouteCursor {
                         next: *end,
@@ -499,6 +526,7 @@ impl EndpointArena {
                     };
                     let data = RouteData {
                         path: *path,
+                        parent_id: *parent_id,
                         first: current + 1,
                         end: *end,
                     };
@@ -527,7 +555,12 @@ impl EndpointArena {
                     current = *end;
                 }
                 Slot::Response { .. } => current += 1,
-                Slot::Endpoint { path, fields, end } => {
+                Slot::Endpoint {
+                    path,
+                    parent_id,
+                    fields,
+                    end,
+                } => {
                     debug_assert!(*end > current && *end <= c.end);
                     let next = EndpointCursor {
                         next: *end,
@@ -535,6 +568,7 @@ impl EndpointArena {
                     };
                     let data = EndpointData {
                         id: EndpointId(current),
+                        parent_id: *parent_id,
                         path: *path,
                         fields: fields.clone(),
                         first: current + 1,
@@ -628,7 +662,6 @@ mod test {
         let mut spec = Spec::new_test();
         let (string_id, bool_id) = primitive_types(&mut spec);
 
-        let route_docs = spec.strings.get_or_intern("api docs");
         let users_docs = spec.strings.get_or_intern("users docs");
 
         let health_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("health")) };
@@ -715,6 +748,7 @@ mod test {
             .next_route(arena.root_route_cursor())
             .expect("root route");
         assert_eq!(root_route, arena.get_route(api_id));
+        assert_eq!(root_route.parent_id, None);
         assert_eq!(
             arena.get_path(root_route.path).segments().as_slice(),
             &["/api"]
@@ -725,6 +759,7 @@ mod test {
             .next_endpoint(arena.root_endpoint_cursor())
             .expect("root endpoint");
         assert_eq!(root_endpoint, arena.get_endpoint(health_id));
+        assert_eq!(root_endpoint.parent_id, None);
         assert_eq!(
             arena.get_path(root_endpoint.path).segments().as_slice(),
             &["/health"]
@@ -747,6 +782,7 @@ mod test {
             .next_endpoint(arena.endpoint_cursor(root_route))
             .expect("users endpoint");
         assert_eq!(users, arena.get_endpoint(users_id));
+        assert_eq!(users.parent_id, Some(api_id));
         assert_eq!(
             arena.get_path(users.path).segments().as_slice(),
             &["/api", "/users"]
@@ -769,6 +805,7 @@ mod test {
             .next_route(arena.route_cursor(root_route))
             .expect("admin route");
         assert_eq!(admin, arena.get_route(admin_id));
+        assert_eq!(admin.parent_id, Some(api_id));
         assert_eq!(
             arena.get_path(admin.path).segments().as_slice(),
             &["/api", "/admin"]
@@ -779,6 +816,7 @@ mod test {
             .next_endpoint(arena.endpoint_cursor(admin))
             .expect("stats endpoint");
         assert_eq!(stats, arena.get_endpoint(stats_id));
+        assert_eq!(stats.parent_id, Some(admin_id));
         assert_eq!(
             arena.get_path(stats.path).segments().as_slice(),
             &["/api", "/admin", "/stats"]

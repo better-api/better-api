@@ -4,7 +4,7 @@
 //! exposed via [`spec::view`](crate::spec::view) module. However, some of the types in this module
 //! are used in public API.
 
-use std::{borrow::Cow, str::FromStr};
+use std::borrow::Cow;
 
 use better_api_diagnostic::{Label, Report, Span};
 use better_api_syntax::{SyntaxToken, TextRange, ast};
