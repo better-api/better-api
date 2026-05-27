@@ -247,7 +247,12 @@ where
 
         let token = line.into();
         let cleaned = clean_comment_token(&token);
-        res.push_str(cleaned.trim_start_matches(prefix));
+        let cleaned = if let Some(s) = cleaned.strip_prefix(prefix) {
+            s
+        } else {
+            cleaned
+        };
+        res.push_str(cleaned);
     }
 
     if res.is_empty() { None } else { Some(res) }
