@@ -566,6 +566,11 @@ impl TypeDefinition {
     pub fn typ(&self) -> Option<Type> {
         self.0.children().find_map(Type::cast)
     }
+
+    /// Returns type definition prologue
+    pub fn prologue(&self) -> Option<Prologue> {
+        self.0.children().find_map(Prologue::cast)
+    }
 }
 
 ast_node! {
@@ -764,6 +769,11 @@ impl EnumMember {
     /// this method returns `None`.
     pub fn value(&self) -> Option<Value> {
         self.0.children().find_map(Value::cast)
+    }
+
+    /// Returns member prologue
+    pub fn prologue(&self) -> Option<Prologue> {
+        self.0.children().find_map(Prologue::cast)
     }
 }
 
