@@ -3,12 +3,14 @@
 //! Endpoints and routes reference types defined in the spec. See [`typ`](crate::spec::view::typ)
 //! documentation for more details on how types are structured and represented.
 
+use smallvec::SmallVec;
+
 use crate::mime::MimeRange;
 use crate::path::Path;
 use crate::spec::Spec;
 use crate::spec::arena::endpoint::{
     EndpointCursor, EndpointData, EndpointId, EndpointResponseTypeId, ResponseCursor, ResponseData,
-    ResponseStatus, RouteCursor, RouteData,
+    ResponseStatus, RouteCursor, RouteData, RouteId,
 };
 use crate::spec::view::typ::{InlineTypeView, NamedRootTypeRefView, NamedTypeRefView};
 use crate::text::Name;
@@ -18,6 +20,8 @@ use crate::text::Name;
 pub struct RouteView<'a> {
     /// Route path at this level of the hierarchy.
     pub path: Path<'a>,
+
+    parent_id: Option<RouteId>,
 
     #[debug(skip)]
     spec: &'a Spec,
@@ -49,12 +53,15 @@ impl<'a> RouteView<'a> {
         ResponseIter {
             spec: self.spec,
             cursor: self.response_cursor,
+            parent_id: self.parent_id,
+            emitted: SmallVec::new(),
         }
     }
 
     fn from_data(spec: &'a Spec, data: RouteData) -> Self {
         Self {
             path: spec.endpoints.get_path(data.path),
+            parent_id: data.parent_id,
             spec,
             route_cursor: spec.endpoints.route_cursor(data),
             endpoint_cursor: spec.endpoints.endpoint_cursor(data),
@@ -67,6 +74,7 @@ impl<'a> RouteView<'a> {
 #[derive(derive_more::Debug, Clone)]
 pub struct EndpointView<'a> {
     pub(crate) id: EndpointId,
+    parent_id: Option<RouteId>,
 
     /// Path of the endpoint.
     pub path: Path<'a>,
@@ -107,6 +115,8 @@ impl<'a> EndpointView<'a> {
         ResponseIter {
             spec: self.spec,
             cursor: self.response_cursor,
+            parent_id: self.parent_id,
+            emitted: SmallVec::new(),
         }
     }
 
@@ -115,6 +125,7 @@ impl<'a> EndpointView<'a> {
 
         Self {
             id: data.id,
+            parent_id: data.parent_id,
             path: spec.endpoints.get_path(data.path),
             docs: data.fields.docs.map(|id| spec.strings.resolve(id)),
             method: data.fields.method,
@@ -178,16 +189,46 @@ impl<'a> Iterator for RouteIter<'a> {
 pub struct ResponseIter<'a> {
     spec: &'a Spec,
     cursor: ResponseCursor,
+
+    parent_id: Option<RouteId>,
+    emitted: SmallVec<[ResponseStatus; 6]>,
+}
+
+impl<'a> ResponseIter<'a> {
+    /// Helper method to start iterating over parent's responses.
+    /// Returns true if there is a parent, otherwise false.
+    fn go_to_parent(&mut self) -> bool {
+        let Some(id) = self.parent_id else {
+            return false;
+        };
+
+        let route = self.spec.endpoints.get_route(id);
+        let cursor = self.spec.endpoints.route_response_cursor(route);
+
+        self.cursor = cursor;
+        self.parent_id = route.parent_id;
+
+        true
+    }
 }
 
 impl<'a> Iterator for ResponseIter<'a> {
     type Item = EndpointResponseView<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (data, next) = self.spec.endpoints.next_response(self.cursor)?;
+        let Some((data, next)) = self.spec.endpoints.next_response(self.cursor) else {
+            let has_more = self.go_to_parent();
+            return if has_more { self.next() } else { None };
+        };
 
         self.cursor = next;
-        Some(EndpointResponseView::from_data(self.spec, data))
+
+        if self.emitted.contains(&data.status) {
+            self.next()
+        } else {
+            self.emitted.push(data.status);
+            Some(EndpointResponseView::from_data(self.spec, data))
+        }
     }
 }
 

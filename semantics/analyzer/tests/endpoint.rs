@@ -217,6 +217,8 @@ fn lower_simple_valid_routes() {
                 on 200: string
             }
             route "/foo" {
+                on 404: u32
+
                 GET {
                     name: "bar"
 
@@ -257,8 +259,9 @@ fn lower_simple_valid_routes() {
     assert_eq!(root_endpoints[0].name.as_str(), "foo");
     assert!(root_endpoints[0].path.segments().is_empty());
 
+    // Test response named "foo"
     let foo_responses: Vec<_> = root_endpoints[0].responses().collect();
-    assert_eq!(foo_responses.len(), 1);
+    assert_eq!(foo_responses.len(), 2);
     assert_eq!(
         foo_responses[0].status,
         ResponseStatus::Code(StatusCode::OK)
@@ -267,12 +270,26 @@ fn lower_simple_valid_routes() {
         foo_responses[0].typ,
         EndpointResponseType::InlineType(InlineTypeView::Primitive(PrimitiveTy::String))
     ));
+    assert_eq!(
+        foo_responses[1].status,
+        ResponseStatus::Code(StatusCode::NOT_FOUND)
+    );
+    assert!(matches!(
+        foo_responses[1].typ,
+        EndpointResponseType::InlineType(InlineTypeView::Primitive(PrimitiveTy::String))
+    ));
 
     let child_routes: Vec<_> = root_route.routes().collect();
     assert_eq!(child_routes.len(), 1);
     assert_eq!(child_routes[0].path.segments().as_slice(), &["/foo"]);
-    assert_eq!(child_routes[0].responses().count(), 0);
+    // Gets response from parent
+    assert_eq!(child_routes[0].responses().count(), 1);
+    assert_eq!(
+        child_routes[0].responses().next().map(|r| r.status),
+        Some(ResponseStatus::Code(StatusCode::NOT_FOUND))
+    );
 
+    // Test endpoint named "bar"
     let child_endpoints: Vec<_> = child_routes[0].endpoints().collect();
     assert_eq!(child_endpoints.len(), 1);
     assert_eq!(child_endpoints[0].method, Method::GET);
@@ -280,7 +297,7 @@ fn lower_simple_valid_routes() {
     assert_eq!(child_endpoints[0].path.segments().as_slice(), &["/foo"]);
 
     let bar_responses: Vec<_> = child_endpoints[0].responses().collect();
-    assert_eq!(bar_responses.len(), 1);
+    assert_eq!(bar_responses.len(), 2);
     assert_eq!(
         bar_responses[0].status,
         ResponseStatus::Code(StatusCode::OK)
@@ -288,6 +305,14 @@ fn lower_simple_valid_routes() {
     assert!(matches!(
         bar_responses[0].typ,
         EndpointResponseType::InlineType(InlineTypeView::Primitive(PrimitiveTy::String))
+    ));
+    assert_eq!(
+        bar_responses[1].status,
+        ResponseStatus::Code(StatusCode::NOT_FOUND)
+    );
+    assert!(matches!(
+        bar_responses[1].typ,
+        EndpointResponseType::InlineType(InlineTypeView::Primitive(PrimitiveTy::U32))
     ));
 }
 
