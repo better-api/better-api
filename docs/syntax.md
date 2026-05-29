@@ -669,36 +669,36 @@ defaults: {
 
 ## Authentication & Authorization
 
-Currently there are three supported authentication types:
+Currently there are three supported security scheme types:
 
 - **HTTP Bearer** - credentials are passed to `Authorization` header as `Authorization: Bearer <token>`
 - **HTTP Basic** - credentials are passed to `Authorization` header as `Authorization: Basic <creds>`
   where `creds` is base64 encoded string `username:password`
 - **API Keys** - credentials are passed to custom header or query parameter
 
-Each authentication method must also define an Unauthorized error type. This is the body of a
-401 response returned if the authentication against the method fails.
+Each security scheme must also define an Unauthorized error type. This is the body of a
+401 response returned if the authentication against the scheme fails.
 
-Authentication method can also define a Forbidden error type. This is the body of a
-403 response returned if a permission check against the auth method fails. This is
+Security schemes can also define a Forbidden error type. This is the body of a
+403 response returned if a permission check against the security scheme fails. This is
 required if an endpoint specifies required permissions. Permissions are discussed later.
 
-You start by defining an authentication type:
+You start by defining a security scheme:
 
 ```text
-type HttpBearer: auth {
+security HttpBearer: {
   type: "http"
   scheme: "bearer"
   unauthorized: UnauthorizedError
 }
 
-type HttpBasic: auth {
+security HttpBasic: {
   type: "http"
   scheme: "basic"
   unauthorized: UnauthorizedError
 }
 
-type ApiKey: auth {
+security ApiKey: {
   type: "api_key"
   header: "X-API-KEY"
   query: "api_key"
@@ -712,7 +712,7 @@ type ApiKey: auth {
 > As you can see, API key can be defined to be present in either header or query.
 > You can also specify just header or just query, and leave the other field empty.
 
-After you have an authentication type, you can use it to specify auth for a single endpoint:
+After you have a security scheme, you can use it to specify auth for a single endpoint:
 
 ```text
 GET "/protected" {
@@ -726,7 +726,7 @@ a 401 response for such an endpoint results in an error.
 
 ---
 
-You can also specify multiple auth types per endpoint. They are joined by `or` (at least one
+You can also specify multiple security schemes per endpoint. They are joined by `or` (at least one
 of them has to match).
 
 ```text
@@ -736,11 +736,11 @@ GET {
 }
 ```
 
-For endpoints that have multiple auth methods, all methods have to have the same unauthorized error
+For endpoints that have multiple security schemes, all schemes have to have the same unauthorized error
 types.
 
 > [!NOTE]
-> Because of how the code gen works, you can't specify anonymous auth. All auth types
+> Because of how the code gen works, you can't specify anonymous auth. All security schemes
 > have to be named.
 
 ---
@@ -750,13 +750,13 @@ a public endpoint that shows additional info if a user is logged in. This is don
 operator.
 
 ```text
-// Optional auth method
+// Optional security scheme
 GET {
   auth: ApiKey?
   // ...
 }
 
-// Multiple auth methods, but all are optional
+// Multiple security schemes, but all are optional
 GET {
   auth: [ApiKey, HttpBasic]?
   // ...
@@ -795,12 +795,12 @@ GET {
 If auth is optional, permissions can still be defined. If a user is authenticated but doesn't have
 required permissions, the generated code will treat them as an unauthorized user.
 
-If an endpoint has multiple auth methods and requires permissions, at least _one_ auth method has to authorize
+If an endpoint has multiple security schemes and requires permissions, at least _one_ security scheme has to authorize
 the user with _all_ required permissions. Otherwise the user is treated as unauthorized or unauthenticated.
-In this case all auth methods have to have the same forbidden error type.
+In this case all security schemes have to have the same forbidden error type.
 This is similar to unauthorized error types.
 
-Defining permissions on an endpoint also defines its 403 response, similar to how defining an auth method
+Defining permissions on an endpoint also defines its 403 response, similar to how defining auth
 defines a 401 response. This means that an endpoint can't redefine a 403 response.
 
 ### Scopes
@@ -889,7 +889,7 @@ and so forth until the top.
 You can set default auth and permissions in a `defaults` block:
 
 ```text
-type ApiKey: auth {
+security ApiKey: {
   // ...
 }
 
@@ -903,7 +903,7 @@ defaults: {
 
 There are cases when simple "read" permission is not enough. For instance, you have an endpoint
 `/pets/{id}` that returns a pet by id and only an owner can update the pet. In this case you can
-define only an authentication method, without any permissions, and a custom 403 response.
+define only auth, without any permissions, and a custom 403 response.
 
 ```text
 PUT "/pets/{id}" {
