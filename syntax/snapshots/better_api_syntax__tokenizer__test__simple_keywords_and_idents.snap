@@ -180,8 +180,8 @@ expression: tokens
         "\n",
     ),
     (
-        TOKEN_KW_FOR,
-        "for",
+        TOKEN_KW_SECURITY,
+        "security",
     ),
     (
         TOKEN_EOL,

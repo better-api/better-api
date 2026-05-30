@@ -231,7 +231,7 @@ impl<'s, 'd> Tokenizer<'s, 'd> {
 
             "default" => TOKEN_KW_DEFAULT,
             "on" => TOKEN_KW_ON,
-            "for" => TOKEN_KW_FOR,
+            "security" => TOKEN_KW_SECURITY,
 
             "i32" => TOKEN_KW_I32,
             "i64" => TOKEN_KW_I64,
@@ -398,7 +398,7 @@ mod test {
                 file
                 on
                 default
-                for
+                security
                 route
             "#},
             &mut diagnostics,

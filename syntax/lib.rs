@@ -74,8 +74,8 @@ pub enum Kind {
     TOKEN_KW_DEFAULT, // default
     #[display("`on`")]
     TOKEN_KW_ON,
-    #[display("`for`")]
-    TOKEN_KW_FOR,
+    #[display("`security`")]
+    TOKEN_KW_SECURITY,
     #[display("`i32`")]
     TOKEN_KW_I32, // i32
     #[display("`i64`")]
@@ -191,6 +191,15 @@ pub enum Kind {
     NODE_RESPONSE_STATUS, // Response status - `200`, `default`, ...
 
     NODE_ROUTE, // Route group
+
+    // Security schema definition
+    NODE_SECURITY,
+    NODE_SECURITY_TYPE,
+    NODE_SECURITY_SCHEME,
+    NODE_SECURITY_HEADER,
+    NODE_SECURITY_QUERY,
+    NODE_SECURITY_UNAUTHORIZED,
+    NODE_SECURITY_FORBIDDEN,
 
     NODE_ERROR,
 
