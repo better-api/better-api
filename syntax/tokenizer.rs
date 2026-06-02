@@ -168,7 +168,25 @@ impl<'s, 'd> Tokenizer<'s, 'd> {
         }
 
         match nr_dots {
-            0 => self.emit(TOKEN_INTEGER),
+            0 => {
+                if self.current_value().parse::<i128>().is_ok() {
+                    self.emit(TOKEN_INTEGER)
+                } else {
+                    self.reports.push(
+                        Report::error(format!("invalid integer `{}`", self.current_value()))
+                            .add_label(Label::primary(
+                                "invalid integer".to_string(),
+                                Span::new(self.start, self.pos),
+                            ))
+                            .with_note(
+                                "help: integer literals must fit in the signed 128-bit range"
+                                    .to_string(),
+                            ),
+                    );
+
+                    self.emit(TOKEN_ERROR)
+                }
+            }
             1 => self.emit(TOKEN_FLOAT),
             _ => {
                 self.reports.push(
@@ -513,6 +531,40 @@ mod test {
 
         insta::assert_debug_snapshot!(tokens);
         insta::assert_debug_snapshot!(diagnostics);
+    }
+
+    #[test]
+    fn integer_overflow() {
+        let mut diagnostics = vec![];
+        let tokens: Vec<_> = tokenize(
+            "170141183460469231731687303715884105727 170141183460469231731687303715884105728",
+            &mut diagnostics,
+        )
+        .collect();
+
+        assert_eq!(
+            tokens,
+            vec![
+                (TOKEN_INTEGER, "170141183460469231731687303715884105727"),
+                (TOKEN_SPACE, " "),
+                (TOKEN_ERROR, "170141183460469231731687303715884105728"),
+            ]
+        );
+        assert_eq!(
+            diagnostics,
+            vec![
+                Report::error(
+                    "invalid integer `170141183460469231731687303715884105728`".to_string()
+                )
+                .add_label(Label::primary(
+                    "invalid integer".to_string(),
+                    Span::new(40, 79)
+                ))
+                .with_note(
+                    "help: integer literals must fit in the signed 128-bit range".to_string()
+                )
+            ]
+        );
     }
 
     #[test]

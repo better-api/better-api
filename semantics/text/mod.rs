@@ -121,7 +121,7 @@ impl StringInterner {
         name: &ast::Name,
         mut reports: Option<&mut Vec<Report>>,
     ) -> Option<NameId> {
-        let token = name.token();
+        let token = name.token()?;
 
         let name_str: Cow<_> = match &token {
             ast::NameToken::Identifier(ident) => ident.text().into(),

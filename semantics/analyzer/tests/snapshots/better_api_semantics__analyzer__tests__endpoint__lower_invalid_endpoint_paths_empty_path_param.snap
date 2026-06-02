@@ -1,0 +1,40 @@
+---
+source: semantics/analyzer/tests/endpoint.rs
+expression: lowered.reports
+---
+[
+    Report {
+        severity: Error,
+        title: "empty path parameter",
+        labels: [
+            Label {
+                style: Primary,
+                message: "empty path parameter",
+                span: Span {
+                    start: 10,
+                    end: 12,
+                },
+            },
+        ],
+        note: Some(
+            "help: path parameter has to have a name",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "invalid path parameters field `id`",
+        labels: [
+            Label {
+                style: Primary,
+                message: "field not defined in path",
+                span: Span {
+                    start: 53,
+                    end: 55,
+                },
+            },
+        ],
+        note: Some(
+            "help: endpoint's path attribute can only contain fields defined in the path",
+        ),
+    },
+]

@@ -245,17 +245,15 @@ impl NameToken {
 
 impl Name {
     /// Returns the token representing the name.
-    pub fn token(&self) -> NameToken {
-        let token = self
-            .syntax()
-            .first_token()
-            .expect("parser should parse name correctly");
+    pub fn token(&self) -> Option<NameToken> {
+        let token = self.syntax().first_token()?;
 
-        match token.kind() {
+        let res = match token.kind() {
             TOKEN_IDENTIFIER => NameToken::Identifier(IdentifierToken::new(token)),
             TOKEN_STRING => NameToken::String(StringToken::new(token)),
             _ => unreachable!("parser should parse name correctly"),
-        }
+        };
+        Some(res)
     }
 }
 
@@ -556,7 +554,7 @@ impl TypeDefinition {
     /// Returns the name of the type
     pub fn name(&self) -> Option<IdentifierToken> {
         let name = self.0.children().find_map(Name::cast)?;
-        match name.token() {
+        match name.token()? {
             NameToken::Identifier(ident) => Some(ident),
             NameToken::String(_) => unreachable!("type definition name should be an identifier"),
         }
@@ -1142,21 +1140,18 @@ pub enum ResponseStatus {
 
 impl EndpointResponseStatus {
     /// Returns response status.
-    pub fn value(&self) -> ResponseStatus {
-        let token = self
-            .0
-            .first_token()
-            .expect("parser should parse response status correctly");
+    pub fn value(&self) -> Option<ResponseStatus> {
+        let token = self.0.first_token()?;
 
         match token.kind() {
-            TOKEN_KW_DEFAULT => ResponseStatus::Default,
-            TOKEN_INTEGER => ResponseStatus::Code(
+            TOKEN_KW_DEFAULT => Some(ResponseStatus::Default),
+            TOKEN_INTEGER => Some(ResponseStatus::Code(
                 token
                     .text()
                     .parse()
                     .expect("tokenizer should emit valid integers"),
-            ),
-            _ => unreachable!("parser should parse response status correctly"),
+            )),
+            _ => None,
         }
     }
 }

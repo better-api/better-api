@@ -250,6 +250,10 @@ fn validate_path_params<'a, F>(
     if let Some(segment) = segment {
         let path_params = PathParamIterator::new(segment, *range);
         for (param, range) in path_params {
+            if param.is_empty() {
+                continue;
+            }
+
             match scoped_params.get(param) {
                 None => {
                     scoped_params.insert(param, range);

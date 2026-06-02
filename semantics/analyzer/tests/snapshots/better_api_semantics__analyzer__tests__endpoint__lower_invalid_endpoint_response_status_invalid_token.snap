@@ -1,0 +1,39 @@
+---
+source: semantics/analyzer/tests/endpoint.rs
+assertion_line: 858
+expression: reports
+---
+[
+    Report {
+        severity: Error,
+        title: "expected response status, got an identifier",
+        labels: [
+            Label {
+                style: Primary,
+                message: "expected response status",
+                span: Span {
+                    start: 30,
+                    end: 33,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "missing endpoint responses",
+        labels: [
+            Label {
+                style: Primary,
+                message: "missing endpoint responses",
+                span: Span {
+                    start: 0,
+                    end: 44,
+                },
+            },
+        ],
+        note: Some(
+            "help: endpoint must have at least one response",
+        ),
+    },
+]

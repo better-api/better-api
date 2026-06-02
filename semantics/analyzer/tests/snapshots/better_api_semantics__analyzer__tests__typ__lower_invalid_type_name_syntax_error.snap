@@ -1,0 +1,37 @@
+---
+source: semantics/analyzer/tests/typ.rs
+assertion_line: 110
+expression: reports
+---
+[
+    Report {
+        severity: Error,
+        title: "expected an identifier, found `:`",
+        labels: [
+            Label {
+                style: Primary,
+                message: "unexpected token",
+                span: Span {
+                    start: 5,
+                    end: 6,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected field name, found `:`",
+        labels: [
+            Label {
+                style: Primary,
+                message: "expected field name",
+                span: Span {
+                    start: 35,
+                    end: 36,
+                },
+            },
+        ],
+        note: None,
+    },
+]

@@ -374,6 +374,27 @@ fn lower_invalid_endpoint_missing_name() {
 }
 
 #[test]
+fn lower_invalid_endpoint_response_status_syntax_error() {
+    let text = indoc! {r#"
+        GET {
+            name: "foo"
+
+            on : string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let lowered = lower_spec(&res.root);
+
+    let mut reports = res.reports;
+    reports.extend(lowered.reports);
+    insta::assert_debug_snapshot!(reports);
+}
+
+#[test]
 fn lower_invalid_endpoint_repeated_response_status() {
     let text = indoc! {r#"
         GET {
@@ -685,6 +706,28 @@ fn lower_invalid_endpoint_paths_missing_path_attribute() {
 }
 
 #[test]
+fn lower_invalid_endpoint_paths_empty_path_param() {
+    let text = indoc! {r#"
+        GET "/foo/{}" {
+            name: "foo"
+
+            path: {
+                id: string
+            }
+
+            on 200: string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
+}
+
+#[test]
 fn lower_invalid_endpoint_paths_attribute_mismatch() {
     let text = indoc! {r#"
         route "/{foo}" {
@@ -814,6 +857,27 @@ fn lower_valid_endpoint_same_path_different_method() {
 
     let lowered = lower_spec(&res.root);
     assert!(lowered.reports.is_empty());
+}
+
+#[test]
+fn lower_invalid_endpoint_response_status_invalid_token() {
+    let text = indoc! {r#"
+        GET {
+            name: "foo"
+
+            on foo: string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let lowered = lower_spec(&res.root);
+
+    let mut reports = res.reports;
+    reports.extend(lowered.reports);
+    insta::assert_debug_snapshot!(reports);
 }
 
 fn lower_spec(root: &ast::Root) -> LoweredSpec {
