@@ -1143,17 +1143,16 @@ impl EndpointResponseStatus {
     pub fn value(&self) -> Option<ResponseStatus> {
         let token = self.0.first_token()?;
 
-        let res = match token.kind() {
-            TOKEN_KW_DEFAULT => ResponseStatus::Default,
-            TOKEN_INTEGER => ResponseStatus::Code(
+        match token.kind() {
+            TOKEN_KW_DEFAULT => Some(ResponseStatus::Default),
+            TOKEN_INTEGER => Some(ResponseStatus::Code(
                 token
                     .text()
                     .parse()
                     .expect("tokenizer should emit valid integers"),
-            ),
-            _ => unreachable!("parser should parse response status correctly"),
-        };
-        Some(res)
+            )),
+            _ => None,
+        }
     }
 }
 
