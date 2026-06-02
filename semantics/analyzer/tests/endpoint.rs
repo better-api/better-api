@@ -706,6 +706,28 @@ fn lower_invalid_endpoint_paths_missing_path_attribute() {
 }
 
 #[test]
+fn lower_invalid_endpoint_paths_empty_path_param() {
+    let text = indoc! {r#"
+        GET "/foo/{}" {
+            name: "foo"
+
+            path: {
+                id: string
+            }
+
+            on 200: string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let lowered = lower_spec(&res.root);
+    insta::assert_debug_snapshot!(lowered.reports);
+}
+
+#[test]
 fn lower_invalid_endpoint_paths_attribute_mismatch() {
     let text = indoc! {r#"
         route "/{foo}" {
