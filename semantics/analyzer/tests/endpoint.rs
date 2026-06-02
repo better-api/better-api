@@ -374,6 +374,27 @@ fn lower_invalid_endpoint_missing_name() {
 }
 
 #[test]
+fn lower_invalid_endpoint_response_status_syntax_error() {
+    let text = indoc! {r#"
+        GET {
+            name: "foo"
+
+            on : string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let lowered = lower_spec(&res.root);
+
+    let mut reports = res.reports;
+    reports.extend(lowered.reports);
+    insta::assert_debug_snapshot!(reports);
+}
+
+#[test]
 fn lower_invalid_endpoint_repeated_response_status() {
     let text = indoc! {r#"
         GET {

@@ -88,6 +88,29 @@ fn lower_reference() {
 }
 
 #[test]
+fn lower_invalid_type_name_syntax_error() {
+    let text = indoc! {r#"
+        type : string
+        
+        type Foo: rec {
+            : string
+        }
+    "#};
+
+    let mut diagnostics = vec![];
+    let tokens = tokenize(text, &mut diagnostics);
+    let res = parse(tokens);
+
+    let mut lowerer = SpecLowerer::new(&res.root);
+    lowerer.validate_symbols();
+    lowerer.lower_type_definitions();
+
+    let mut reports = res.reports;
+    reports.extend(lowerer.reports);
+    insta::assert_debug_snapshot!(reports);
+}
+
+#[test]
 fn lower_simple_array() {
     let text = indoc! {r#"
         type Foo: [i32]

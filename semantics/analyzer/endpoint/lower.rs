@@ -636,8 +636,7 @@ enum LowerResponseBehavior {
 
 /// Lower endpoint response
 ///
-/// Types that are not inlined are handled based on given
-/// [behavior](LowerResponseBehavior).
+/// Types that are not inlined are handled based on given [behavior](LowerResponseBehavior).
 fn lower_endpoint_response<P: ResponseParent>(
     ctx: &mut Context,
     values: &mut ValueArena,
@@ -647,16 +646,16 @@ fn lower_endpoint_response<P: ResponseParent>(
     behavior: LowerResponseBehavior,
 ) -> Option<ResponseStatus> {
     // Validate status
-    let status = match resp.status() {
-        None => None,
-        Some(status) => match convert_status(&status) {
-            Ok(status) => Some(status),
-            Err(report) => {
-                ctx.reports.push(report);
-                None
-            }
-        },
-    };
+    let status =
+        resp.status().and_then(
+            |s| match convert_status(&s.value()?, s.syntax().text_range()) {
+                Ok(status) => Some(status),
+                Err(report) => {
+                    ctx.reports.push(report);
+                    None
+                }
+            },
+        );
 
     let typ = resp.typ()?;
     let type_id = match &typ {
@@ -786,18 +785,21 @@ fn convert_method(method: ast::Method) -> http::Method {
 }
 
 /// Convert AST response status to semantic one
-fn convert_status(status: &ast::EndpointResponseStatus) -> Result<ResponseStatus, Report> {
+fn convert_status(
+    status: &ast::ResponseStatus,
+    range: TextRange,
+) -> Result<ResponseStatus, Report> {
     let build_report = || {
         Report::error("invalid response status".to_string()).add_label(Label::primary(
             "invalid response status".to_string(),
-            status.syntax().text_range().into(),
+            range.into(),
         ))
     };
 
-    let res = match status.value() {
+    let res = match status {
         ast::ResponseStatus::Default => ResponseStatus::Default,
         ast::ResponseStatus::Code(code) => {
-            let code = u16::try_from(code).map_err(|_| build_report())?;
+            let code = u16::try_from(*code).map_err(|_| build_report())?;
             let code = http::StatusCode::from_u16(code).map_err(|_| build_report())?;
             ResponseStatus::Code(code)
         }
