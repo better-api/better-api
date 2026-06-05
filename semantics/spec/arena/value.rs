@@ -462,12 +462,12 @@ mod test {
         let mut spec = Spec::new_test();
 
         let done = spec.strings.get_or_intern("done");
-        let flag_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("flag")) };
-        let items_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("items")) };
-        let meta_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("meta")) };
-        let label_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("label")) };
-        let ok_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("ok")) };
-        let unused_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("unused")) };
+        let flag_name = NameId::from_string_id(spec.strings.get_or_intern("flag"));
+        let items_name = NameId::from_string_id(spec.strings.get_or_intern("items"));
+        let meta_name = NameId::from_string_id(spec.strings.get_or_intern("meta"));
+        let label_name = NameId::from_string_id(spec.strings.get_or_intern("label"));
+        let ok_name = NameId::from_string_id(spec.strings.get_or_intern("ok"));
+        let unused_name = NameId::from_string_id(spec.strings.get_or_intern("unused"));
 
         let null_id = spec.values.add_primitive(PrimitiveValue::Null);
         let bool_id = spec.values.add_primitive(PrimitiveValue::Bool(true));

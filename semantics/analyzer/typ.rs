@@ -585,7 +585,7 @@ pub(crate) fn lower_response(
     let body_id = ensure_inline(ctx, &body, body_id, &format!("{name}Body"), types)?;
 
     // Safety: We know that body is not a response and it's inlined.
-    let body_id = unsafe { InlineTypeId::from_root_type_id(body_id) };
+    let body_id = InlineTypeId::from_root_type_id(body_id);
     let id = types.add_response(body_id, headers_id, content_type_id);
     Some(id)
 }
@@ -673,12 +673,8 @@ pub(crate) fn lower_simple_record_param(
     let id = ensure_inline(ctx, node, id, ref_name, types)?;
 
     if is_valid {
-        // Safety: We have checked that it's a simple record, and that it's behind a reference.
-        let id = unsafe {
-            let id = InlineTypeId::from_root_type_id(id);
-            SimpleRecordReferenceProof::new(id)
-        };
-        Some(id)
+        let id = InlineTypeId::from_root_type_id(id);
+        Some(SimpleRecordReferenceProof::new(id))
     } else {
         None
     }

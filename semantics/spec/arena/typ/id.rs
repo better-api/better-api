@@ -5,10 +5,9 @@ pub(crate) struct InlineTypeId(pub(super) u32);
 impl InlineTypeId {
     /// Creates inline type id from a root type id.
     ///
-    /// ## Safety
     /// It's the caller's responsibility to check that this is actually true.
     /// Constructing a proof with wrong type, and using it, will lead to panics!
-    pub(crate) unsafe fn from_root_type_id(id: RootTypeId) -> Self {
+    pub(crate) fn from_root_type_id(id: RootTypeId) -> Self {
         Self(id.0)
     }
 }
@@ -71,7 +70,7 @@ impl SimpleRecordReferenceProof {
     ///
     /// It's the caller's responsibility to check that this is actually true.
     /// Constructing a proof with wrong type, and using it, will lead to panics!
-    pub(crate) unsafe fn new(id: InlineTypeId) -> Self {
+    pub(crate) fn new(id: InlineTypeId) -> Self {
         Self(id)
     }
 
@@ -92,7 +91,7 @@ impl ResponseReferenceProof {
     ///
     /// It's the caller's responsibility to check that this is actually true.
     /// Constructing a proof with wrong type, and using it, will lead to panics!
-    pub(crate) unsafe fn new(id: RootTypeId) -> Self {
+    pub(crate) fn new(id: RootTypeId) -> Self {
         Self(id)
     }
 

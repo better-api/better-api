@@ -529,15 +529,13 @@ mod test {
         // - record Root { id: i64, simple_array: [f32], values: [[[string?]]], metadata: [[bool]?] }
         // - union { success: bool, error: string }
 
-        let id_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("id")) };
-        let simple_array_name =
-            unsafe { NameId::from_string_id(spec.strings.get_or_intern("simple_array")) };
-        let values_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("values")) };
-        let metadata_name =
-            unsafe { NameId::from_string_id(spec.strings.get_or_intern("metadata")) };
-        let unused_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("unused")) };
-        let success_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("success")) };
-        let error_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("error")) };
+        let id_name = NameId::from_string_id(spec.strings.get_or_intern("id"));
+        let simple_array_name = NameId::from_string_id(spec.strings.get_or_intern("simple_array"));
+        let values_name = NameId::from_string_id(spec.strings.get_or_intern("values"));
+        let metadata_name = NameId::from_string_id(spec.strings.get_or_intern("metadata"));
+        let unused_name = NameId::from_string_id(spec.strings.get_or_intern("unused"));
+        let success_name = NameId::from_string_id(spec.strings.get_or_intern("success"));
+        let error_name = NameId::from_string_id(spec.strings.get_or_intern("error"));
 
         let mut root = builder.start_record();
         root.add_primitive(id_name, PrimitiveTy::I64, None, None);
@@ -674,7 +672,7 @@ mod test {
         // - type Bar = record { name: Foo }
 
         let foo_name = spec.strings.get_or_intern("Foo");
-        let name_field = unsafe { NameId::from_string_id(spec.strings.get_or_intern("name")) };
+        let name_field = NameId::from_string_id(spec.strings.get_or_intern("name"));
 
         let foo_id = builder.add_primitive(PrimitiveTy::String);
         spec.symbol_table.insert(
@@ -727,9 +725,9 @@ mod test {
         let status_name = spec.strings.get_or_intern("Status");
         let open_str = spec.strings.get_or_intern("open");
         let closed_str = spec.strings.get_or_intern("closed");
-        let id_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("id")) };
-        let title_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("title")) };
-        let status_field = unsafe { NameId::from_string_id(spec.strings.get_or_intern("status")) };
+        let id_name = NameId::from_string_id(spec.strings.get_or_intern("id"));
+        let title_name = NameId::from_string_id(spec.strings.get_or_intern("title"));
+        let status_field = NameId::from_string_id(spec.strings.get_or_intern("status"));
 
         let open_value = spec.values.add_primitive(PrimitiveValue::String(open_str));
         let closed_value = spec
@@ -846,11 +844,8 @@ mod test {
         );
 
         let enum_ref_id = builder.add_root_reference(RootRef(enum_name));
-        let response_id = builder.add_response(
-            unsafe { InlineTypeId::from_root_type_id(enum_ref_id) },
-            None,
-            None,
-        );
+        let response_id =
+            builder.add_response(InlineTypeId::from_root_type_id(enum_ref_id), None, None);
         spec.symbol_table.insert(
             response_name,
             TypeDefData {

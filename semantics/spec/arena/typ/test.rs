@@ -15,14 +15,13 @@ fn builds_nested_types() {
     // - record Root { id: i64, simple_array: [f32], values: [[[string?]]], metadata: [[bool]?] }
     // - union { success: bool, error: string }
 
-    let id_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("id")) };
-    let simple_array_name =
-        unsafe { NameId::from_string_id(spec.strings.get_or_intern("simple_array")) };
-    let values_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("values")) };
-    let metadata_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("metadata")) };
-    let unused_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("unused")) };
-    let success_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("success")) };
-    let error_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("error")) };
+    let id_name = NameId::from_string_id(spec.strings.get_or_intern("id"));
+    let simple_array_name = NameId::from_string_id(spec.strings.get_or_intern("simple_array"));
+    let values_name = NameId::from_string_id(spec.strings.get_or_intern("values"));
+    let metadata_name = NameId::from_string_id(spec.strings.get_or_intern("metadata"));
+    let unused_name = NameId::from_string_id(spec.strings.get_or_intern("unused"));
+    let success_name = NameId::from_string_id(spec.strings.get_or_intern("success"));
+    let error_name = NameId::from_string_id(spec.strings.get_or_intern("error"));
 
     let i32_id = builder.add_primitive(PrimitiveTy::I32);
     let string_id = builder.add_primitive(PrimitiveTy::String);

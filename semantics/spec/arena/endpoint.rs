@@ -664,10 +664,10 @@ mod test {
 
         let users_docs = spec.strings.get_or_intern("users docs");
 
-        let health_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("health")) };
-        let users_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("users")) };
-        let stats_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("stats")) };
-        let dropped_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("dropped")) };
+        let health_name = NameId::from_string_id(spec.strings.get_or_intern("health"));
+        let users_name = NameId::from_string_id(spec.strings.get_or_intern("users"));
+        let stats_name = NameId::from_string_id(spec.strings.get_or_intern("stats"));
+        let dropped_name = NameId::from_string_id(spec.strings.get_or_intern("dropped"));
 
         let mut arena = EndpointArena::default();
 

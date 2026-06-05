@@ -198,10 +198,10 @@ mod test {
     fn iterates_object_fields_and_array_items() {
         let mut spec = Spec::new_test();
 
-        let title_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("title")) };
-        let list_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("list")) };
-        let nested_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("nested")) };
-        let ok_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("ok")) };
+        let title_name = NameId::from_string_id(spec.strings.get_or_intern("title"));
+        let list_name = NameId::from_string_id(spec.strings.get_or_intern("list"));
+        let nested_name = NameId::from_string_id(spec.strings.get_or_intern("nested"));
+        let ok_name = NameId::from_string_id(spec.strings.get_or_intern("ok"));
         let hello = spec.strings.get_or_intern("hello");
 
         let mut root = spec.values.start_object();
@@ -263,7 +263,7 @@ mod test {
     fn iterates_array_items_with_nested_values() {
         let mut spec = Spec::new_test();
 
-        let flag_name = unsafe { NameId::from_string_id(spec.strings.get_or_intern("flag")) };
+        let flag_name = NameId::from_string_id(spec.strings.get_or_intern("flag"));
 
         let mut root = spec.values.start_array();
         root.add_primitive(PrimitiveValue::Integer(1));

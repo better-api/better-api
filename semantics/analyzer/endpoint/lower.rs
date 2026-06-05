@@ -580,7 +580,7 @@ fn lower_request_body(
     let body_id = ensure_inline(ctx, &body, body_id, name, types).ok_or(())?;
 
     // Safety: We checked that body is not a response, and that it's inlined.
-    let body_id = unsafe { InlineTypeId::from_root_type_id(body_id) };
+    let body_id = InlineTypeId::from_root_type_id(body_id);
     Ok(Some(body_id))
 }
 
@@ -667,7 +667,7 @@ fn lower_endpoint_response<P: ResponseParent>(
                 let resp_id = ensure_inline(ctx, &typ, resp_id.into(), &resp_name, types)?;
 
                 // Safety: We know it's a response and we have made sure that it's behind a reference.
-                let resp_id = unsafe { ResponseReferenceProof::new(resp_id) };
+                let resp_id = ResponseReferenceProof::new(resp_id);
                 Some(EndpointResponseTypeId::Response(resp_id))
             }
             LowerResponseBehavior::Route => {
@@ -685,13 +685,13 @@ fn lower_endpoint_response<P: ResponseParent>(
             match deref(ctx.strings, ctx.symbol_map, ctx.root, reference)? {
                 ast::Type::TypeResponse(_) => {
                     // Safety: We know it's a reference to a response
-                    let id = unsafe { ResponseReferenceProof::new(reference_id) };
+                    let id = ResponseReferenceProof::new(reference_id);
                     Some(EndpointResponseTypeId::Response(id))
                 }
 
                 _ => {
                     // Safety: We know it's a reference to a type that isn't a response
-                    let id = unsafe { InlineTypeId::from_root_type_id(reference_id) };
+                    let id = InlineTypeId::from_root_type_id(reference_id);
                     Some(EndpointResponseTypeId::InlineType(id))
                 }
             }
@@ -704,7 +704,7 @@ fn lower_endpoint_response<P: ResponseParent>(
                 let id = ensure_inline(ctx, &typ, id, &resp_name, types)?;
 
                 // Safety: We know it's a type and we made sure it's inline
-                let id = unsafe { InlineTypeId::from_root_type_id(id) };
+                let id = InlineTypeId::from_root_type_id(id);
                 Some(EndpointResponseTypeId::InlineType(id))
             }
             LowerResponseBehavior::Route => {
@@ -713,7 +713,7 @@ fn lower_endpoint_response<P: ResponseParent>(
                         let id = lower_type(ctx, types, values, &typ)?;
 
                         // Safety: We know it's inline type
-                        let id = unsafe { InlineTypeId::from_root_type_id(id) };
+                        let id = InlineTypeId::from_root_type_id(id);
                         Some(EndpointResponseTypeId::InlineType(id))
                     }
                     TypeClass::Enum => {

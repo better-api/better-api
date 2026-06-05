@@ -40,8 +40,8 @@ impl std::fmt::Display for Name {
 impl Name {
     /// Creates a new name from &str.
     ///
-    /// Safety: Caller is responsible for validating that string is a valid name.
-    unsafe fn from_str_unchecked(s: &str) -> &Self {
+    /// Caller is responsible for validating that string is a valid name.
+    fn from_str_unchecked(s: &str) -> &Self {
         // Safety: Name is transparent repr of str, so this operation is safe
         unsafe { &*(s as *const str as *const Name) }
     }
@@ -71,7 +71,7 @@ pub(crate) struct NameId(StringId);
 
 impl NameId {
     #[cfg(test)]
-    pub(crate) unsafe fn from_string_id(id: StringId) -> Self {
+    pub(crate) fn from_string_id(id: StringId) -> Self {
         Self(id)
     }
 }
@@ -107,7 +107,7 @@ impl StringInterner {
         let name = self.resolve(id.0);
 
         // Safety: interner must contain a valid name for NameId.
-        unsafe { Name::from_str_unchecked(name) }
+        Name::from_str_unchecked(name)
     }
 
     /// Lowers name by parsing, validating and interning it.
@@ -147,7 +147,7 @@ pub(crate) fn validate_name(name: &str, range: TextRange) -> Result<&Name, Repor
 
     if is_valid {
         // Safety: We have checked it's a valid name.
-        let name = unsafe { Name::from_str_unchecked(name) };
+        let name = Name::from_str_unchecked(name);
         Ok(name)
     } else {
         Err(Report::error("invalid name".to_string()).add_label(Label::primary("invalid name".to_string(), range.into())).with_note(
