@@ -66,6 +66,14 @@ server: {
 }
 ```
 
+Repeating the `server` block is an instance of a general rule of the language:
+
+- Top level declarations (`server`, `type`, `security`, `example`) are repeated when you need
+  more than one of them.
+- Properties inside blocks take a value. Properties that can have multiple values (`tags`,
+  `contentType`, `auth`) accept either a single value or an array. The single value is just a
+  shorthand for an array with one element.
+
 ## Types
 
 ### Primitives
@@ -289,7 +297,7 @@ example for Foo: "hey!"
 Endpoints are actual endpoints of the API. Usually it's most convenient to nest them inside a
 [`route`](#routes). This way you don't need to repeat the prefix.
 
-Endpoints start with one or more methods, followed by an optional path. The following are equivalent:
+Endpoints start with a method, followed by an optional path. The following are equivalent:
 
 ```text
 GET "/hello" {
@@ -419,6 +427,24 @@ route "/hello" {
 }
 ```
 
+Routes can also contain path parameters:
+
+```text
+route "/pets/{id}" {
+  GET "/owner" {
+    // ...
+
+    path: {
+      id: string
+    }
+  }
+}
+```
+
+Each endpoint has to declare _all_ path parameters in its `path` record, including the ones
+coming from parent routes. Better API doesn't merge `path` records from different levels,
+because the merging rules would quickly become ugly and unpredictable.
+
 ## Comments and Documentation
 
 We already hinted at comments `// ...`. Better API also supports doc comments `/// ...`,
@@ -476,6 +502,16 @@ GET "/foo" {
   }
 }
 ```
+
+A missing key and an explicit `null` are treated as the same thing: no value. Generated code maps
+both into the language's native "no value" (`None`, `nil`, `undefined`, ...). When serializing,
+generated code always omits the key and never sends `null`.
+
+> [!NOTE]
+> This means that APIs where `null` has a meaning of its own (for example JSON Merge Patch, where
+> `null` means "delete this field") can't be expressed. This is by design. Most languages collapse
+> the two cases into one anyway, so supporting the distinction would result in inconsistent
+> generated code across languages.
 
 Default is specified with a `@default` decorator:
 
@@ -793,7 +829,15 @@ GET {
 > It is up to the server implementation to decide this.
 
 If auth is optional, permissions can still be defined. If a user is authenticated but doesn't have
-required permissions, the generated code will treat them as an unauthorized user.
+the required permissions, the generated code will treat them as an unauthenticated user. The
+reasoning is that an endpoint with optional auth returns something useful to anonymous users.
+Being signed in shouldn't show you less than being anonymous.
+
+> [!WARNING]
+> This behavior can be surprising, especially on endpoints that mutate state. If you want to
+> handle this case yourself, remove the `permissions` from the endpoint, define an `on 403: ...`
+> response, and do the permission check in the endpoint business logic. See
+> [Advanced Permissions](#advanced-permissions) for more details.
 
 If an endpoint has multiple security schemes and requires permissions, at least _one_ security scheme has to authorize
 the user with _all_ required permissions. Otherwise the user is treated as unauthorized or unauthenticated.

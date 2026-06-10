@@ -41,6 +41,10 @@ The following are _not_ goals:
   > Mapping between XML elements and data structures is inherently flawed: an XML element is an order-dependent
   > collection of anonymous values, while a data structure is an order-independent collection of named values.
   > See encoding/json for a textual representation more suitable to data structures.
+- **Meaningful `null`** - Better API treats a missing key and an explicit `null` as the same thing:
+  no value. APIs where `null` carries its own meaning (for example JSON Merge Patch, where `null`
+  means "delete this field") can't be expressed. Most languages collapse the two cases into one
+  anyway, so this keeps the generated code consistent across languages.
 
 ## Syntax
 
@@ -65,7 +69,7 @@ GET "/hello" {
   //
   // Notice that this comment starts with `//` and is a normal comment,
   // that is ignored by the toolkit.
-  name: greeter
+  name: "greeter"
 
   // We will define some query params
   query: {
