@@ -10,6 +10,7 @@ use prologue::Prologue;
 mod basic;
 mod endpoint;
 mod prologue;
+mod security;
 mod types;
 mod values;
 
@@ -122,6 +123,8 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
             | Some(TOKEN_KW_PATCH) => self.parse_endpoint(prologue),
 
             Some(TOKEN_KW_ROUTE) => self.parse_route(prologue),
+
+            Some(TOKEN_KW_SECURITY) => self.parse_security(prologue),
 
             Some(token) => {
                 let span = self.parse_error(|_| false);

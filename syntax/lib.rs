@@ -201,6 +201,10 @@ pub enum Kind {
     NODE_SECURITY_UNAUTHORIZED,
     NODE_SECURITY_FORBIDDEN,
 
+    NODE_AUTH,
+    NODE_AUTH_ARRAY,
+    NODE_AUTH_OPTION,
+
     NODE_ERROR,
 
     NODE_ROOT, // Root node of the file that's parsed
