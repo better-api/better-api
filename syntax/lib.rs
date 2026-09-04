@@ -194,7 +194,7 @@ pub enum Kind {
 
     // Security schema definition
     NODE_SECURITY,
-    NODE_SECURITY_TYPE,
+    NODE_SECURITY_KIND,
     NODE_SECURITY_SCHEME,
     NODE_SECURITY_HEADER,
     NODE_SECURITY_QUERY,

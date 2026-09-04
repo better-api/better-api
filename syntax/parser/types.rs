@@ -335,7 +335,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
                 }
 
                 Some(kind) => {
-                    let span = self.parse_error(|_| false);
+                    let span = self.parse_error(|t| t == TOKEN_CURLY_RIGHT);
 
                     self.reports.push(
                         Report::error(format!("expected field name, found {kind}"))

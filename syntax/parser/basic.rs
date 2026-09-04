@@ -104,7 +104,7 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
     /// Parses line end.
     ///
     /// This is done by skipping white space, skipping comment and doc comments
-    /// (if present) and _expecting_ EOL.
+    /// (if present) and expecting EOL or EOF.
     pub fn expect_line_end(&mut self) -> bool {
         self.skip_whitespace();
 
@@ -115,6 +115,10 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         if self.peek() == Some(TOKEN_DOC_COMMENT) {
             self.emit_doc_comment_warning();
             self.advance();
+        }
+
+        if self.peek().is_none() {
+            return true;
         }
 
         self.expect(TOKEN_EOL)

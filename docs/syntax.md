@@ -723,19 +723,19 @@ You start by defining a security scheme:
 
 ```text
 security HttpBearer: {
-  type: "http"
+  kind: "http"
   scheme: "bearer"
   unauthorized: UnauthorizedError
 }
 
 security HttpBasic: {
-  type: "http"
+  kind: "http"
   scheme: "basic"
   unauthorized: UnauthorizedError
 }
 
 security ApiKey: {
-  type: "api_key"
+  kind: "api_key"
   header: "X-API-KEY"
   query: "api_key"
 
