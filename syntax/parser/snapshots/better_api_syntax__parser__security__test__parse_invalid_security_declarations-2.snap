@@ -1,0 +1,81 @@
+---
+source: syntax/parser/security.rs
+expression: res.reports
+---
+[
+    Report {
+        severity: Error,
+        title: "unexpected `@default`",
+        labels: [
+            Label {
+                style: Primary,
+                message: "unexpected `@default`",
+                span: Span {
+                    start: 0,
+                    end: 9,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected an identifier, found `:`",
+        labels: [
+            Label {
+                style: Primary,
+                message: "unexpected token",
+                span: Span {
+                    start: 18,
+                    end: 19,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected `:`, found `{`",
+        labels: [
+            Label {
+                style: Primary,
+                message: "unexpected token",
+                span: Span {
+                    start: 46,
+                    end: 47,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected `{`, found new line",
+        labels: [
+            Label {
+                style: Primary,
+                message: "unexpected token",
+                span: Span {
+                    start: 70,
+                    end: 71,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected field name, found end of file",
+        labels: [
+            Label {
+                style: Primary,
+                message: "expected field name",
+                span: Span {
+                    start: 110,
+                    end: 111,
+                },
+            },
+        ],
+        note: None,
+    },
+]

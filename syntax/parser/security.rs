@@ -185,3 +185,91 @@ impl<'a, T: Iterator<Item = Token<'a>>> Parser<'a, T> {
         });
     }
 }
+
+#[cfg(test)]
+mod test {
+    use indoc::indoc;
+
+    use crate::{parse, tokenize};
+
+    #[test]
+    fn parse_security() {
+        let text = indoc! {r#"
+            /// Bearer token authentication
+            security HttpBearer: {
+                kind: "http"
+                scheme: "bearer"
+                unauthorized: UnauthorizedError
+            }
+
+            security ApiKey: {
+                kind: "api_key"
+                header: "X-API-KEY"
+                query: "api_key"
+                unauthorized: UnauthorizedError
+                forbidden: ForbiddenError
+            }
+
+            security Empty: {}
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let res = parse(tokens);
+        insta::assert_debug_snapshot!(res.node);
+        assert_eq!(res.reports, vec![]);
+    }
+
+    #[test]
+    fn parse_invalid_security_fields() {
+        let text = indoc! {r#"
+            security Broken: {
+                /// Field documentation is ignored
+                @default("http")
+                kind: Http
+
+                scheme: Bearer
+                unauthorized: "UnauthorizedError"
+                forbidden: 403
+
+                invalidField: "value"
+                42
+            }
+
+            security ValidAfterErrors: {
+                kind: "http"
+                scheme: "basic"
+                unauthorized: UnauthorizedError
+            }
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let res = parse(tokens);
+        insta::assert_debug_snapshot!(res.node);
+        insta::assert_debug_snapshot!(res.reports);
+    }
+
+    #[test]
+    fn parse_invalid_security_declarations() {
+        let text = indoc! {r#"
+            @default
+            security : {}
+
+            security MissingColon {}
+            security MissingBody:
+
+            security Unclosed: {
+                kind: "http"
+        "#};
+
+        let mut diagnostics = vec![];
+        let tokens = tokenize(text, &mut diagnostics);
+
+        let res = parse(tokens);
+        insta::assert_debug_snapshot!(res.node);
+        insta::assert_debug_snapshot!(res.reports);
+    }
+}

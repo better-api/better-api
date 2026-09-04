@@ -1,0 +1,53 @@
+---
+source: syntax/parser/security.rs
+expression: res.node
+---
+NODE_ROOT@0..110
+  NODE_SECURITY@0..23
+    NODE_PROLOGUE@0..9
+      NODE_DEFAULT@0..9
+        TOKEN_DECORATOR_DEFAULT@0..8 "@default"
+        TOKEN_EOL@8..9 "\n"
+    TOKEN_KW_SECURITY@9..17 "security"
+    TOKEN_SPACE@17..18 " "
+    NODE_NAME@18..18
+    TOKEN_COLON@18..19 ":"
+    TOKEN_SPACE@19..20 " "
+    TOKEN_CURLY_LEFT@20..21 "{"
+    TOKEN_CURLY_RIGHT@21..22 "}"
+    TOKEN_EOL@22..23 "\n"
+  TOKEN_EOL@23..24 "\n"
+  NODE_SECURITY@24..49
+    TOKEN_KW_SECURITY@24..32 "security"
+    TOKEN_SPACE@32..33 " "
+    NODE_NAME@33..45
+      TOKEN_IDENTIFIER@33..45 "MissingColon"
+    TOKEN_SPACE@45..46 " "
+    TOKEN_CURLY_LEFT@46..47 "{"
+    TOKEN_CURLY_RIGHT@47..48 "}"
+    TOKEN_EOL@48..49 "\n"
+  NODE_SECURITY@49..71
+    TOKEN_KW_SECURITY@49..57 "security"
+    TOKEN_SPACE@57..58 " "
+    NODE_NAME@58..69
+      TOKEN_IDENTIFIER@58..69 "MissingBody"
+    TOKEN_COLON@69..70 ":"
+    TOKEN_EOL@70..71 "\n"
+  TOKEN_EOL@71..72 "\n"
+  NODE_SECURITY@72..110
+    TOKEN_KW_SECURITY@72..80 "security"
+    TOKEN_SPACE@80..81 " "
+    NODE_NAME@81..89
+      TOKEN_IDENTIFIER@81..89 "Unclosed"
+    TOKEN_COLON@89..90 ":"
+    TOKEN_SPACE@90..91 " "
+    TOKEN_CURLY_LEFT@91..92 "{"
+    TOKEN_EOL@92..93 "\n"
+    TOKEN_SPACE@93..97 "    "
+    NODE_SECURITY_KIND@97..110
+      TOKEN_IDENTIFIER@97..101 "kind"
+      TOKEN_COLON@101..102 ":"
+      TOKEN_SPACE@102..103 " "
+      NODE_VALUE_STRING@103..109
+        TOKEN_STRING@103..109 "\"http\""
+      TOKEN_EOL@109..110 "\n"

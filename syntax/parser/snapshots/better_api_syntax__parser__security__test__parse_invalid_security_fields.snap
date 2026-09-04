@@ -1,0 +1,108 @@
+---
+source: syntax/parser/security.rs
+expression: res.node
+---
+NODE_ROOT@0..312
+  NODE_SECURITY@0..207
+    TOKEN_KW_SECURITY@0..8 "security"
+    TOKEN_SPACE@8..9 " "
+    NODE_NAME@9..15
+      TOKEN_IDENTIFIER@9..15 "Broken"
+    TOKEN_COLON@15..16 ":"
+    TOKEN_SPACE@16..17 " "
+    TOKEN_CURLY_LEFT@17..18 "{"
+    TOKEN_EOL@18..19 "\n"
+    TOKEN_SPACE@19..23 "    "
+    TOKEN_DOC_COMMENT@23..57 "/// Field documentati ..."
+    TOKEN_EOL@57..58 "\n"
+    TOKEN_SPACE@58..62 "    "
+    NODE_DEFAULT@62..79
+      TOKEN_DECORATOR_DEFAULT@62..70 "@default"
+      TOKEN_PAREN_LEFT@70..71 "("
+      NODE_VALUE_STRING@71..77
+        TOKEN_STRING@71..77 "\"http\""
+      TOKEN_PAREN_RIGHT@77..78 ")"
+      TOKEN_EOL@78..79 "\n"
+    TOKEN_SPACE@79..83 "    "
+    NODE_SECURITY_KIND@83..94
+      TOKEN_IDENTIFIER@83..87 "kind"
+      TOKEN_COLON@87..88 ":"
+      TOKEN_SPACE@88..89 " "
+      NODE_ERROR@89..93
+        TOKEN_IDENTIFIER@89..93 "Http"
+      TOKEN_EOL@93..94 "\n"
+    TOKEN_EOL@94..95 "\n"
+    TOKEN_SPACE@95..99 "    "
+    NODE_SECURITY_SCHEME@99..114
+      TOKEN_IDENTIFIER@99..105 "scheme"
+      TOKEN_COLON@105..106 ":"
+      TOKEN_SPACE@106..107 " "
+      NODE_ERROR@107..113
+        TOKEN_IDENTIFIER@107..113 "Bearer"
+      TOKEN_EOL@113..114 "\n"
+    TOKEN_SPACE@114..118 "    "
+    NODE_SECURITY_UNAUTHORIZED@118..152
+      TOKEN_IDENTIFIER@118..130 "unauthorized"
+      TOKEN_COLON@130..131 ":"
+      TOKEN_SPACE@131..132 " "
+      NODE_ERROR@132..151
+        TOKEN_STRING@132..151 "\"UnauthorizedError\""
+      TOKEN_EOL@151..152 "\n"
+    TOKEN_SPACE@152..156 "    "
+    NODE_SECURITY_FORBIDDEN@156..171
+      TOKEN_IDENTIFIER@156..165 "forbidden"
+      TOKEN_COLON@165..166 ":"
+      TOKEN_SPACE@166..167 " "
+      NODE_ERROR@167..170
+        TOKEN_INTEGER@167..170 "403"
+      TOKEN_EOL@170..171 "\n"
+    TOKEN_EOL@171..172 "\n"
+    TOKEN_SPACE@172..176 "    "
+    NODE_ERROR@176..197
+      TOKEN_IDENTIFIER@176..188 "invalidField"
+      TOKEN_COLON@188..189 ":"
+      TOKEN_SPACE@189..190 " "
+      TOKEN_STRING@190..197 "\"value\""
+    TOKEN_EOL@197..198 "\n"
+    TOKEN_SPACE@198..202 "    "
+    NODE_ERROR@202..204
+      TOKEN_INTEGER@202..204 "42"
+    TOKEN_EOL@204..205 "\n"
+    TOKEN_CURLY_RIGHT@205..206 "}"
+    TOKEN_EOL@206..207 "\n"
+  TOKEN_EOL@207..208 "\n"
+  NODE_SECURITY@208..312
+    TOKEN_KW_SECURITY@208..216 "security"
+    TOKEN_SPACE@216..217 " "
+    NODE_NAME@217..233
+      TOKEN_IDENTIFIER@217..233 "ValidAfterErrors"
+    TOKEN_COLON@233..234 ":"
+    TOKEN_SPACE@234..235 " "
+    TOKEN_CURLY_LEFT@235..236 "{"
+    TOKEN_EOL@236..237 "\n"
+    TOKEN_SPACE@237..241 "    "
+    NODE_SECURITY_KIND@241..254
+      TOKEN_IDENTIFIER@241..245 "kind"
+      TOKEN_COLON@245..246 ":"
+      TOKEN_SPACE@246..247 " "
+      NODE_VALUE_STRING@247..253
+        TOKEN_STRING@247..253 "\"http\""
+      TOKEN_EOL@253..254 "\n"
+    TOKEN_SPACE@254..258 "    "
+    NODE_SECURITY_SCHEME@258..274
+      TOKEN_IDENTIFIER@258..264 "scheme"
+      TOKEN_COLON@264..265 ":"
+      TOKEN_SPACE@265..266 " "
+      NODE_VALUE_STRING@266..273
+        TOKEN_STRING@266..273 "\"basic\""
+      TOKEN_EOL@273..274 "\n"
+    TOKEN_SPACE@274..278 "    "
+    NODE_SECURITY_UNAUTHORIZED@278..310
+      TOKEN_IDENTIFIER@278..290 "unauthorized"
+      TOKEN_COLON@290..291 ":"
+      TOKEN_SPACE@291..292 " "
+      NODE_TYPE_REF@292..309
+        TOKEN_IDENTIFIER@292..309 "UnauthorizedError"
+      TOKEN_EOL@309..310 "\n"
+    TOKEN_CURLY_RIGHT@310..311 "}"
+    TOKEN_EOL@311..312 "\n"

@@ -1,0 +1,128 @@
+---
+source: syntax/parser/security.rs
+expression: res.reports
+---
+[
+    Report {
+        severity: Warning,
+        title: "unexpected doc comment",
+        labels: [
+            Label {
+                style: Primary,
+                message: "unexpected doc comment",
+                span: Span {
+                    start: 23,
+                    end: 57,
+                },
+            },
+        ],
+        note: Some(
+            "help: This doc comment has no effect and will be ignored. Use regular comment instead.",
+        ),
+    },
+    Report {
+        severity: Error,
+        title: "unexpected `@default`",
+        labels: [
+            Label {
+                style: Primary,
+                message: "unexpected `@default`",
+                span: Span {
+                    start: 62,
+                    end: 79,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected a string, found an identifier",
+        labels: [
+            Label {
+                style: Primary,
+                message: "expected a string",
+                span: Span {
+                    start: 89,
+                    end: 93,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected a string, found an identifier",
+        labels: [
+            Label {
+                style: Primary,
+                message: "expected a string",
+                span: Span {
+                    start: 107,
+                    end: 113,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected an identifier, found a string",
+        labels: [
+            Label {
+                style: Primary,
+                message: "expected an identifier",
+                span: Span {
+                    start: 132,
+                    end: 151,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected an identifier, found an integer",
+        labels: [
+            Label {
+                style: Primary,
+                message: "expected an identifier",
+                span: Span {
+                    start: 167,
+                    end: 170,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "invalid security field `invalidField`",
+        labels: [
+            Label {
+                style: Primary,
+                message: "invalid security field",
+                span: Span {
+                    start: 176,
+                    end: 188,
+                },
+            },
+        ],
+        note: None,
+    },
+    Report {
+        severity: Error,
+        title: "expected field name, found an integer",
+        labels: [
+            Label {
+                style: Primary,
+                message: "expected field name",
+                span: Span {
+                    start: 202,
+                    end: 204,
+                },
+            },
+        ],
+        note: None,
+    },
+]
